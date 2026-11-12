@@ -273,6 +273,10 @@ experimental = []
 # deficit. OFF by default: the default `cargo test` stays on the synthetic
 # baseline (golden_snapshot 50 expectations + reality.rs) byte-for-byte.
 calibrated-sim = []
+# Engine end-to-end gate only (scripts/ci/engine-e2e.mjs): the OSV archive
+# mirror reads FOURDA_E2E_OSV_MIRROR so the gate serves frozen archives with no
+# network. Debug builds only; a release build with it fails to compile.
+e2e-osv-mirror = []
 # generate-sim-fixtures unlocks the ignored fixture-generator test that embeds
 # the corpus + persona topics via fastembed and writes the *.bin fixtures.
 # Requires the fastembed model; run once to (re)produce the committed fixtures.

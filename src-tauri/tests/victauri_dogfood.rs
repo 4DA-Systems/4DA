@@ -4,7 +4,11 @@
 //! Every test has real assertions. No log-and-continue patterns.
 //!
 //! Requires a running 4DA dev server (`pnpm run tauri dev`).
-//! Run with: `VICTAURI_E2E=1 CARGO_TARGET_DIR=target-test cargo test --test victauri_dogfood -- --test-threads=1`
+//! Run with: `VICTAURI_E2E=1 CARGO_TARGET_DIR=target-test cargo test --test victauri_dogfood -- --ignored --test-threads=1`
+//!
+//! Every test is `#[ignore]`d: without the live app a normal run reports them as
+//! ignored, never as passes. No CI job runs them: a hosted runner has no 4DA corpus
+//! and the suite drives the real GUI (WebView2, Vite on 4444, the Victauri port).
 
 use victauri_test::visual::{MaskRegion, ThresholdPreset, VisualOptions};
 use victauri_test::VictauriClient;
@@ -85,12 +89,17 @@ async fn connect_victauri() -> Result<VictauriClient, victauri_test::TestError> 
     VictauriClient::connect_with_token(port, token.as_deref()).await
 }
 
-fn skip_unless_e2e() -> bool {
-    if !victauri_test::is_e2e() {
-        eprintln!("Skipping: set VICTAURI_E2E=1 with 4DA dev server running");
-        return true;
-    }
-    false
+/// Every test here is `#[ignore]`d, so a plain `cargo test` / `cargo nextest run` reports
+/// them as IGNORED (skipped), never as passes. They run only when asked for
+/// (`-- --ignored`), and then only against a live app: without `VICTAURI_E2E=1` they fail
+/// rather than pass having checked nothing. Until 2026-11-12 each test returned early
+/// when the variable was unset and was counted as a pass: 161 "passing" tests that had
+/// never run in any CI job (audit 2026-11-11, Q1).
+fn require_e2e() {
+    assert!(
+        victauri_test::is_e2e(),
+        "this live-app test needs VICTAURI_E2E=1 and a running 4DA debug build (pnpm run tauri dev)"
+    );
 }
 
 fn ipc_call_command(call: &serde_json::Value) -> Option<&str> {
@@ -180,10 +189,9 @@ async fn open_preemption_tab(client: &mut VictauriClient) {
 // ── Phase 1: Smoke Tests ─────────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn connect_and_get_plugin_info() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri()
         .await
@@ -201,10 +209,9 @@ async fn connect_and_get_plugin_info() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn screenshot_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client.screenshot().await.unwrap();
@@ -221,10 +228,9 @@ async fn screenshot_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn dom_snapshot_has_elements() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let snapshot = client.dom_snapshot().await.unwrap();
@@ -237,10 +243,9 @@ async fn dom_snapshot_has_elements() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn memory_stats_reports_rss() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let stats = client.get_memory_stats().await.unwrap();
@@ -255,10 +260,9 @@ async fn memory_stats_reports_rss() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn window_state_reports_main() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let windows = client.list_windows().await.unwrap();
@@ -279,10 +283,9 @@ async fn window_state_reports_main() {
 // ── Phase 2: Core Flow Tests ─────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn main_navigation_tabs_exist() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -309,10 +312,9 @@ async fn main_navigation_tabs_exist() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn eval_js_returns_document_title() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let title = client.eval_js("document.title").await.unwrap();
@@ -325,10 +327,9 @@ async fn eval_js_returns_document_title() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn settings_command_round_trip() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
@@ -340,10 +341,9 @@ async fn settings_command_round_trip() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn console_logs_accessible() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -359,10 +359,9 @@ async fn console_logs_accessible() {
 // ── Phase 3: Cross-Boundary Tests (Victauri's Unique Value) ──────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ghost_command_detection_works() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let ghosts = client.detect_ghost_commands().await.unwrap();
@@ -395,10 +394,9 @@ async fn ghost_command_detection_works() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ipc_integrity_check() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let health = client.check_ipc_integrity().await.unwrap();
@@ -410,10 +408,9 @@ async fn ipc_integrity_check() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ipc_log_captures_commands() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -429,10 +426,9 @@ async fn ipc_log_captures_commands() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn accessibility_audit_returns_results() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let audit = client.audit_accessibility().await.unwrap();
@@ -444,10 +440,9 @@ async fn accessibility_audit_returns_results() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn performance_metrics_baseline() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let metrics = client.get_performance_metrics().await.unwrap();
@@ -461,10 +456,9 @@ async fn performance_metrics_baseline() {
 // ── Phase 3.5: Fluent Verification ──────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn full_verification_chain() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -490,10 +484,9 @@ async fn full_verification_chain() {
 // ── Phase 4: Visual, Coverage, Recording ─────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn visual_regression_smoke_creates_and_compares_baseline() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -538,10 +531,9 @@ async fn visual_regression_smoke_creates_and_compares_baseline() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ipc_coverage_via_log_analysis() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -570,10 +562,9 @@ async fn ipc_coverage_via_log_analysis() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn recording_captures_events() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -609,10 +600,9 @@ async fn recording_captures_events() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn wait_for_text_finds_content() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -629,10 +619,9 @@ async fn wait_for_text_finds_content() {
 // ── Phase 5: Expanded Verification ──────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn verification_chain_with_state_match() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -662,10 +651,9 @@ async fn verification_chain_with_state_match() {
 // ── Phase 6: Navigation & View Switching ─────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn navigate_all_five_views() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -697,10 +685,9 @@ async fn navigate_all_five_views() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn settings_modal_open_close() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -750,10 +737,9 @@ async fn settings_modal_open_close() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn keyboard_shortcuts_modal() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -778,10 +764,9 @@ async fn keyboard_shortcuts_modal() {
 // ── Phase 7: Multi-Window Management ─────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn all_three_windows_reported() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let windows = client.list_windows().await.unwrap();
@@ -802,10 +787,9 @@ async fn all_three_windows_reported() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn main_window_state_details() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let state = client.get_window_state(Some("main")).await.unwrap();
@@ -826,10 +810,9 @@ async fn main_window_state_details() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn window_resize_and_restore() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -861,10 +844,9 @@ async fn window_resize_and_restore() {
 // ── Phase 8: Cross-Boundary Verification ─────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn verify_state_title_match() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -879,10 +861,9 @@ async fn verify_state_title_match() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn verify_state_detects_mismatch() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -907,10 +888,9 @@ async fn verify_state_detects_mismatch() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn semantic_assert_equals() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -933,10 +913,9 @@ async fn semantic_assert_equals() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn semantic_assert_truthy() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -961,10 +940,9 @@ async fn semantic_assert_truthy() {
 // ── Phase 9: Deep Introspection ──────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn css_style_inspection() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let snapshot = client.dom_snapshot().await.unwrap();
@@ -994,10 +972,9 @@ async fn css_style_inspection() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn accessibility_has_no_critical_violations() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let audit = client.audit_accessibility().await.unwrap();
@@ -1016,10 +993,9 @@ async fn accessibility_has_no_critical_violations() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn performance_metrics_within_budget() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let metrics = client.get_performance_metrics().await.unwrap();
@@ -1042,10 +1018,9 @@ async fn performance_metrics_within_budget() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn highlight_and_clear() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1083,10 +1058,9 @@ async fn highlight_and_clear() {
 // ── Phase 10: IPC Command Invocation ─────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn invoke_settings_returns_valid_config() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
@@ -1103,10 +1077,9 @@ async fn invoke_settings_returns_valid_config() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn invoke_monitoring_returns_status() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let status = client
@@ -1125,10 +1098,9 @@ async fn invoke_monitoring_returns_status() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn invoke_channels_returns_list() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let channels = client.invoke_command("list_channels", None).await.unwrap();
@@ -1139,10 +1111,9 @@ async fn invoke_channels_returns_list() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ipc_integrity_healthy() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     assert_scoped_ipc_round_trip_healthy(&mut client, "get_settings").await;
@@ -1151,10 +1122,9 @@ async fn ipc_integrity_healthy() {
 // ── Phase 11: Time-Travel Recording ──────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn recording_lifecycle() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1192,10 +1162,9 @@ async fn recording_lifecycle() {
 // ── Phase 12: Logs & Navigation ──────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn network_log_captured() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1208,10 +1177,9 @@ async fn network_log_captured() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn slow_ipc_detection() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let slow = client
@@ -1230,10 +1198,9 @@ async fn slow_ipc_detection() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn navigation_history_tracked() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let history = client.logs("navigation", None).await.unwrap();
@@ -1255,10 +1222,9 @@ async fn navigation_history_tracked() {
 // ── Phase 13: Stress & Concurrency ───────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn rapid_eval_burst() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1284,10 +1250,9 @@ async fn rapid_eval_burst() {
 // ── Phase 14: Security ──────────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn health_endpoint_does_not_leak_internals() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let client = connect_victauri().await.unwrap();
     let resp = reqwest::get(format!("{}/health", client.base_url()))
@@ -1312,10 +1277,9 @@ async fn health_endpoint_does_not_leak_internals() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn bad_auth_token_rejected() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let port = connect_victauri().await.unwrap();
     let base_url = port.base_url().to_string();
@@ -1348,10 +1312,9 @@ async fn bad_auth_token_rejected() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn missing_auth_token_rejected() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let port = connect_victauri().await.unwrap();
     let base_url = port.base_url().to_string();
@@ -1386,10 +1349,9 @@ async fn missing_auth_token_rejected() {
 // ── Phase 15: Heavy IPC Traffic ─────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn parallel_ipc_burst() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1448,10 +1410,9 @@ async fn parallel_ipc_burst() {
 // ── Phase 16: Multi-Window Snapshots ────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn snapshot_each_window() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let windows = client.list_windows().await.unwrap();
@@ -1490,10 +1451,9 @@ async fn snapshot_each_window() {
 // ── Phase 18: Connection Resilience ─────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn is_alive_returns_true() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let client = connect_victauri().await.unwrap();
     assert!(
@@ -1505,10 +1465,9 @@ async fn is_alive_returns_true() {
 // ── Phase 17: Event-Driven IPC Capture ──────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ipc_wait_for_capture_returns_complete_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1545,9 +1504,7 @@ async fn ipc_wait_for_capture_returns_complete_data() {
 #[tokio::test]
 #[ignore = "diagnostic only — dumps blind spots data for manual inspection"]
 async fn blind_spots_data_dump() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -1592,10 +1549,9 @@ async fn blind_spots_data_dump() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_ipc_returns_evidence_feed() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -1641,10 +1597,9 @@ async fn blind_spots_ipc_returns_evidence_feed() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_score_is_valid() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -1668,10 +1623,9 @@ async fn blind_spots_score_is_valid() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_no_template_explanations() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -1703,10 +1657,9 @@ async fn blind_spots_no_template_explanations() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_items_have_valid_evidence() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -1752,10 +1705,9 @@ async fn blind_spots_items_have_valid_evidence() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_tab_renders_without_errors() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1808,10 +1760,9 @@ async fn blind_spots_tab_renders_without_errors() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_tab_has_score_bar() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1849,10 +1800,9 @@ async fn blind_spots_tab_has_score_bar() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_tab_has_tier_sections() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1916,10 +1866,9 @@ async fn blind_spots_tab_has_tier_sections() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_accessibility_audit() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -1962,10 +1911,9 @@ async fn blind_spots_accessibility_audit() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_clean_state_shows_positive_ux() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2017,10 +1965,9 @@ async fn blind_spots_clean_state_shows_positive_ux() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_no_vanity_metrics() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2068,10 +2015,9 @@ async fn blind_spots_no_vanity_metrics() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_score_shows_coverage_not_problems() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2127,10 +2073,9 @@ async fn blind_spots_score_shows_coverage_not_problems() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn blind_spots_covered_section_has_compact_view() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2199,10 +2144,9 @@ async fn blind_spots_covered_section_has_compact_view() {
 // ── Phase 10: Content Graph ─────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_command_returns_valid_structure() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2245,10 +2189,9 @@ async fn content_graph_command_returns_valid_structure() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_nodes_have_required_fields() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2293,10 +2236,9 @@ async fn content_graph_nodes_have_required_fields() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_edges_have_valid_types() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2363,10 +2305,9 @@ async fn content_graph_edges_have_valid_types() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_clusters_are_consistent() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2436,10 +2377,9 @@ async fn content_graph_clusters_are_consistent() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_meta_counts_are_consistent() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2476,10 +2416,9 @@ async fn content_graph_meta_counts_are_consistent() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_different_time_windows() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2514,10 +2453,9 @@ async fn content_graph_different_time_windows() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_no_duplicate_edges() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2541,10 +2479,9 @@ async fn content_graph_no_duplicate_edges() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_layout_positions_are_finite() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2579,10 +2516,9 @@ async fn content_graph_layout_positions_are_finite() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_ui_toggle_exists() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2661,10 +2597,9 @@ async fn content_graph_ui_toggle_exists() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_ui_renders_on_toggle() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2802,10 +2737,9 @@ async fn content_graph_ui_renders_on_toggle() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn content_graph_edge_provenance_is_non_empty() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let graph = client
@@ -2839,10 +2773,9 @@ async fn content_graph_edge_provenance_is_non_empty() {
 // the DOM renders it, and the content is substantive (not placeholder).
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn briefing_snapshot_returns_structured_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let snapshot = client
@@ -2870,10 +2803,9 @@ async fn briefing_snapshot_returns_structured_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn latest_briefing_returns_value() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let briefing = client
@@ -2889,10 +2821,9 @@ async fn latest_briefing_returns_value() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn brief_tab_renders_content_in_dom() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -2935,10 +2866,9 @@ async fn brief_tab_renders_content_in_dom() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn briefing_snapshot_content_is_not_placeholder() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let snapshot = client
@@ -2974,10 +2904,9 @@ async fn briefing_snapshot_content_is_not_placeholder() {
 // ── Phase 12: Signal Tab — Scored Item Rendering ─────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn scoring_stats_returns_aggregate() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let stats = client
@@ -3006,10 +2935,9 @@ async fn scoring_stats_returns_aggregate() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn analysis_status_reports_state() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let status = client
@@ -3034,10 +2962,9 @@ async fn analysis_status_reports_state() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn signal_tab_renders_items_or_empty_state() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3079,10 +3006,9 @@ async fn signal_tab_renders_items_or_empty_state() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn signal_items_have_titles_when_present() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3138,10 +3064,9 @@ async fn signal_items_have_titles_when_present() {
 // ── Phase 13: Settings Persistence Round-trip ────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn get_settings_returns_valid_config() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
@@ -3163,10 +3088,9 @@ async fn get_settings_returns_valid_config() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn settings_no_api_keys_in_response() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
@@ -3183,10 +3107,9 @@ async fn settings_no_api_keys_in_response() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn mark_onboarding_complete_succeeds() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3216,10 +3139,9 @@ async fn mark_onboarding_complete_succeeds() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn settings_round_trip_preserves_structure() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3245,10 +3167,9 @@ async fn settings_round_trip_preserves_structure() {
 // ── Phase 14: Preemption Data Verification ───────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn preemption_alerts_returns_evidence_feed() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let alerts = client
@@ -3268,10 +3189,9 @@ async fn preemption_alerts_returns_evidence_feed() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn preemption_alerts_items_have_required_fields() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let alerts = client
@@ -3300,10 +3220,9 @@ async fn preemption_alerts_items_have_required_fields() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn preemption_tab_renders_in_dom() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3343,10 +3262,9 @@ async fn preemption_tab_renders_in_dom() {
 // ── Phase 15: Cold-start & Monitoring ────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn monitoring_status_returns_valid_state() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let status = client
@@ -3371,10 +3289,9 @@ async fn monitoring_status_returns_valid_state() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn cold_start_no_blank_screens() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3411,10 +3328,9 @@ async fn cold_start_no_blank_screens() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn all_tabs_have_no_console_errors() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3451,10 +3367,9 @@ async fn all_tabs_have_no_console_errors() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ipc_commands_never_panic() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3513,10 +3428,9 @@ async fn ipc_commands_never_panic() {
 // ── Phase 16: Write-Read-Verify — Mutation Tests ─────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn tech_stack_add_remove_round_trip() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3572,10 +3486,9 @@ async fn tech_stack_add_remove_round_trip() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn interest_add_remove_round_trip() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3624,10 +3537,9 @@ async fn interest_add_remove_round_trip() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn monitoring_toggle_round_trip() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3678,10 +3590,9 @@ async fn monitoring_toggle_round_trip() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn rss_feeds_read_write_round_trip() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3734,10 +3645,9 @@ async fn rss_feeds_read_write_round_trip() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn user_role_set_and_verify() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -3785,10 +3695,9 @@ async fn user_role_set_and_verify() {
 // ── Phase 18: Intelligence Systems — Deep IPC Coverage ──────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn tech_radar_returns_valid_structure() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let radar = client.invoke_command("get_tech_radar", None).await.unwrap();
@@ -3800,10 +3709,9 @@ async fn tech_radar_returns_valid_structure() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn knowledge_gaps_returns_evidence_feed() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let gaps = client
@@ -3820,10 +3728,9 @@ async fn knowledge_gaps_returns_evidence_feed() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn void_signal_returns_heartbeat() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let signal = client
@@ -3838,10 +3745,9 @@ async fn void_signal_returns_heartbeat() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn capability_states_returns_map() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let states = client
@@ -3862,10 +3768,9 @@ async fn capability_states_returns_map() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn capability_summary_returns_counts() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let summary = client
@@ -3880,10 +3785,9 @@ async fn capability_summary_returns_counts() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn source_health_returns_summary() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let health = client
@@ -3898,10 +3802,9 @@ async fn source_health_returns_summary() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn learned_preferences_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let prefs = client
@@ -3916,10 +3819,9 @@ async fn learned_preferences_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn trust_dashboard_returns_summary() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let trust = client
@@ -3934,10 +3836,9 @@ async fn trust_dashboard_returns_summary() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn intelligence_metrics_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let metrics = client
@@ -3954,10 +3855,9 @@ async fn intelligence_metrics_returns_data() {
 // ── Phase 19: System Health & Diagnostics ────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn startup_health_returns_issues_array() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let health = client
@@ -3972,10 +3872,9 @@ async fn startup_health_returns_issues_array() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn diagnostics_snapshot_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let diag = client
@@ -3990,10 +3889,9 @@ async fn diagnostics_snapshot_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn autophagy_status_returns_state() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let status = client
@@ -4008,10 +3906,9 @@ async fn autophagy_status_returns_state() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn data_health_returns_report() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let health = client
@@ -4026,10 +3923,9 @@ async fn data_health_returns_report() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn intelligence_pulse_returns_snapshot() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let pulse = client
@@ -4046,10 +3942,9 @@ async fn intelligence_pulse_returns_snapshot() {
 // ── Phase 20: ACE, Achievements, Channels, Profile ──────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ace_detected_tech_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let tech = client
@@ -4064,10 +3959,9 @@ async fn ace_detected_tech_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ace_active_topics_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let topics = client
@@ -4082,10 +3976,9 @@ async fn ace_active_topics_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn achievement_state_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let state = client
@@ -4100,10 +3993,9 @@ async fn achievement_state_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn achievements_list_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let achievements = client
@@ -4118,10 +4010,9 @@ async fn achievements_list_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn intelligence_growth_returns_history() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let growth = client
@@ -4136,10 +4027,9 @@ async fn intelligence_growth_returns_history() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn engagement_summary_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let summary = client
@@ -4154,10 +4044,9 @@ async fn engagement_summary_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn decision_windows_returns_array() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let windows = client
@@ -4172,10 +4061,9 @@ async fn decision_windows_returns_array() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn indexed_stats_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let stats = client
@@ -4190,10 +4078,9 @@ async fn indexed_stats_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn stack_health_returns_report() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let health = client
@@ -4208,10 +4095,9 @@ async fn stack_health_returns_report() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn user_context_returns_profile() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let ctx = client
@@ -4228,10 +4114,9 @@ async fn user_context_returns_profile() {
 // ── Phase 21: Channels — Content Pipeline ────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn channels_list_has_content() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let channels = client.invoke_command("list_channels", None).await.unwrap();
@@ -4250,10 +4135,9 @@ async fn channels_list_has_content() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn channel_content_returns_render_for_first_channel() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let channels = client.invoke_command("list_channels", None).await.unwrap();
@@ -4286,10 +4170,9 @@ async fn channel_content_returns_render_for_first_channel() {
 // were removed — local AI is Ollama, cloud AI is BYOK.)
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn synthesis_capability_returns_hardware_info() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -4340,10 +4223,9 @@ async fn synthesis_capability_returns_hardware_info() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn synthesis_capability_flags_unverified_providers() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
@@ -4377,10 +4259,9 @@ async fn synthesis_capability_flags_unverified_providers() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn model_eval_returns_structured_verdict() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -4459,10 +4340,9 @@ async fn model_eval_returns_structured_verdict() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn briefing_snapshot_has_synthesis_fields() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let snapshot = client
@@ -4510,10 +4390,9 @@ async fn briefing_snapshot_has_synthesis_fields() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn trigger_briefing_returns_status() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -4541,10 +4420,9 @@ async fn trigger_briefing_returns_status() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ipc_commands_include_llm_infrastructure() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 
@@ -4570,10 +4448,9 @@ async fn ipc_commands_include_llm_infrastructure() {
 // ── Phase 23: Source Management — The Onboarding Path ─────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn source_health_returns_structured_summary() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let health = client
@@ -4596,10 +4473,9 @@ async fn source_health_returns_structured_summary() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn available_sources_returns_source_list() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let sources = client.invoke_command("get_sources", None).await.unwrap();
@@ -4622,10 +4498,9 @@ async fn available_sources_returns_source_list() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn source_health_status_returns_per_source_records() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let status = client
@@ -4649,10 +4524,9 @@ async fn source_health_status_returns_per_source_records() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn rss_feeds_returns_config_object() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let response = client.invoke_command("get_rss_feeds", None).await.unwrap();
@@ -4675,10 +4549,9 @@ async fn rss_feeds_returns_config_object() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn twitter_handles_returns_config_object() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let response = client
@@ -4704,10 +4577,9 @@ async fn twitter_handles_returns_config_object() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn default_rss_feeds_returns_curated_list() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let defaults = client
@@ -4731,10 +4603,9 @@ async fn default_rss_feeds_returns_curated_list() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn curated_feeds_returns_structured_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let curated = client
@@ -4749,10 +4620,9 @@ async fn curated_feeds_returns_structured_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn feed_health_status_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let health = client
@@ -4772,10 +4642,9 @@ async fn feed_health_status_returns_data() {
 // ── Phase 24: Content & Saved Items ──────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn saved_items_returns_array() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let items = client
@@ -4799,10 +4668,9 @@ async fn saved_items_returns_array() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn engagement_summary_returns_reading_metrics() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let summary = client
@@ -4817,10 +4685,9 @@ async fn engagement_summary_returns_reading_metrics() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn watched_items_returns_config_object() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let response = client
@@ -4846,10 +4713,9 @@ async fn watched_items_returns_config_object() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn learned_preferences_returns_structured_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let prefs = client
@@ -4866,10 +4732,9 @@ async fn learned_preferences_returns_structured_data() {
 // ── Phase 25: Digest & Briefing Pipeline ─────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn digest_config_returns_settings_object() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let config = client
@@ -4884,10 +4749,9 @@ async fn digest_config_returns_settings_object() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn briefing_snapshot_returns_structured_briefing() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let snapshot = client
@@ -4917,10 +4781,9 @@ async fn briefing_snapshot_returns_structured_briefing() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn latest_briefing_returns_briefing_or_null() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let briefing = client
@@ -4935,10 +4798,9 @@ async fn latest_briefing_returns_briefing_or_null() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn morning_briefing_config_returns_schedule() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let config = client
@@ -4955,10 +4817,9 @@ async fn morning_briefing_config_returns_schedule() {
 // ── Phase 26: Decision Advantage & Trust ─────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn decision_windows_returns_actionable_array() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let windows = client
@@ -4982,10 +4843,9 @@ async fn decision_windows_returns_actionable_array() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn trust_dashboard_returns_calibration_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let dashboard = client
@@ -5000,10 +4860,9 @@ async fn trust_dashboard_returns_calibration_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn accuracy_report_returns_metrics() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let report = client
@@ -5018,10 +4877,9 @@ async fn accuracy_report_returns_metrics() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn ace_accuracy_metrics_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let metrics = client
@@ -5036,10 +4894,9 @@ async fn ace_accuracy_metrics_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn advantage_history_returns_timeline() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let history = client
@@ -5054,10 +4911,9 @@ async fn advantage_history_returns_timeline() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn domain_precision_report_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let report = client
@@ -5072,10 +4928,9 @@ async fn domain_precision_report_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn false_positive_analysis_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let analysis = client
@@ -5092,10 +4947,9 @@ async fn false_positive_analysis_returns_data() {
 // ── Phase 27: Privacy & Security Surface ─────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn privacy_config_returns_privacy_fields() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let config = client
@@ -5110,10 +4964,9 @@ async fn privacy_config_returns_privacy_fields() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn usage_analytics_returns_telemetry_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let analytics = client
@@ -5128,10 +4981,9 @@ async fn usage_analytics_returns_telemetry_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn diagnostics_returns_system_snapshot() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let diag = client
@@ -5151,10 +5003,9 @@ async fn diagnostics_returns_system_snapshot() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn error_telemetry_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let errors = client
@@ -5169,10 +5020,9 @@ async fn error_telemetry_returns_data() {
 }
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn error_summary_returns_aggregated_data() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let summary = client
@@ -5188,10 +5038,9 @@ async fn error_summary_returns_aggregated_data() {
 
 #[cfg(feature = "enterprise")]
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn audit_log_returns_security_events() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let log = client.invoke_command("get_audit_log", None).await.unwrap();
@@ -5204,10 +5053,9 @@ async fn audit_log_returns_security_events() {
 
 #[cfg(feature = "enterprise")]
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn audit_summary_returns_overview() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
     let summary = client
@@ -5224,10 +5072,9 @@ async fn audit_summary_returns_overview() {
 // ── Phase 28: IPC Panic Guard Expansion ──────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "live app: needs a running 4DA debug build; see the module docs"]
 async fn expanded_panic_guard_30_plus_commands() {
-    if skip_unless_e2e() {
-        return;
-    }
+    require_e2e();
 
     let mut client = connect_victauri().await.unwrap();
 

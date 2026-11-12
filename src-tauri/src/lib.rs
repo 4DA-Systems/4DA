@@ -102,6 +102,7 @@ pub use types::{
 pub(crate) use types::{GenericSourceItem, ANALYSIS_TIMEOUT_SECS};
 
 mod commands;
+mod e2e_gate;
 pub(crate) mod embedding_calibration;
 mod embeddings;
 mod events;

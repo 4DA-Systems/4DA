@@ -1,0 +1,27 @@
+{
+  "$comment": "Engine end-to-end gate (scripts/ci/engine-e2e.mjs). README.md in this directory says what each field is for and how to update the goldens.",
+  "cases": [
+    "js-h3-pnpm9",
+    "js-jest-yarn-berry",
+    "js-hono-bun",
+    "rs-bat-0.18",
+    "poly-fastapi-template-uv",
+    "py-poetry-1.1",
+    "go-gh-cli-v2.20",
+    "synth-npm-edges"
+  ],
+  "mutation": {
+    "$comment": "A user applying a fix: optimist's nested minimist 0.0.10 (two advisories) moves to 1.2.8, which the root already installs.",
+    "case": "synth-npm-edges",
+    "file": "package-lock.json",
+    "find": "\"version\": \"0.0.10\"",
+    "replace": "\"version\": \"1.2.8\"",
+    "occurrences": 1,
+    "removed": ["npm|.|minimist|0.0.10"],
+    "added": []
+  },
+  "budgets": {
+    "fresh": { "wall_seconds": 600, "peak_rss_mb": 2048 },
+    "rerun": { "wall_seconds": 300, "peak_rss_mb": 2048 }
+  }
+}

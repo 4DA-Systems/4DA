@@ -82,7 +82,8 @@ pub(crate) struct Mirror {
 impl Mirror {
     pub(crate) fn live() -> Self {
         Self {
-            base_url: GCS_BASE_URL.to_string(),
+            base_url: crate::e2e_gate::osv_mirror_base_url()
+                .unwrap_or_else(|| GCS_BASE_URL.to_string()),
             dir: RuntimePaths::get().data_dir.join("osv-cache"),
         }
     }

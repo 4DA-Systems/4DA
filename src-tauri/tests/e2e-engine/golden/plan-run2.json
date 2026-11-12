@@ -1,0 +1,7328 @@
+{
+  "schema_version": 5,
+  "item_count": 175,
+  "multi_version_coverage": true,
+  "validation_drop_count": 0,
+  "items": [
+    {
+      "id": "upgrade-plan:crates.io:atty",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "No fix published for atty — 2 advisories across 1 project",
+      "affected_deps": [
+        "atty"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:chrono",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade chrono to >= 0.4.20 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "chrono"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:git2",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade git2 to >= 0.21.0 (major) — clears 4 advisories across 1 project",
+      "affected_deps": [
+        "git2"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:idna",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade idna to >= 1.0.0 (major) via url — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "idna"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:libgit2-sys",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade libgit2-sys to >= 0.16.2 (major) via git2 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "libgit2-sys"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:nix",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade nix to >= 0.20.2 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "nix"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:rand",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade rand to >= 0.8.6 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "rand"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:regex",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade regex to >= 1.5.5 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "regex"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:remove_dir_all",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade remove_dir_all to >= 0.8.0 (major) via tempfile — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "remove_dir_all"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:sys-info",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade sys-info to >= 0.8.0 (major) via bugreport — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "sys-info"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:crates.io:thread_local",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade thread_local to >= 1.1.4 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "thread_local"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:github.com/cli/go-gh",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "No fix published for github.com/cli/go-gh — 1 advisory across 1 project",
+      "affected_deps": [
+        "github.com/cli/go-gh"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:github.com/gorilla/websocket",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade github.com/gorilla/websocket to >= 1.5.3 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "github.com/gorilla/websocket"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:github.com/yuin/goldmark",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade github.com/yuin/goldmark to >= 1.7.17 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "github.com/yuin/goldmark"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:golang.org/x/net",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade golang.org/x/net to >= 0.60.0 (major) — clears 25 advisories across 1 project",
+      "affected_deps": [
+        "golang.org/x/net"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:golang.org/x/oauth2",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade golang.org/x/oauth2 to >= 0.27.0 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "golang.org/x/oauth2"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:golang.org/x/sys",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade golang.org/x/sys to >= 0.44.0 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "golang.org/x/sys"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:golang.org/x/text",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade golang.org/x/text to >= 0.41.0 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "golang.org/x/text"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:google.golang.org/grpc",
+      "kind": "alert",
+      "urgency": "critical",
+      "title": "Upgrade google.golang.org/grpc to >= 1.83.2 — clears 6 advisories across 1 project",
+      "affected_deps": [
+        "google.golang.org/grpc"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:google.golang.org/protobuf",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade google.golang.org/protobuf to >= 1.33.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "google.golang.org/protobuf"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:Go:stdlib",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade stdlib to >= 1.26.9 — clears 14 advisories across 1 project",
+      "affected_deps": [
+        "stdlib"
+      ],
+      "affected_projects": [
+        "<ctx>/go-gh-cli-v2.20"
+      ]
+    },
+    {
+      "id": "upgrade-plan:informational",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "9 unmaintained dependencies — no fix to apply (adler, ansi_term, bincode +6 more)",
+      "affected_deps": [
+        "adler",
+        "ansi_term",
+        "bincode",
+        "difference",
+        "encoding",
+        "instant",
+        "safemem",
+        "term_size",
+        "yaml-rust"
+      ],
+      "affected_projects": [
+        "<ctx>/rs-bat-0.18"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@angular/common",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade @angular/common to >= 20.3.28 (major) — clears 7 advisories across 1 project",
+      "affected_deps": [
+        "@angular/common"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@angular/compiler",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade @angular/compiler to >= 20.3.28 (major) — clears 6 advisories across 1 project",
+      "affected_deps": [
+        "@angular/compiler"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@angular/core",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade @angular/core to >= 20.3.28 (major) — clears 7 advisories across 1 project",
+      "affected_deps": [
+        "@angular/core"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@babel/core",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade @babel/core to >= 7.29.6 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "@babel/core"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@babel/helpers",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @babel/helpers to >= 7.26.10 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "@babel/helpers"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@babel/plugin-transform-modules-systemjs",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade @babel/plugin-transform-modules-systemjs to >= 7.29.4 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@babel/plugin-transform-modules-systemjs"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@babel/runtime",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @babel/runtime to >= 7.26.10 — clears 1 advisory across 3 projects",
+      "affected_deps": [
+        "@babel/runtime"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@babel/runtime-corejs3",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @babel/runtime-corejs3 to >= 7.26.10 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@babel/runtime-corejs3"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@babel/traverse",
+      "kind": "alert",
+      "urgency": "critical",
+      "title": "Upgrade @babel/traverse to >= 7.23.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@babel/traverse"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@eslint/plugin-kit",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade @eslint/plugin-kit to >= 0.3.4 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "@eslint/plugin-kit"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@fastify/busboy",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @fastify/busboy to >= 3.2.2 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "@fastify/busboy"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@hey-api/openapi-ts",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade @hey-api/openapi-ts to >= 0.97.3 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@hey-api/openapi-ts"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@hono/node-server",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @hono/node-server to >= 1.19.15 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "@hono/node-server"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@octokit/plugin-paginate-rest",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @octokit/plugin-paginate-rest to >= 9.2.2 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@octokit/plugin-paginate-rest"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@octokit/request",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @octokit/request to >= 8.4.1 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@octokit/request"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@octokit/request-error",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @octokit/request-error to >= 5.1.1 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@octokit/request-error"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@sideway/formula",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade @sideway/formula to >= 3.0.1 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@sideway/formula"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@tootallnate/once",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade @tootallnate/once to >= 2.0.1 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "@tootallnate/once"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@vitest/mocker",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade @vitest/mocker to >= 4.1.11 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@vitest/mocker"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:@zag-js/core",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade @zag-js/core to >= 0.82.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "@zag-js/core"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:ajv",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade ajv to >= 6.14.0 / 8.18.0 — clears 1 advisory across 3 projects",
+      "affected_deps": [
+        "ajv"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:algoliasearch-helper",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade algoliasearch-helper to >= 3.11.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "algoliasearch-helper"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:axios:ghsa-35jp-ww65-95wh",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade axios to >= 1.20.0 — clears 33 advisories across 1 project",
+      "affected_deps": [
+        "axios"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:axios:ghsa-3g43-6gmg-66jw",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade axios to >= 0.34.0 (major) — clears 23 advisories across 1 project",
+      "affected_deps": [
+        "axios"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:bn.js",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade bn.js to >= 4.12.3 / 5.2.3 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "bn.js"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:body-parser",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade body-parser to >= 1.20.6 — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "body-parser"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:brace-expansion",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade brace-expansion to >= 1.1.21 / 2.1.7 — clears 8 advisories across 4 projects",
+      "affected_deps": [
+        "brace-expansion"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/synth-npm-edges"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:braces:ghsa-grv7-fg5c-xmjg",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade braces to >= 3.0.3 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "braces"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:braces:ghsa-vfj7-8cjw-p6xm",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "No fix published for braces — 1 advisory across 2 projects",
+      "affected_deps": [
+        "braces"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:browserslist",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade browserslist to >= 4.28.7 — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "browserslist"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:cipher-base",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade cipher-base to >= 1.0.5 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "cipher-base"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:colord",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade colord to >= 2.9.4 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "colord"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:compression",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade compression to >= 1.8.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "compression"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:cookie",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade cookie to >= 0.7.0 (major) via express — clears 1 advisory across 3 projects",
+      "affected_deps": [
+        "cookie"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:cross-spawn",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade cross-spawn to >= 6.0.6 / 7.0.5 — clears 1 advisory across 3 projects",
+      "affected_deps": [
+        "cross-spawn"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:d3-color",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade d3-color to >= 3.1.0 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "d3-color"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:decode-uri-component",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade decode-uri-component to >= 0.5.0 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "decode-uri-component"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:decompress",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "No fix published for decompress — 4 advisories across 1 project",
+      "affected_deps": [
+        "decompress"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:defu",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade defu to >= 6.1.5 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "defu"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:diff:ghsa-73rr-hh4g-fpgx",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade diff to >= 4.0.4 / 5.2.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "diff"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:ejs",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade ejs to >= 3.1.10 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "ejs"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:elliptic",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade elliptic to >= 6.6.1 — clears 7 advisories across 1 project",
+      "affected_deps": [
+        "elliptic"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:esbuild",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade esbuild to >= 0.25.0 (major) — clears 1 advisory across 3 projects",
+      "affected_deps": [
+        "esbuild"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:eta",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade eta to >= 2.0.0 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "eta"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:express:ghsa-qw6h-vgh9-j6wx~2f12d0a8",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade express to >= 4.20.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "express"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:express:ghsa-qw6h-vgh9-j6wx~ad7c6187",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade express to >= 4.20.0 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "express"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:flatted",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade flatted to >= 3.4.2 — clears 2 advisories across 3 projects",
+      "affected_deps": [
+        "flatted"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:follow-redirects:ghsa-cxjh-pqwp-8mfp",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade follow-redirects to >= 1.16.0 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "follow-redirects"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:follow-redirects:ghsa-r4q5-vmmm-2653",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade follow-redirects to >= 1.16.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "follow-redirects"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:form-data",
+      "kind": "alert",
+      "urgency": "critical",
+      "title": "Upgrade form-data to >= 3.0.5 / 4.0.6 — clears 2 advisories across 4 projects",
+      "affected_deps": [
+        "form-data"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:formidable",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade formidable to >= 2.1.3 / 3.5.3 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "formidable"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:glob",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade glob to >= 10.5.0 / 11.1.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "glob"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:got",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade got to >= 11.8.5 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "got"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:graphql",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade graphql to >= 16.8.1 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "graphql"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:h3:ghsa-22cc-p3c6-wpvm",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade h3 to >= 1.15.9 — clears 5 advisories across 1 project",
+      "affected_deps": [
+        "h3"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:handlebars",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade handlebars to >= 4.7.10 via @hey-api/openapi-ts — clears 11 advisories across 2 projects",
+      "affected_deps": [
+        "handlebars"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:hono",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade hono to >= 4.13.7 — clears 43 advisories across 1 project",
+      "affected_deps": [
+        "hono"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:http-cache-semantics",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade http-cache-semantics to >= 4.1.1 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "http-cache-semantics"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:http-proxy-middleware",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade http-proxy-middleware to >= 2.0.10 — clears 4 advisories across 1 project",
+      "affected_deps": [
+        "http-proxy-middleware"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:image-size",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade image-size to >= 2.0.3 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "image-size"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:immutable",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade immutable to >= 4.3.9 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "immutable"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:ip",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade ip to >= 1.1.9 / 2.0.1 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "ip"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:joi",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade joi to >= 17.13.8 — clears 5 advisories across 1 project",
+      "affected_deps": [
+        "joi"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:js-yaml:ghsa-2883-xcg3-v3hh",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade js-yaml to >= 3.15.2 / 4.3.2 — clears 5 advisories across 4 projects",
+      "affected_deps": [
+        "js-yaml"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:json5",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade json5 to >= 1.0.2 / 2.2.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "json5"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:loader-utils",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade loader-utils to >= 2.0.4 / 3.2.1 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "loader-utils"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:lodash",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade lodash to >= 4.18.0 — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "lodash"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:micromatch",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade micromatch to >= 4.0.8 (major) — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "micromatch"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:minimatch:ghsa-23c5-xmqv-rm74~1cdc5894",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade minimatch to >= 3.1.4 / 5.1.8 — clears 4 advisories across 2 projects",
+      "affected_deps": [
+        "minimatch"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/synth-npm-edges"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:minimatch:ghsa-23c5-xmqv-rm74~2933092e",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade minimatch to >= 3.1.4 / 5.1.8 / 9.0.7 / 10.2.3 — clears 3 advisories across 2 projects",
+      "affected_deps": [
+        "minimatch"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:mongodb",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade mongodb to >= 4.17.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "mongodb"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:nanoid:ghsa-28wg-ghj8-5hjv~54704543",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade nanoid to >= 3.3.18 — clears 4 advisories across 3 projects",
+      "affected_deps": [
+        "nanoid"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:nanoid:ghsa-28wg-ghj8-5hjv~9ef349a2",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade nanoid to >= 3.3.18 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "nanoid"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:node-forge",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade node-forge to >= 1.4.0 — clears 7 advisories across 3 projects",
+      "affected_deps": [
+        "node-forge"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:nth-check",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade nth-check to >= 2.0.1 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "nth-check"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:on-headers",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade on-headers to >= 1.1.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "on-headers"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:pacote",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade pacote to >= 21.5.1 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "pacote"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:parse-url",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade parse-url to >= 8.1.0 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "parse-url"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:path-to-regexp",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade path-to-regexp to >= 0.1.13 / 1.9.0 / 3.3.0 (major) — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "path-to-regexp"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:pbkdf2",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade pbkdf2 to >= 3.1.7 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "pbkdf2"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:picomatch",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade picomatch to >= 2.3.2 — clears 2 advisories across 3 projects",
+      "affected_deps": [
+        "picomatch"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:playwright",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade playwright to >= 1.55.1 via @playwright/test — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "playwright"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:postcss-selector-parser:ghsa-rj75-hqrm-r3gf~67b72996",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade postcss-selector-parser to >= 7.1.6 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "postcss-selector-parser"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:postcss-selector-parser:ghsa-rj75-hqrm-r3gf~7381802c",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade postcss-selector-parser to >= 7.1.6 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "postcss-selector-parser"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:postcss:ghsa-6g55-p6wh-862q~1a963e6e",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade postcss to >= 8.5.23 — clears 4 advisories across 3 projects",
+      "affected_deps": [
+        "postcss"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:postcss:ghsa-6g55-p6wh-862q~780ab42a",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade postcss to >= 8.5.23 — clears 5 advisories across 1 project",
+      "affected_deps": [
+        "postcss"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:prismjs",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade prismjs to >= 1.30.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "prismjs"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:proxy-addr",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade proxy-addr to >= 2.0.8 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "proxy-addr"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:qs:ghsa-4mjr-xmp4-gh2g~4cbce68a",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade qs to >= 6.16.0 — clears 4 advisories across 2 projects",
+      "affected_deps": [
+        "qs"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:qs:ghsa-4mjr-xmp4-gh2g~52146029",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade qs to >= 6.16.0 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "qs"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:react-devtools-core",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade react-devtools-core to >= 4.28.4 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "react-devtools-core"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:rollup:ghsa-gcx4-mw62-g8wm",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade rollup to >= 2.80.0 / 3.30.0 / 4.59.0 — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "rollup"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:rollup:ghsa-mw96-cpmx-2vgc",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade rollup to >= 4.59.0 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "rollup"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:semver:ghsa-c2qf-rxjj-qqgw",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade semver to >= 5.7.2 / 6.3.1 / 7.5.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "semver"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:send",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade send to >= 0.19.0 (major) — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "send"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:serialize-javascript",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade serialize-javascript to >= 7.0.5 (major) — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "serialize-javascript"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:serve-static",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade serve-static to >= 1.16.0 — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "serve-static"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:sha.js",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade sha.js to >= 2.4.12 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "sha.js"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:shell-quote",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade shell-quote to >= 1.11.0 — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "shell-quote"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:source-map-js",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade source-map-js to >= 1.2.2 — clears 1 advisory across 4 projects",
+      "affected_deps": [
+        "source-map-js"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:sprintf-js",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "No fix published for sprintf-js — 1 advisory across 1 project",
+      "affected_deps": [
+        "sprintf-js"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:svgo",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade svgo to >= 2.8.4 / 3.3.5 — clears 4 advisories across 2 projects",
+      "affected_deps": [
+        "svgo"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:tar:ghsa-23hp-3jrh-7fpw~4a05071a",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade tar to >= 7.5.21 (major) via giget — clears 12 advisories across 2 projects",
+      "affected_deps": [
+        "tar"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:tar:ghsa-23hp-3jrh-7fpw~fec01d26",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade tar to >= 7.5.21 (major) — clears 13 advisories across 1 project",
+      "affected_deps": [
+        "tar"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:tinypool",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade tinypool to >= 2.1.2 (major) via vitest — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "tinypool"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:tmp",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade tmp to >= 0.2.7 (major) — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "tmp"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:tough-cookie",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade tough-cookie to >= 4.1.3 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "tough-cookie"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:trim",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade trim to >= 0.0.3 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "trim"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:ua-parser-js",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade ua-parser-js to >= 0.7.33 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "ua-parser-js"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:undici:ghsa-2mjp-6q6p-2qxm~34b7eadb",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade undici to >= 6.28.1 — clears 17 advisories across 1 project",
+      "affected_deps": [
+        "undici"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:undici:ghsa-2mjp-6q6p-2qxm~9da4dd9e",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade undici to >= 6.28.1 (major) — clears 15 advisories across 1 project",
+      "affected_deps": [
+        "undici"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:uuid",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade uuid to >= 11.1.1 (major) via hyperid — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "uuid"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:validator",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade validator to >= 13.15.22 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "validator"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:vite:ghsa-356w-63v5-8wf4~45769bee",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade vite to >= 6.4.3 (major) — clears 11 advisories across 1 project",
+      "affected_deps": [
+        "vite"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:vite:ghsa-356w-63v5-8wf4~7375d7f4",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade vite to >= 6.4.3 (major) — clears 13 advisories across 1 project",
+      "affected_deps": [
+        "vite"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:vite:ghsa-356w-63v5-8wf4~a97b86ec",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade vite to >= 6.4.3 (major) — clears 15 advisories across 1 project",
+      "affected_deps": [
+        "vite"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:vitest:ghsa-5xrq-8626-4rwp~aed75c76",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade vitest to >= 4.1.11 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "vitest"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:vitest:ghsa-5xrq-8626-4rwp~cf3e6379",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade vitest to >= 4.1.11 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "vitest"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:webpack",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade webpack to >= 5.104.1 — clears 4 advisories across 1 project",
+      "affected_deps": [
+        "webpack"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:webpack-dev-middleware",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade webpack-dev-middleware to >= 7.4.6 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "webpack-dev-middleware"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:webpack-dev-server",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade webpack-dev-server to >= 5.2.6 (major) — clears 6 advisories across 1 project",
+      "affected_deps": [
+        "webpack-dev-server"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:websocket-driver",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade websocket-driver to >= 0.7.5 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "websocket-driver"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:word-wrap",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade word-wrap to >= 1.2.4 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "word-wrap"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:wrangler",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade wrangler to >= 3.114.17 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "wrangler"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:ws:ghsa-3h5v-q93c-6h6q",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade ws to >= 6.2.4 / 7.5.11 / 8.21.0 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "ws"
+      ],
+      "affected_projects": [
+        "<ctx>/js-jest-yarn-berry"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:ws:ghsa-58qx-3vcg-4xpx",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade ws to >= 8.21.0 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "ws"
+      ],
+      "affected_projects": [
+        "<ctx>/js-hono-bun"
+      ]
+    },
+    {
+      "id": "upgrade-plan:npm:yaml",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade yaml to >= 1.10.3 / 2.8.3 — clears 1 advisory across 3 projects",
+      "affected_deps": [
+        "yaml"
+      ],
+      "affected_projects": [
+        "<ctx>/js-h3-pnpm9",
+        "<ctx>/js-jest-yarn-berry",
+        "<ctx>/poly-fastapi-template-uv/frontend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:anyio",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade anyio to >= 4.14.2 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "anyio"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:certifi",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade certifi to >= 2024.7.4 (major) — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "certifi"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:cleo",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade cleo to >= 2.0.0 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "cleo"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:cryptography",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade cryptography to >= 50.0.0 (major) — clears 15 advisories across 1 project",
+      "affected_deps": [
+        "cryptography"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:filelock",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade filelock to >= 3.20.3 — clears 2 advisories across 2 projects",
+      "affected_deps": [
+        "filelock"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend",
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:h11",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade h11 to >= 0.16.0 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "h11"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:idna:ghsa-65pc-fj4g-8rjx~78d5a736",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade idna to >= 3.15 (major) — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "idna"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:idna:ghsa-65pc-fj4g-8rjx~ebdf4219",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade idna to >= 3.15 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "idna"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:jinja2",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade jinja2 to >= 3.1.6 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "jinja2"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:lxml",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade lxml to >= 6.1.0 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "lxml"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:mako",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade mako to >= 1.4.2 — clears 3 advisories across 1 project",
+      "affected_deps": [
+        "mako"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:msgpack",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade msgpack to >= 1.2.1 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "msgpack"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:py",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade py to >= 1.10.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "py"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:pygments",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade pygments to >= 2.20.0 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "pygments"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:pyjwt",
+      "kind": "alert",
+      "urgency": "critical",
+      "title": "Upgrade pyjwt to >= 2.15.0 — clears 16 advisories across 1 project",
+      "affected_deps": [
+        "pyjwt"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:pytest",
+      "kind": "alert",
+      "urgency": "watch",
+      "title": "Upgrade pytest to >= 9.0.3 (major) — clears 1 advisory across 2 projects",
+      "affected_deps": [
+        "pytest"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend",
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:python-dotenv",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade python-dotenv to >= 1.2.2 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "python-dotenv"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:python-multipart",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade python-multipart to >= 0.0.31 (major) — clears 8 advisories across 1 project",
+      "affected_deps": [
+        "python-multipart"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:pyyaml",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade pyyaml to >= 5.4 — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "pyyaml"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:requests:ghsa-9hjg-9r4m-mvj7~91fe83ad",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade requests to >= 2.33.0 — clears 4 advisories across 1 project",
+      "affected_deps": [
+        "requests"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:requests:ghsa-9hjg-9r4m-mvj7~fc850a73",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade requests to >= 2.33.0 — clears 2 advisories across 1 project",
+      "affected_deps": [
+        "requests"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:starlette",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade starlette to >= 1.3.1 (major) — clears 7 advisories across 1 project",
+      "affected_deps": [
+        "starlette"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:urllib3:ghsa-2xpw-w6gg-jr37~1b58b712",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade urllib3 to >= 2.8.0 (major) — clears 10 advisories across 1 project",
+      "affected_deps": [
+        "urllib3"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:urllib3:ghsa-2xpw-w6gg-jr37~647a90c3",
+      "kind": "alert",
+      "urgency": "high",
+      "title": "Upgrade urllib3 to >= 2.8.0 — clears 8 advisories across 1 project",
+      "affected_deps": [
+        "urllib3"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:virtualenv",
+      "kind": "alert",
+      "urgency": "critical",
+      "title": "Upgrade virtualenv to >= 21.7.13 (major) — clears 6 advisories across 2 projects",
+      "affected_deps": [
+        "virtualenv"
+      ],
+      "affected_projects": [
+        "<ctx>/poly-fastapi-template-uv/backend",
+        "<ctx>/py-poetry-1.1"
+      ]
+    },
+    {
+      "id": "upgrade-plan:PyPI:zipp",
+      "kind": "alert",
+      "urgency": "medium",
+      "title": "Upgrade zipp to >= 3.19.1 (major) — clears 1 advisory across 1 project",
+      "affected_deps": [
+        "zipp"
+      ],
+      "affected_projects": [
+        "<ctx>/py-poetry-1.1"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "item_id": "upgrade-plan:crates.io:atty",
+      "package": "atty",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "GHSA-g98v-hv3f-hcfr",
+        "RUSTSEC-2021-0145",
+        "RUSTSEC-2024-0375"
+      ],
+      "lines": [
+        {
+          "installed": "0.2.14",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:chrono",
+      "package": "chrono",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "RUSTSEC-2020-0159"
+      ],
+      "lines": [
+        {
+          "installed": "0.4.19",
+          "target": "0.4.20",
+          "upgrade_type": "patch",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:git2",
+      "package": "git2",
+      "ecosystem": "crates.io",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-j39j-6gw9-jw6h",
+        "GHSA-m4ch-rfv5-x5g3",
+        "RUSTSEC-2026-0008",
+        "RUSTSEC-2026-0183",
+        "RUSTSEC-2026-0184"
+      ],
+      "lines": [
+        {
+          "installed": "0.13.15",
+          "target": "0.21.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:idna",
+      "package": "idna",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-h97m-ww89-6jmq",
+        "RUSTSEC-2024-0421"
+      ],
+      "lines": [
+        {
+          "installed": "0.2.1",
+          "target": "1.0.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:libgit2-sys",
+      "package": "libgit2-sys",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-22q8-ghmq-63vf",
+        "GHSA-m4ch-rfv5-x5g3",
+        "RUSTSEC-2023-0003",
+        "RUSTSEC-2024-0013"
+      ],
+      "lines": [
+        {
+          "installed": "0.12.18+1.1.0",
+          "target": "0.16.2",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:nix",
+      "package": "nix",
+      "ecosystem": "crates.io",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-76w9-p8mg-j927",
+        "GHSA-wgrg-5h56-jg27",
+        "RUSTSEC-2021-0119"
+      ],
+      "lines": [
+        {
+          "installed": "0.19.1",
+          "target": "0.20.2",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:rand",
+      "package": "rand",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-cq8v-f236-94qc",
+        "RUSTSEC-2026-0097"
+      ],
+      "lines": [
+        {
+          "installed": "0.8.3",
+          "target": "0.8.6",
+          "upgrade_type": "patch",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:regex",
+      "package": "regex",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-m5pq-gvj9-9vr8",
+        "RUSTSEC-2022-0013"
+      ],
+      "lines": [
+        {
+          "installed": "1.4.3",
+          "target": "1.5.5",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:remove_dir_all",
+      "package": "remove_dir_all",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-mc8h-8q98-g5hr",
+        "RUSTSEC-2023-0018"
+      ],
+      "lines": [
+        {
+          "installed": "0.5.3",
+          "target": "0.8.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:sys-info",
+      "package": "sys-info",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-2f5j-3mhq-xv58",
+        "RUSTSEC-2020-0100"
+      ],
+      "lines": [
+        {
+          "installed": "0.7.0",
+          "target": "0.8.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:crates.io:thread_local",
+      "package": "thread_local",
+      "ecosystem": "crates.io",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-9hpw-r23r-xgm5",
+        "RUSTSEC-2022-0006"
+      ],
+      "lines": [
+        {
+          "installed": "1.1.3",
+          "target": "1.1.4",
+          "upgrade_type": "patch",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:github.com/cli/go-gh",
+      "package": "github.com/cli/go-gh",
+      "ecosystem": "Go",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "GHSA-55v3-xh23-96gh",
+        "GO-2024-3295"
+      ],
+      "lines": [
+        {
+          "installed": "0.1.3-0.20221102170023-e3ec45fb1d1b",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:github.com/gorilla/websocket",
+      "package": "github.com/gorilla/websocket",
+      "ecosystem": "Go",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-w67g-5rqw-f597",
+        "GO-2026-6278"
+      ],
+      "lines": [
+        {
+          "installed": "1.4.2",
+          "target": "1.5.3",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:github.com/yuin/goldmark",
+      "package": "github.com/yuin/goldmark",
+      "ecosystem": "Go",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GO-2026-5320"
+      ],
+      "lines": [
+        {
+          "installed": "1.4.4",
+          "target": "1.7.17",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:golang.org/x/net",
+      "package": "golang.org/x/net",
+      "ecosystem": "Go",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-2wrh-6pvc-2jm9",
+        "GHSA-4374-p667-p6c8",
+        "GHSA-4v7x-pqxf-cx7m",
+        "GHSA-5cv4-jp36-h3mw",
+        "GHSA-fxg5-wq6x-vr4w",
+        "GHSA-qppj-fm5r-hxr3",
+        "GHSA-qxp5-gwg8-xv66",
+        "GHSA-vvgc-356p-c3xw",
+        "GHSA-vvpx-j8f3-3w6h",
+        "GHSA-xrjj-mj9h-534m",
+        "GO-2022-1144",
+        "GO-2023-1495",
+        "GO-2023-1571",
+        "GO-2023-1988",
+        "GO-2023-2102",
+        "GO-2024-2687",
+        "GO-2024-3333",
+        "GO-2025-3503",
+        "GO-2025-3595",
+        "GO-2026-4440",
+        "GO-2026-4441",
+        "GO-2026-4918",
+        "GO-2026-5025",
+        "GO-2026-5026",
+        "GO-2026-5027",
+        "GO-2026-5028",
+        "GO-2026-5029",
+        "GO-2026-5030",
+        "GO-2026-5942",
+        "GO-2026-6603",
+        "GO-2026-6610",
+        "GO-2026-6611",
+        "GO-2026-6612",
+        "GO-2026-6617"
+      ],
+      "lines": [
+        {
+          "installed": "0.0.0-20220923203811-8be639271d50",
+          "target": "0.60.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:golang.org/x/oauth2",
+      "package": "golang.org/x/oauth2",
+      "ecosystem": "Go",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-6v2p-p543-phr9",
+        "GO-2025-3488"
+      ],
+      "lines": [
+        {
+          "installed": "0.0.0-20220309155454-6242fa91716a",
+          "target": "0.27.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:golang.org/x/sys",
+      "package": "golang.org/x/sys",
+      "ecosystem": "Go",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GO-2026-5024"
+      ],
+      "lines": [
+        {
+          "installed": "0.0.0-20220811171246-fbc7d0a398ab",
+          "target": "0.44.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:golang.org/x/text",
+      "package": "golang.org/x/text",
+      "ecosystem": "Go",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GO-2026-5970",
+        "GO-2026-6629"
+      ],
+      "lines": [
+        {
+          "installed": "0.3.8",
+          "target": "0.41.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:google.golang.org/grpc",
+      "package": "google.golang.org/grpc",
+      "ecosystem": "Go",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-2v4p-qf9q-27wj",
+        "GHSA-hrxh-6v49-42gf",
+        "GHSA-m425-mq94-257g",
+        "GHSA-p77j-4mvh-x3m3",
+        "GHSA-qc2q-p7wx-3px3",
+        "GHSA-vp52-pcj8-j9qc",
+        "GO-2023-2153",
+        "GO-2026-4762",
+        "GO-2026-6061",
+        "GO-2026-6348",
+        "GO-2026-6441",
+        "GO-2026-6443"
+      ],
+      "lines": [
+        {
+          "installed": "1.49.0",
+          "target": "1.83.2",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:google.golang.org/protobuf",
+      "package": "google.golang.org/protobuf",
+      "ecosystem": "Go",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-8r3f-844c-mc37",
+        "GO-2024-2611"
+      ],
+      "lines": [
+        {
+          "installed": "1.27.1",
+          "target": "1.33.0",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:Go:stdlib",
+      "package": "stdlib",
+      "ecosystem": "Go",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GO-2022-0493",
+        "GO-2022-0969",
+        "GO-2022-1144",
+        "GO-2023-1571",
+        "GO-2023-2102",
+        "GO-2024-2687",
+        "GO-2025-3503",
+        "GO-2026-4918",
+        "GO-2026-5026",
+        "GO-2026-6603",
+        "GO-2026-6610",
+        "GO-2026-6611",
+        "GO-2026-6612",
+        "GO-2026-6617"
+      ],
+      "lines": [
+        {
+          "installed": "1.18.0",
+          "target": "1.26.9",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/go-gh-cli-v2.20 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "adler",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2025-0056"
+      ],
+      "lines": [
+        {
+          "installed": "0.2.3",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "ansi_term",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2021-0139"
+      ],
+      "lines": [
+        {
+          "installed": "0.11.0",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        },
+        {
+          "installed": "0.12.1",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "bincode",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2025-0141"
+      ],
+      "lines": [
+        {
+          "installed": "1.3.1",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "difference",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2020-0095"
+      ],
+      "lines": [
+        {
+          "installed": "2.0.0",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "encoding",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2021-0153"
+      ],
+      "lines": [
+        {
+          "installed": "0.2.33",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "instant",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2024-0384"
+      ],
+      "lines": [
+        {
+          "installed": "0.1.9",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "safemem",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2023-0081"
+      ],
+      "lines": [
+        {
+          "installed": "0.3.3",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "term_size",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2020-0163"
+      ],
+      "lines": [
+        {
+          "installed": "0.3.2",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:informational",
+      "package": "yaml-rust",
+      "ecosystem": "crates.io",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "RUSTSEC-2024-0320"
+      ],
+      "lines": [
+        {
+          "installed": "0.4.5",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/rs-bat-0.18"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@angular/common",
+      "package": "@angular/common",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-39pv-4j6c-2g6v",
+        "GHSA-48r7-hpm6-gfxm",
+        "GHSA-58c5-g7wp-6w37",
+        "GHSA-jhpw-976m-542j",
+        "GHSA-p297-fm68-3q8c",
+        "GHSA-p3vc-36g9-x9gr",
+        "GHSA-q6f4-qqrg-jv6x"
+      ],
+      "lines": [
+        {
+          "installed": "12.2.16",
+          "target": "20.3.28",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@angular/compiler",
+      "package": "@angular/compiler",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-58w9-8g37-x9v5",
+        "GHSA-f3m7-gqxr-g87x",
+        "GHSA-hh8m-fm6v-7cvg",
+        "GHSA-jj27-h5hq-8x99",
+        "GHSA-jrmj-c5cx-3cw6",
+        "GHSA-v4hv-rgfq-gp49"
+      ],
+      "lines": [
+        {
+          "installed": "12.2.16",
+          "target": "20.3.28",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@angular/core",
+      "package": "@angular/core",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-692r-grfm-v8x7",
+        "GHSA-f3m7-gqxr-g87x",
+        "GHSA-hh8m-fm6v-7cvg",
+        "GHSA-jj27-h5hq-8x99",
+        "GHSA-jrmj-c5cx-3cw6",
+        "GHSA-prjf-86w9-mfqv",
+        "GHSA-rgjc-h3x7-9mwg"
+      ],
+      "lines": [
+        {
+          "installed": "12.2.16",
+          "target": "20.3.28",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@babel/core",
+      "package": "@babel/core",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-4x5r-pxfx-6jf8"
+      ],
+      "lines": [
+        {
+          "installed": "7.12.9",
+          "target": "7.29.6",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "7.18.10",
+          "target": "7.29.6",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        },
+        {
+          "installed": "7.24.7",
+          "target": "7.29.6",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@babel/helpers",
+      "package": "@babel/helpers",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-968p-4wvh-cqc8"
+      ],
+      "lines": [
+        {
+          "installed": "7.18.9",
+          "target": "7.26.10",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "7.24.7",
+          "target": "7.26.10",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@babel/plugin-transform-modules-systemjs",
+      "package": "@babel/plugin-transform-modules-systemjs",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-fv7c-fp4j-7gwp"
+      ],
+      "lines": [
+        {
+          "installed": "7.18.9",
+          "target": "7.29.4",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@babel/runtime",
+      "package": "@babel/runtime",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-968p-4wvh-cqc8"
+      ],
+      "lines": [
+        {
+          "installed": "7.18.9",
+          "target": "7.26.10",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "7.23.9",
+          "target": "7.26.10",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend"
+          ]
+        },
+        {
+          "installed": "7.24.7",
+          "target": "7.26.10",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@babel/runtime-corejs3",
+      "package": "@babel/runtime-corejs3",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-968p-4wvh-cqc8"
+      ],
+      "lines": [
+        {
+          "installed": "7.18.9",
+          "target": "7.26.10",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@babel/traverse",
+      "package": "@babel/traverse",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-67hx-6x53-jw92"
+      ],
+      "lines": [
+        {
+          "installed": "7.18.11",
+          "target": "7.23.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@eslint/plugin-kit",
+      "package": "@eslint/plugin-kit",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-7q7g-4xm8-89cq",
+        "GHSA-xffm-g5w8-qvg7"
+      ],
+      "lines": [
+        {
+          "installed": "0.2.0",
+          "target": "0.3.4",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@fastify/busboy",
+      "package": "@fastify/busboy",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-gxm5-99cw-xjw9",
+        "GHSA-x8mw-p69m-v3mx"
+      ],
+      "lines": [
+        {
+          "installed": "2.1.1",
+          "target": "3.2.2",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@hey-api/openapi-ts",
+      "package": "@hey-api/openapi-ts",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-hhx9-57xq-r5rw"
+      ],
+      "lines": [
+        {
+          "installed": "0.57.0",
+          "target": "0.97.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@hono/node-server",
+      "package": "@hono/node-server",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-92pp-h63x-v22m",
+        "GHSA-frvp-7c67-39w9",
+        "GHSA-wc8c-qw6v-h7f6"
+      ],
+      "lines": [
+        {
+          "installed": "1.13.5",
+          "target": "1.19.15",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@octokit/plugin-paginate-rest",
+      "package": "@octokit/plugin-paginate-rest",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-h5c3-5r3r-rr8q"
+      ],
+      "lines": [
+        {
+          "installed": "3.1.0",
+          "target": "9.2.2",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@octokit/request",
+      "package": "@octokit/request",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-rmvr-2pp2-xj38"
+      ],
+      "lines": [
+        {
+          "installed": "6.2.0",
+          "target": "8.4.1",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@octokit/request-error",
+      "package": "@octokit/request-error",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-xx4v-prfh-6cgc"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.0",
+          "target": "5.1.1",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@sideway/formula",
+      "package": "@sideway/formula",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-c2jc-4fpr-4vhg"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.0",
+          "target": "3.0.1",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@tootallnate/once",
+      "package": "@tootallnate/once",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-vpq2-c234-7xj6"
+      ],
+      "lines": [
+        {
+          "installed": "2.0.0",
+          "target": "2.0.1",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@vitest/mocker",
+      "package": "@vitest/mocker",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-82fw-gwwq-j7x9"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.5",
+          "target": "4.1.11",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:@zag-js/core",
+      "package": "@zag-js/core",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-fg4m-w35q-vfg2"
+      ],
+      "lines": [
+        {
+          "installed": "0.82.1",
+          "target": "0.82.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:ajv",
+      "package": "ajv",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2g4f-4pwh-qvx6"
+      ],
+      "lines": [
+        {
+          "installed": "6.12.6",
+          "target": "6.14.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "8.11.0",
+          "target": "8.18.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "8.16.0",
+          "target": "8.18.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:algoliasearch-helper",
+      "package": "algoliasearch-helper",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-529q-4j3p-7c5r"
+      ],
+      "lines": [
+        {
+          "installed": "3.11.0",
+          "target": "3.11.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:axios:ghsa-35jp-ww65-95wh",
+      "package": "axios",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-35jp-ww65-95wh",
+        "GHSA-3g43-6gmg-66jw",
+        "GHSA-3p68-rc4w-qgx5",
+        "GHSA-3w6x-2g7m-8v23",
+        "GHSA-42h9-826w-cgv3",
+        "GHSA-43fc-jf86-j433",
+        "GHSA-445q-vr5w-6q77",
+        "GHSA-4hjh-wcwx-xvwj",
+        "GHSA-5c9x-8gcm-mpgx",
+        "GHSA-62hf-57xw-28j9",
+        "GHSA-6chq-wfr3-2hj9",
+        "GHSA-777c-7fjr-54vf",
+        "GHSA-7q8q-rj6j-mhjq",
+        "GHSA-898c-q2cr-xwhg",
+        "GHSA-9fr6-4gfg-395g",
+        "GHSA-fvcv-3m26-pcqx",
+        "GHSA-hfxv-24rg-xrqf",
+        "GHSA-j5f8-grm9-p9fc",
+        "GHSA-j8rh-479h-cp32",
+        "GHSA-jqh4-m9w3-8hp9",
+        "GHSA-jr5f-v2jv-69x6",
+        "GHSA-m7pr-hjqh-92cm",
+        "GHSA-mmx7-hfxf-jppx",
+        "GHSA-p92q-9vqr-4j8v",
+        "GHSA-pf86-5x62-jrwf",
+        "GHSA-pmv8-rq9r-6j72",
+        "GHSA-pmwg-cvhr-8vh7",
+        "GHSA-q8qp-cvcw-x6jj",
+        "GHSA-vf2m-468p-8v99",
+        "GHSA-vh66-26gq-q6x8",
+        "GHSA-w9j2-pvgh-6h63",
+        "GHSA-xhjh-pmcv-23jw",
+        "GHSA-xx6v-rp6x-q39c"
+      ],
+      "lines": [
+        {
+          "installed": "1.7.4",
+          "target": "1.20.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:axios:ghsa-3g43-6gmg-66jw",
+      "package": "axios",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-3g43-6gmg-66jw",
+        "GHSA-3p68-rc4w-qgx5",
+        "GHSA-43fc-jf86-j433",
+        "GHSA-5c9x-8gcm-mpgx",
+        "GHSA-62hf-57xw-28j9",
+        "GHSA-6chq-wfr3-2hj9",
+        "GHSA-7q8q-rj6j-mhjq",
+        "GHSA-898c-q2cr-xwhg",
+        "GHSA-fvcv-3m26-pcqx",
+        "GHSA-hfxv-24rg-xrqf",
+        "GHSA-j5f8-grm9-p9fc",
+        "GHSA-jr5f-v2jv-69x6",
+        "GHSA-m7pr-hjqh-92cm",
+        "GHSA-mmx7-hfxf-jppx",
+        "GHSA-p92q-9vqr-4j8v",
+        "GHSA-pf86-5x62-jrwf",
+        "GHSA-pjwm-pj3p-43mv",
+        "GHSA-pmwg-cvhr-8vh7",
+        "GHSA-vf2m-468p-8v99",
+        "GHSA-w9j2-pvgh-6h63",
+        "GHSA-wf5p-g6vw-rhxx",
+        "GHSA-xhjh-pmcv-23jw",
+        "GHSA-xx6v-rp6x-q39c"
+      ],
+      "lines": [
+        {
+          "installed": "0.25.0",
+          "target": "0.34.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:bn.js",
+      "package": "bn.js",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-378v-28hj-76wf"
+      ],
+      "lines": [
+        {
+          "installed": "4.12.0",
+          "target": "4.12.3",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "5.2.1",
+          "target": "5.2.3",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:body-parser",
+      "package": "body-parser",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-qwcr-r2fm-qrc7",
+        "GHSA-v422-hmwv-36x6"
+      ],
+      "lines": [
+        {
+          "installed": "1.20.0",
+          "target": "1.20.6",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "1.20.2",
+          "target": "1.20.6",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:brace-expansion",
+      "package": "brace-expansion",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-3jxr-9vmj-r5cp",
+        "GHSA-6j4f-fj2g-mc7p",
+        "GHSA-f886-m6hf-6m8v",
+        "GHSA-mh99-v99m-4gvg",
+        "GHSA-q2hr-2g5m-vwhr",
+        "GHSA-qhr7-859c-m2p7",
+        "GHSA-rgw5-rvv9-x895",
+        "GHSA-v6h2-p8h4-qcjw"
+      ],
+      "lines": [
+        {
+          "installed": "1.1.11",
+          "target": "1.1.21",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "1.1.8",
+          "target": "1.1.21",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/synth-npm-edges dev"
+          ]
+        },
+        {
+          "installed": "2.0.1",
+          "target": "2.1.7",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:braces:ghsa-grv7-fg5c-xmjg",
+      "package": "braces",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-grv7-fg5c-xmjg",
+        "GHSA-vfj7-8cjw-p6xm"
+      ],
+      "lines": [
+        {
+          "installed": "2.3.2",
+          "target": "3.0.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "3.0.2",
+          "target": "3.0.3",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:braces:ghsa-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "ecosystem": "npm",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.3",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/js-h3-pnpm9",
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:browserslist",
+      "package": "browserslist",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-73wf-gq98-2v4g",
+        "GHSA-c83g-rgw3-j3cx"
+      ],
+      "lines": [
+        {
+          "installed": "4.21.3",
+          "target": "4.28.7",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "4.23.1",
+          "target": "4.28.7",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:cipher-base",
+      "package": "cipher-base",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-cpq7-6gpm-g9rc"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.4",
+          "target": "1.0.5",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:colord",
+      "package": "colord",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2wm5-q62r-hmrv"
+      ],
+      "lines": [
+        {
+          "installed": "2.9.3",
+          "target": "2.9.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:compression",
+      "package": "compression",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-vc2v-76pw-4v95"
+      ],
+      "lines": [
+        {
+          "installed": "1.7.4",
+          "target": "1.8.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:cookie",
+      "package": "cookie",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-pxg6-pf52-xh8x"
+      ],
+      "lines": [
+        {
+          "installed": "0.5.0",
+          "target": "0.7.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "0.6.0",
+          "target": "0.7.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:cross-spawn",
+      "package": "cross-spawn",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-3xgq-45jj-v275"
+      ],
+      "lines": [
+        {
+          "installed": "6.0.5",
+          "target": "6.0.6",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "7.0.3",
+          "target": "7.0.5",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:d3-color",
+      "package": "d3-color",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-36jr-mh4h-2g58"
+      ],
+      "lines": [
+        {
+          "installed": "1.4.1",
+          "target": "3.1.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "2.0.0",
+          "target": "3.1.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:decode-uri-component",
+      "package": "decode-uri-component",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-vcc3-ghjq-m6fr",
+        "GHSA-w573-4hg7-7wgq"
+      ],
+      "lines": [
+        {
+          "installed": "0.2.0",
+          "target": "0.5.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:decompress",
+      "package": "decompress",
+      "ecosystem": "npm",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "GHSA-h39j-r5qq-r9mm",
+        "GHSA-hrh2-vp3x-79xf",
+        "GHSA-jwp9-9v96-94mx",
+        "GHSA-mp2f-45pm-3cg9"
+      ],
+      "lines": [
+        {
+          "installed": "4.2.1",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:defu",
+      "package": "defu",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-737v-mqg7-c878"
+      ],
+      "lines": [
+        {
+          "installed": "6.1.4",
+          "target": "6.1.5",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 direct",
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:diff:ghsa-73rr-hh4g-fpgx",
+      "package": "diff",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-73rr-hh4g-fpgx"
+      ],
+      "lines": [
+        {
+          "installed": "4.0.2",
+          "target": "4.0.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "5.1.0",
+          "target": "5.2.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:ejs",
+      "package": "ejs",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-ghr5-ch3p-vcr6"
+      ],
+      "lines": [
+        {
+          "installed": "3.1.8",
+          "target": "3.1.10",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:elliptic",
+      "package": "elliptic",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-434g-2637-qmqr",
+        "GHSA-49q7-c7j4-3p7m",
+        "GHSA-848j-6mx2-7j84",
+        "GHSA-977x-g7h5-7qgw",
+        "GHSA-f7q4-pwc6-w24p",
+        "GHSA-fc9h-whq2-v747",
+        "GHSA-vjh7-7g9h-fjfh"
+      ],
+      "lines": [
+        {
+          "installed": "6.5.5",
+          "target": "6.6.1",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:esbuild",
+      "package": "esbuild",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-67mh-4wv8-2f99"
+      ],
+      "lines": [
+        {
+          "installed": "0.15.18",
+          "target": "0.25.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev direct"
+          ]
+        },
+        {
+          "installed": "0.17.19",
+          "target": "0.25.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "0.19.12",
+          "target": "0.25.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "0.20.2",
+          "target": "0.25.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "0.21.5",
+          "target": "0.25.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        },
+        {
+          "installed": "0.23.1",
+          "target": "0.25.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:eta",
+      "package": "eta",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-mf6x-hrgr-658f",
+        "GHSA-xrh7-m5pp-39r6"
+      ],
+      "lines": [
+        {
+          "installed": "1.12.3",
+          "target": "2.0.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:express:ghsa-qw6h-vgh9-j6wx~2f12d0a8",
+      "package": "express",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-qw6h-vgh9-j6wx"
+      ],
+      "lines": [
+        {
+          "installed": "4.19.2",
+          "target": "4.20.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:express:ghsa-qw6h-vgh9-j6wx~ad7c6187",
+      "package": "express",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-qw6h-vgh9-j6wx",
+        "GHSA-rv95-896h-c2vc"
+      ],
+      "lines": [
+        {
+          "installed": "4.18.1",
+          "target": "4.20.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:flatted",
+      "package": "flatted",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-25h7-pfq9-p65f",
+        "GHSA-rf6f-7fwh-wjgh"
+      ],
+      "lines": [
+        {
+          "installed": "3.2.6",
+          "target": "3.4.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "3.3.1",
+          "target": "3.4.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:follow-redirects:ghsa-cxjh-pqwp-8mfp",
+      "package": "follow-redirects",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-cxjh-pqwp-8mfp",
+        "GHSA-jchw-25xp-jwwc",
+        "GHSA-r4q5-vmmm-2653"
+      ],
+      "lines": [
+        {
+          "installed": "1.15.1",
+          "target": "1.16.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:follow-redirects:ghsa-r4q5-vmmm-2653",
+      "package": "follow-redirects",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-r4q5-vmmm-2653"
+      ],
+      "lines": [
+        {
+          "installed": "1.15.6",
+          "target": "1.16.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:form-data",
+      "package": "form-data",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-fjxv-7rqg-78g4",
+        "GHSA-hmw2-7cc7-3qxx"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.1",
+          "target": "3.0.5",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "4.0.0",
+          "target": "4.0.6",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry",
+            "<ctx>/poly-fastapi-template-uv/frontend direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:formidable",
+      "package": "formidable",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-75v8-2h7p-7m2m"
+      ],
+      "lines": [
+        {
+          "installed": "2.1.2",
+          "target": "2.1.3",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "3.5.1",
+          "target": "3.5.3",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:glob",
+      "package": "glob",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-5j98-mcp5-4vw2"
+      ],
+      "lines": [
+        {
+          "installed": "10.4.5",
+          "target": "10.5.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "11.0.0",
+          "target": "11.1.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:got",
+      "package": "got",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-pfrx-2q88-qq97"
+      ],
+      "lines": [
+        {
+          "installed": "9.6.0",
+          "target": "11.8.5",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:graphql",
+      "package": "graphql",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-9pv7-vfvm-6vr7"
+      ],
+      "lines": [
+        {
+          "installed": "16.5.0",
+          "target": "16.8.1",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:h3:ghsa-22cc-p3c6-wpvm",
+      "package": "h3",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-22cc-p3c6-wpvm",
+        "GHSA-4hxc-9384-m385",
+        "GHSA-72gr-qfp7-vwhw",
+        "GHSA-mp2g-9vg9-f4cg",
+        "GHSA-wr4h-v87w-p3r7"
+      ],
+      "lines": [
+        {
+          "installed": "1.11.1",
+          "target": "1.15.9",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:handlebars",
+      "package": "handlebars",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-2qvq-rjwj-gvw9",
+        "GHSA-2w6w-674q-4c4q",
+        "GHSA-3mfm-83xf-c92r",
+        "GHSA-442j-39wm-28r2",
+        "GHSA-7rx3-28cr-v5wh",
+        "GHSA-8r5x-fm3f-whwj",
+        "GHSA-9cx6-37pm-9jff",
+        "GHSA-p8wg-vrv2-v86f",
+        "GHSA-xhpv-hc6g-r9c6",
+        "GHSA-xjpj-3mr7-gcpf",
+        "GHSA-xw65-4hp5-5hc7"
+      ],
+      "lines": [
+        {
+          "installed": "4.7.7",
+          "target": "4.7.10",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "4.7.8",
+          "target": "4.7.10",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:hono",
+      "package": "hono",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2234-fmw7-43wr",
+        "GHSA-26pp-8wgv-hjvm",
+        "GHSA-2gcr-mfcq-wcc3",
+        "GHSA-3hrh-pfw6-9m5x",
+        "GHSA-3vhc-576x-3qv4",
+        "GHSA-458j-xx4x-4375",
+        "GHSA-5pq2-9x2x-5p6w",
+        "GHSA-69xw-7hcm-h432",
+        "GHSA-6wqw-2p9w-4vw4",
+        "GHSA-88fw-hqm2-52qc",
+        "GHSA-8j4g-w8fx-2239",
+        "GHSA-92vj-g62v-jqhh",
+        "GHSA-9r54-q6cx-xmh5",
+        "GHSA-9vqf-7f2p-gf9v",
+        "GHSA-crvj-82cr-hjcx",
+        "GHSA-f23p-vx2j-j53r",
+        "GHSA-f577-qrjj-4474",
+        "GHSA-f67f-6cw9-8mq4",
+        "GHSA-g6gw-c38x-mqfc",
+        "GHSA-gq3j-xvxp-8hrf",
+        "GHSA-gqvv-2mrq-wpjv",
+        "GHSA-hm8q-7f3q-5f36",
+        "GHSA-hxh3-vqpv-xpqv",
+        "GHSA-j6c9-x7qj-28xf",
+        "GHSA-m732-5p4w-x69g",
+        "GHSA-p6xx-57qc-3wxr",
+        "GHSA-p77w-8qqv-26rm",
+        "GHSA-q5qw-h33p-qvwr",
+        "GHSA-q7jf-gf43-6x6p",
+        "GHSA-qp7p-654g-cw7p",
+        "GHSA-r354-f388-2fhh",
+        "GHSA-r5rp-j6wh-rvv4",
+        "GHSA-rv63-4mwf-qqc2",
+        "GHSA-v8w9-8mx6-g223",
+        "GHSA-w332-q679-j88p",
+        "GHSA-w62v-xxxg-mg59",
+        "GHSA-wgpf-jwqj-8h8p",
+        "GHSA-wmmm-f939-6g9c",
+        "GHSA-wwfh-h76j-fc44",
+        "GHSA-xf4j-xp2r-rqqx",
+        "GHSA-xgm2-5f3f-mvvc",
+        "GHSA-xpcf-pg52-r92g",
+        "GHSA-xrhx-7g5j-rcj5"
+      ],
+      "lines": [
+        {
+          "installed": "4.6.3",
+          "target": "4.13.7",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:http-cache-semantics",
+      "package": "http-cache-semantics",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-ch52-4w7c-c8xp",
+        "GHSA-rc47-6667-2j5j"
+      ],
+      "lines": [
+        {
+          "installed": "4.1.0",
+          "target": "4.1.1",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:http-proxy-middleware",
+      "package": "http-proxy-middleware",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-4www-5p9h-95mh",
+        "GHSA-64mm-vxmg-q3vj",
+        "GHSA-9gqv-wp59-fq42",
+        "GHSA-c7qv-q95q-8v27"
+      ],
+      "lines": [
+        {
+          "installed": "2.0.6",
+          "target": "2.0.10",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:image-size",
+      "package": "image-size",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-w3rx-r6r6-pgpr"
+      ],
+      "lines": [
+        {
+          "installed": "0.6.3",
+          "target": "2.0.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "1.0.2",
+          "target": "2.0.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:immutable",
+      "package": "immutable",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-v56q-mh7h-f735",
+        "GHSA-wf6x-7x77-mvgw",
+        "GHSA-xvcm-6775-5m9r"
+      ],
+      "lines": [
+        {
+          "installed": "4.1.0",
+          "target": "4.3.9",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:ip",
+      "package": "ip",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2p57-rm9w-gvfp",
+        "GHSA-78xj-cgh5-2h22"
+      ],
+      "lines": [
+        {
+          "installed": "1.1.8",
+          "target": "1.1.9",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "2.0.0",
+          "target": "2.0.1",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:joi",
+      "package": "joi",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-6h2x-m376-mqjq",
+        "GHSA-6w3j-5fw6-r9vr",
+        "GHSA-gg4h-3hg2-grpc",
+        "GHSA-q7cg-457f-vx79",
+        "GHSA-wr44-6hxh-3jwq"
+      ],
+      "lines": [
+        {
+          "installed": "17.6.0",
+          "target": "17.13.8",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:js-yaml:ghsa-2883-xcg3-v3hh",
+      "package": "js-yaml",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-2883-xcg3-v3hh",
+        "GHSA-52cp-r559-cp3m",
+        "GHSA-5p4m-2wfm-xmqj",
+        "GHSA-h67p-54hq-rp68",
+        "GHSA-mh29-5h37-fv8m"
+      ],
+      "lines": [
+        {
+          "installed": "3.14.1",
+          "target": "3.15.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "4.1.0",
+          "target": "4.3.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry direct",
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:json5",
+      "package": "json5",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-9c47-m6qq-7p4h"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.1",
+          "target": "1.0.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "2.2.1",
+          "target": "2.2.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:loader-utils",
+      "package": "loader-utils",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-3rfm-jhwj-7488",
+        "GHSA-76p3-8jx3-jpfq",
+        "GHSA-hhq3-ff78-jv3g"
+      ],
+      "lines": [
+        {
+          "installed": "2.0.2",
+          "target": "2.0.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "3.2.0",
+          "target": "3.2.1",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:lodash",
+      "package": "lodash",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-f23m-r3pf-42rh",
+        "GHSA-r5fr-rjxr-66jc",
+        "GHSA-xxjr-mmjv-4gpg"
+      ],
+      "lines": [
+        {
+          "installed": "4.17.21",
+          "target": "4.18.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:micromatch",
+      "package": "micromatch",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-952p-6rrq-rcjv"
+      ],
+      "lines": [
+        {
+          "installed": "3.1.10",
+          "target": "4.0.8",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "4.0.5",
+          "target": "4.0.8",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        },
+        {
+          "installed": "4.0.7",
+          "target": "4.0.8",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:minimatch:ghsa-23c5-xmqv-rm74~1cdc5894",
+      "package": "minimatch",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-23c5-xmqv-rm74",
+        "GHSA-3ppc-4f35-3m26",
+        "GHSA-7r86-cg39-jmmj",
+        "GHSA-f8q6-p94x-37v3"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.4",
+          "target": "3.1.4",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry",
+            "<ctx>/synth-npm-edges dev direct"
+          ]
+        },
+        {
+          "installed": "3.1.2",
+          "target": "3.1.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "5.1.0",
+          "target": "5.1.8",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:minimatch:ghsa-23c5-xmqv-rm74~2933092e",
+      "package": "minimatch",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-23c5-xmqv-rm74",
+        "GHSA-3ppc-4f35-3m26",
+        "GHSA-7r86-cg39-jmmj"
+      ],
+      "lines": [
+        {
+          "installed": "10.0.1",
+          "target": "10.2.3",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "3.1.2",
+          "target": "3.1.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "5.1.6",
+          "target": "5.1.8",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "9.0.4",
+          "target": "9.0.7",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "9.0.5",
+          "target": "9.0.7",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:mongodb",
+      "package": "mongodb",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-vxvm-qww3-2fh7"
+      ],
+      "lines": [
+        {
+          "installed": "4.7.0",
+          "target": "4.17.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:nanoid:ghsa-28wg-ghj8-5hjv~54704543",
+      "package": "nanoid",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-28wg-ghj8-5hjv",
+        "GHSA-2v37-7h3g-55p8",
+        "GHSA-mwcw-c2x4-8c55",
+        "GHSA-xwg4-73v4-xw9w"
+      ],
+      "lines": [
+        {
+          "installed": "3.3.4",
+          "target": "3.3.18",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "3.3.7",
+          "target": "3.3.18",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:nanoid:ghsa-28wg-ghj8-5hjv~9ef349a2",
+      "package": "nanoid",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-28wg-ghj8-5hjv",
+        "GHSA-2v37-7h3g-55p8",
+        "GHSA-xwg4-73v4-xw9w"
+      ],
+      "lines": [
+        {
+          "installed": "3.3.8",
+          "target": "3.3.18",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:node-forge",
+      "package": "node-forge",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2328-f5f3-gj25",
+        "GHSA-554w-wpv2-vw27",
+        "GHSA-5gfm-wpxj-wjgq",
+        "GHSA-5m6q-g25r-mvwx",
+        "GHSA-65ch-62r8-g69g",
+        "GHSA-86w9-cpqp-85rv",
+        "GHSA-ppp5-5v6c-4jwp",
+        "GHSA-q67f-28xg-22rw"
+      ],
+      "lines": [
+        {
+          "installed": "1.3.1",
+          "target": "1.4.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:nth-check",
+      "package": "nth-check",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-rp65-9cf3-cjxr"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.2",
+          "target": "2.0.1",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:on-headers",
+      "package": "on-headers",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-76c9-3jph-rj3q"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.2",
+          "target": "1.1.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:pacote",
+      "package": "pacote",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-w4pp-8pjf-rmxw"
+      ],
+      "lines": [
+        {
+          "installed": "13.6.1",
+          "target": "21.5.1",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:parse-url",
+      "package": "parse-url",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-j9fq-vwqv-2fm2",
+        "GHSA-pqw5-jmp5-px4v"
+      ],
+      "lines": [
+        {
+          "installed": "7.0.2",
+          "target": "8.1.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:path-to-regexp",
+      "package": "path-to-regexp",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-37ch-88jc-xwx2",
+        "GHSA-9wv6-86v2-598j",
+        "GHSA-rhx6-c78j-4q9w"
+      ],
+      "lines": [
+        {
+          "installed": "0.1.7",
+          "target": "0.1.13",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "1.8.0",
+          "target": "1.9.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "2.2.1",
+          "target": "3.3.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:pbkdf2",
+      "package": "pbkdf2",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-477h-4r7f-fvrx",
+        "GHSA-h7cp-r72f-jxh6",
+        "GHSA-v62p-rq8g-8h59"
+      ],
+      "lines": [
+        {
+          "installed": "3.1.2",
+          "target": "3.1.7",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:picomatch",
+      "package": "picomatch",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-3v7f-55p6-f55p",
+        "GHSA-c2c7-rcm5-vvqj"
+      ],
+      "lines": [
+        {
+          "installed": "2.3.1",
+          "target": "2.3.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9",
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:playwright",
+      "package": "playwright",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-7mvr-c777-76hp"
+      ],
+      "lines": [
+        {
+          "installed": "1.45.2",
+          "target": "1.55.1",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:postcss-selector-parser:ghsa-rj75-hqrm-r3gf~67b72996",
+      "package": "postcss-selector-parser",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-rj75-hqrm-r3gf"
+      ],
+      "lines": [
+        {
+          "installed": "6.0.10",
+          "target": "7.1.6",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:postcss-selector-parser:ghsa-rj75-hqrm-r3gf~7381802c",
+      "package": "postcss-selector-parser",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-rj75-hqrm-r3gf",
+        "GHSA-w9m9-85wc-3x92"
+      ],
+      "lines": [
+        {
+          "installed": "6.1.0",
+          "target": "7.1.6",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:postcss:ghsa-6g55-p6wh-862q~1a963e6e",
+      "package": "postcss",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-6g55-p6wh-862q",
+        "GHSA-fxqj-rqcc-2cmp",
+        "GHSA-qx2v-qp2m-jg93",
+        "GHSA-r28c-9q8g-f849"
+      ],
+      "lines": [
+        {
+          "installed": "8.4.38",
+          "target": "8.5.23",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "8.4.47",
+          "target": "8.5.23",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "8.5.2",
+          "target": "8.5.23",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:postcss:ghsa-6g55-p6wh-862q~780ab42a",
+      "package": "postcss",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-6g55-p6wh-862q",
+        "GHSA-7fh5-64p2-3v2j",
+        "GHSA-fxqj-rqcc-2cmp",
+        "GHSA-qx2v-qp2m-jg93",
+        "GHSA-r28c-9q8g-f849"
+      ],
+      "lines": [
+        {
+          "installed": "8.4.16",
+          "target": "8.5.23",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:prismjs",
+      "package": "prismjs",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-x7hr-w5r2-h6wg"
+      ],
+      "lines": [
+        {
+          "installed": "1.28.0",
+          "target": "1.30.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:proxy-addr",
+      "package": "proxy-addr",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-jqcg-44mw-7w3h"
+      ],
+      "lines": [
+        {
+          "installed": "2.0.7",
+          "target": "2.0.8",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:qs:ghsa-4mjr-xmp4-gh2g~4cbce68a",
+      "package": "qs",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-4mjr-xmp4-gh2g",
+        "GHSA-6rw7-vpxm-498p",
+        "GHSA-q8mj-m7cp-5q26",
+        "GHSA-w7fw-mjwx-w883"
+      ],
+      "lines": [
+        {
+          "installed": "6.11.0",
+          "target": "6.16.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "6.12.1",
+          "target": "6.16.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "6.13.0",
+          "target": "6.16.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:qs:ghsa-4mjr-xmp4-gh2g~52146029",
+      "package": "qs",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-4mjr-xmp4-gh2g",
+        "GHSA-6rw7-vpxm-498p",
+        "GHSA-w7fw-mjwx-w883"
+      ],
+      "lines": [
+        {
+          "installed": "6.10.3",
+          "target": "6.16.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:react-devtools-core",
+      "package": "react-devtools-core",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-rxrc-rgv4-jpvx"
+      ],
+      "lines": [
+        {
+          "installed": "4.24.0",
+          "target": "4.28.4",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:rollup:ghsa-gcx4-mw62-g8wm",
+      "package": "rollup",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-gcx4-mw62-g8wm",
+        "GHSA-mw96-cpmx-2vgc"
+      ],
+      "lines": [
+        {
+          "installed": "2.78.0",
+          "target": "2.80.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "3.29.4",
+          "target": "3.30.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "4.18.0",
+          "target": "4.59.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:rollup:ghsa-mw96-cpmx-2vgc",
+      "package": "rollup",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-mw96-cpmx-2vgc"
+      ],
+      "lines": [
+        {
+          "installed": "4.22.4",
+          "target": "4.59.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        },
+        {
+          "installed": "4.22.5",
+          "target": "4.59.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:semver:ghsa-c2qf-rxjj-qqgw",
+      "package": "semver",
+      "ecosystem": "npm",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-c2qf-rxjj-qqgw"
+      ],
+      "lines": [
+        {
+          "installed": "5.7.1",
+          "target": "5.7.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "6.3.0",
+          "target": "6.3.1",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "7.0.0",
+          "target": "7.5.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "7.3.7",
+          "target": "7.5.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:send",
+      "package": "send",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-m6fv-jmcg-4jfg"
+      ],
+      "lines": [
+        {
+          "installed": "0.18.0",
+          "target": "0.19.0",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:serialize-javascript",
+      "package": "serialize-javascript",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-5c6j-r48x-rmvq",
+        "GHSA-76p7-773f-r4q5",
+        "GHSA-qj8w-gfj5-8c6v"
+      ],
+      "lines": [
+        {
+          "installed": "4.0.0",
+          "target": "7.0.5",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "6.0.0",
+          "target": "7.0.5",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:serve-static",
+      "package": "serve-static",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-cm22-4g7w-348p"
+      ],
+      "lines": [
+        {
+          "installed": "1.15.0",
+          "target": "1.16.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:sha.js",
+      "package": "sha.js",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-95m3-7q98-8xr5"
+      ],
+      "lines": [
+        {
+          "installed": "2.4.11",
+          "target": "2.4.12",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:shell-quote",
+      "package": "shell-quote",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-395f-4hp3-45gv",
+        "GHSA-w7jw-789q-3m8p"
+      ],
+      "lines": [
+        {
+          "installed": "1.7.3",
+          "target": "1.11.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "1.8.1",
+          "target": "1.11.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:source-map-js",
+      "package": "source-map-js",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-68fv-2mgg-jv7q"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.2",
+          "target": "1.2.2",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "1.2.0",
+          "target": "1.2.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "1.2.1",
+          "target": "1.2.2",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:sprintf-js",
+      "package": "sprintf-js",
+      "ecosystem": "npm",
+      "mechanism": "no_fix",
+      "advisory_ids": [
+        "GHSA-hp3w-g68c-fv3c"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.3",
+          "target": null,
+          "upgrade_type": null,
+          "clears_all_known": false,
+          "held": null,
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:svgo",
+      "package": "svgo",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2p49-hgcm-8545",
+        "GHSA-4vpr-x523-8j87",
+        "GHSA-w27v-7q3p-w38r",
+        "GHSA-xpqw-6gx7-v673"
+      ],
+      "lines": [
+        {
+          "installed": "2.8.0",
+          "target": "2.8.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "3.3.2",
+          "target": "3.3.5",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:tar:ghsa-23hp-3jrh-7fpw~4a05071a",
+      "package": "tar",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-23hp-3jrh-7fpw",
+        "GHSA-34x7-hfp2-rc4v",
+        "GHSA-83g3-92jg-28cx",
+        "GHSA-8qq5-rm4j-mr97",
+        "GHSA-8x88-c5mf-7j5w",
+        "GHSA-9ppj-qmqm-q256",
+        "GHSA-gvwx-54wh-qm9j",
+        "GHSA-qffp-2rhf-9h96",
+        "GHSA-r292-9mhp-454m",
+        "GHSA-r6q2-hw4h-h46w",
+        "GHSA-vmf3-w455-68vh",
+        "GHSA-w8wr-v893-vjvp"
+      ],
+      "lines": [
+        {
+          "installed": "6.2.1",
+          "target": "7.5.21",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/poly-fastapi-template-uv/frontend dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:tar:ghsa-23hp-3jrh-7fpw~fec01d26",
+      "package": "tar",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-23hp-3jrh-7fpw",
+        "GHSA-34x7-hfp2-rc4v",
+        "GHSA-83g3-92jg-28cx",
+        "GHSA-8qq5-rm4j-mr97",
+        "GHSA-8x88-c5mf-7j5w",
+        "GHSA-9ppj-qmqm-q256",
+        "GHSA-f5x3-32g6-xq36",
+        "GHSA-gvwx-54wh-qm9j",
+        "GHSA-qffp-2rhf-9h96",
+        "GHSA-r292-9mhp-454m",
+        "GHSA-r6q2-hw4h-h46w",
+        "GHSA-vmf3-w455-68vh",
+        "GHSA-w8wr-v893-vjvp"
+      ],
+      "lines": [
+        {
+          "installed": "4.4.19",
+          "target": "7.5.21",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "6.1.11",
+          "target": "7.5.21",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:tinypool",
+      "package": "tinypool",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-5gmw-xhrv-c9v3",
+        "GHSA-85c8-ppgw-ccpr"
+      ],
+      "lines": [
+        {
+          "installed": "0.8.4",
+          "target": "2.1.2",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        },
+        {
+          "installed": "1.0.2",
+          "target": "2.1.2",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:tmp",
+      "package": "tmp",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-52f5-9888-hmc6",
+        "GHSA-ph9p-34f9-6g65"
+      ],
+      "lines": [
+        {
+          "installed": "0.0.33",
+          "target": "0.2.7",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "0.2.1",
+          "target": "0.2.7",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:tough-cookie",
+      "package": "tough-cookie",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-72xf-g2v4-qvf3"
+      ],
+      "lines": [
+        {
+          "installed": "4.0.0",
+          "target": "4.1.3",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:trim",
+      "package": "trim",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-w5p7-h5w8-2hfq"
+      ],
+      "lines": [
+        {
+          "installed": "0.0.1",
+          "target": "0.0.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:ua-parser-js",
+      "package": "ua-parser-js",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-fhg7-m89q-25r3"
+      ],
+      "lines": [
+        {
+          "installed": "0.7.31",
+          "target": "0.7.33",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:undici:ghsa-2mjp-6q6p-2qxm~34b7eadb",
+      "package": "undici",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-2mjp-6q6p-2qxm",
+        "GHSA-35p6-xmwp-9g52",
+        "GHSA-4992-7rv2-5pvq",
+        "GHSA-8xcm-r25x-g524",
+        "GHSA-c76h-2ccp-4975",
+        "GHSA-cxrh-j4jr-qwg3",
+        "GHSA-f269-vfmq-vjvj",
+        "GHSA-g8m3-5g58-fq7m",
+        "GHSA-g9mf-h72j-4rw9",
+        "GHSA-m8rv-5g2x-5cg5",
+        "GHSA-p88m-4jfj-68fv",
+        "GHSA-r53p-7pc4-xj5r",
+        "GHSA-rfgv-xxqx-mfg5",
+        "GHSA-v3r7-h72x-cjcm",
+        "GHSA-v9p9-hfj2-hcw8",
+        "GHSA-vrm6-8vpv-qv8q",
+        "GHSA-vxpw-j846-p89q"
+      ],
+      "lines": [
+        {
+          "installed": "6.19.2",
+          "target": "6.28.1",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:undici:ghsa-2mjp-6q6p-2qxm~9da4dd9e",
+      "package": "undici",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-2mjp-6q6p-2qxm",
+        "GHSA-35p6-xmwp-9g52",
+        "GHSA-4992-7rv2-5pvq",
+        "GHSA-8xcm-r25x-g524",
+        "GHSA-c76h-2ccp-4975",
+        "GHSA-cxrh-j4jr-qwg3",
+        "GHSA-g8m3-5g58-fq7m",
+        "GHSA-g9mf-h72j-4rw9",
+        "GHSA-m8rv-5g2x-5cg5",
+        "GHSA-p88m-4jfj-68fv",
+        "GHSA-r53p-7pc4-xj5r",
+        "GHSA-v3r7-h72x-cjcm",
+        "GHSA-v9p9-hfj2-hcw8",
+        "GHSA-vrm6-8vpv-qv8q",
+        "GHSA-vxpw-j846-p89q"
+      ],
+      "lines": [
+        {
+          "installed": "5.28.4",
+          "target": "6.28.1",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:uuid",
+      "package": "uuid",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-w5hq-g745-h8pq"
+      ],
+      "lines": [
+        {
+          "installed": "8.3.2",
+          "target": "11.1.1",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev",
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:validator",
+      "package": "validator",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-9965-vmph-33xx",
+        "GHSA-vghf-hv5q-vc2g"
+      ],
+      "lines": [
+        {
+          "installed": "13.7.0",
+          "target": "13.15.22",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:vite:ghsa-356w-63v5-8wf4~45769bee",
+      "package": "vite",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-356w-63v5-8wf4",
+        "GHSA-4r4m-qw57-chr8",
+        "GHSA-4w7w-66w2-5vf9",
+        "GHSA-859w-5945-r5v3",
+        "GHSA-93m4-6634-74q7",
+        "GHSA-fx2h-pf6j-xcff",
+        "GHSA-g4jq-h2w9-997c",
+        "GHSA-jqfw-vq24-v9c3",
+        "GHSA-v6wh-96g9-6wx3",
+        "GHSA-x574-m823-4x7w",
+        "GHSA-xcj6-pq6g-qj4x"
+      ],
+      "lines": [
+        {
+          "installed": "5.4.14",
+          "target": "6.4.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/frontend dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:vite:ghsa-356w-63v5-8wf4~7375d7f4",
+      "package": "vite",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-356w-63v5-8wf4",
+        "GHSA-4r4m-qw57-chr8",
+        "GHSA-4w7w-66w2-5vf9",
+        "GHSA-859w-5945-r5v3",
+        "GHSA-93m4-6634-74q7",
+        "GHSA-c27g-q93r-2cwf",
+        "GHSA-fx2h-pf6j-xcff",
+        "GHSA-g4jq-h2w9-997c",
+        "GHSA-jqfw-vq24-v9c3",
+        "GHSA-v6wh-96g9-6wx3",
+        "GHSA-vg6x-rcgg-rjx6",
+        "GHSA-x574-m823-4x7w",
+        "GHSA-xcj6-pq6g-qj4x"
+      ],
+      "lines": [
+        {
+          "installed": "5.4.7",
+          "target": "6.4.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:vite:ghsa-356w-63v5-8wf4~a97b86ec",
+      "package": "vite",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-356w-63v5-8wf4",
+        "GHSA-4r4m-qw57-chr8",
+        "GHSA-4w7w-66w2-5vf9",
+        "GHSA-64vr-g452-qvp3",
+        "GHSA-859w-5945-r5v3",
+        "GHSA-93m4-6634-74q7",
+        "GHSA-9cwx-2883-4wfx",
+        "GHSA-c27g-q93r-2cwf",
+        "GHSA-fx2h-pf6j-xcff",
+        "GHSA-g4jq-h2w9-997c",
+        "GHSA-jqfw-vq24-v9c3",
+        "GHSA-v6wh-96g9-6wx3",
+        "GHSA-vg6x-rcgg-rjx6",
+        "GHSA-x574-m823-4x7w",
+        "GHSA-xcj6-pq6g-qj4x"
+      ],
+      "lines": [
+        {
+          "installed": "5.3.1",
+          "target": "6.4.3",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:vitest:ghsa-5xrq-8626-4rwp~aed75c76",
+      "package": "vitest",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-5xrq-8626-4rwp",
+        "GHSA-82fw-gwwq-j7x9"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.5",
+          "target": "4.1.11",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:vitest:ghsa-5xrq-8626-4rwp~cf3e6379",
+      "package": "vitest",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-5xrq-8626-4rwp",
+        "GHSA-9crc-q9x8-hgqq"
+      ],
+      "lines": [
+        {
+          "installed": "1.6.0",
+          "target": "4.1.11",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:webpack",
+      "package": "webpack",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-38r7-794h-5758",
+        "GHSA-4vvj-4cpr-p986",
+        "GHSA-8fgc-7cc6-rx7x",
+        "GHSA-hc6q-2mpp-qw7j"
+      ],
+      "lines": [
+        {
+          "installed": "5.74.0",
+          "target": "5.104.1",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:webpack-dev-middleware",
+      "package": "webpack-dev-middleware",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-g84c-rxfj-3j2c",
+        "GHSA-wr3j-pwj9-hqq6"
+      ],
+      "lines": [
+        {
+          "installed": "5.3.3",
+          "target": "7.4.6",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:webpack-dev-server",
+      "package": "webpack-dev-server",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-4v9v-hfq4-rm2v",
+        "GHSA-79cf-xcqc-c78w",
+        "GHSA-9jgg-88mc-972h",
+        "GHSA-f5vj-f2hx-8m93",
+        "GHSA-m28w-2pqf-7qgj",
+        "GHSA-mx8g-39q3-5c79"
+      ],
+      "lines": [
+        {
+          "installed": "4.10.0",
+          "target": "5.2.6",
+          "upgrade_type": "major",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:websocket-driver",
+      "package": "websocket-driver",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-mp7j-qc5w-4988",
+        "GHSA-xv26-6w52-cph6"
+      ],
+      "lines": [
+        {
+          "installed": "0.7.4",
+          "target": "0.7.5",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:word-wrap",
+      "package": "word-wrap",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-j8xg-fqg3-53r7"
+      ],
+      "lines": [
+        {
+          "installed": "1.2.3",
+          "target": "1.2.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:wrangler",
+      "package": "wrangler",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-36p8-mvp6-cv38"
+      ],
+      "lines": [
+        {
+          "installed": "3.58.0",
+          "target": "3.114.17",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:ws:ghsa-3h5v-q93c-6h6q",
+      "package": "ws",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-3h5v-q93c-6h6q",
+        "GHSA-58qx-3vcg-4xpx",
+        "GHSA-96hv-2xvq-fx4p"
+      ],
+      "lines": [
+        {
+          "installed": "6.2.2",
+          "target": "6.2.4",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "7.5.9",
+          "target": "7.5.11",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        },
+        {
+          "installed": "8.8.1",
+          "target": "8.21.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:ws:ghsa-58qx-3vcg-4xpx",
+      "package": "ws",
+      "ecosystem": "npm",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-58qx-3vcg-4xpx",
+        "GHSA-96hv-2xvq-fx4p"
+      ],
+      "lines": [
+        {
+          "installed": "8.18.0",
+          "target": "8.21.0",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-hono-bun dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:npm:yaml",
+      "package": "yaml",
+      "ecosystem": "npm",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-48c2-rrv3-qjmp"
+      ],
+      "lines": [
+        {
+          "installed": "1.10.2",
+          "target": "1.10.3",
+          "upgrade_type": "patch",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-jest-yarn-berry",
+            "<ctx>/poly-fastapi-template-uv/frontend"
+          ]
+        },
+        {
+          "installed": "2.4.5",
+          "target": "2.8.3",
+          "upgrade_type": "minor",
+          "clears_all_known": false,
+          "held": "unchecked",
+          "sites": [
+            "<ctx>/js-h3-pnpm9 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:anyio",
+      "package": "anyio",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-5p39-cfhj-2xmp",
+        "GHSA-82r6-8w77-94w6",
+        "PYSEC-2026-4024",
+        "PYSEC-2026-4025"
+      ],
+      "lines": [
+        {
+          "installed": "4.6.0",
+          "target": "4.14.2",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:certifi",
+      "package": "certifi",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-43fp-rhv2-5gv8",
+        "GHSA-xqr8-7jwr-rhp7",
+        "PYSEC-2022-42986",
+        "PYSEC-2023-135",
+        "PYSEC-2024-230"
+      ],
+      "lines": [
+        {
+          "installed": "2020.6.20",
+          "target": "2024.7.4",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:cleo",
+      "package": "cleo",
+      "ecosystem": "PyPI",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "PYSEC-2022-43178"
+      ],
+      "lines": [
+        {
+          "installed": "0.8.1",
+          "target": "2.0.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:cryptography",
+      "package": "cryptography",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-3ww4-gg4f-jr7f",
+        "GHSA-537c-gmf6-5ccf",
+        "GHSA-5cpq-8wj7-hf2v",
+        "GHSA-9v9h-cgj8-h64p",
+        "GHSA-hggm-jpg3-v476",
+        "GHSA-jfhm-5ghh-2f97",
+        "GHSA-jm77-qphf-c4w8",
+        "GHSA-m959-cc7f-wv43",
+        "GHSA-r6ph-v2qm-q3c2",
+        "GHSA-rhm9-p9w5-fwm7",
+        "GHSA-v8gr-m533-ghj9",
+        "GHSA-w7pp-m8wf-vj6r",
+        "GHSA-x4qr-2fvf-3mr5",
+        "PYSEC-2021-62",
+        "PYSEC-2021-63",
+        "PYSEC-2023-11",
+        "PYSEC-2023-254",
+        "PYSEC-2026-1283",
+        "PYSEC-2026-1285",
+        "PYSEC-2026-2141",
+        "PYSEC-2026-35",
+        "PYSEC-2026-3553",
+        "PYSEC-2026-3554",
+        "PYSEC-2026-800"
+      ],
+      "lines": [
+        {
+          "installed": "3.1.1",
+          "target": "50.0.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:filelock",
+      "package": "filelock",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-qmgc-5h2g-mvrw",
+        "GHSA-w853-jp5j-5j7f",
+        "PYSEC-2026-1374",
+        "PYSEC-2026-1375"
+      ],
+      "lines": [
+        {
+          "installed": "3.0.12",
+          "target": "3.20.3",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1"
+          ]
+        },
+        {
+          "installed": "3.16.1",
+          "target": "3.20.3",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:h11",
+      "package": "h11",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-vqfr-h8mv-ghfj",
+        "PYSEC-2026-348"
+      ],
+      "lines": [
+        {
+          "installed": "0.14.0",
+          "target": "0.16.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:idna:ghsa-65pc-fj4g-8rjx~78d5a736",
+      "package": "idna",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-65pc-fj4g-8rjx",
+        "GHSA-jjg7-2v4v-x38h",
+        "PYSEC-2024-60",
+        "PYSEC-2026-215"
+      ],
+      "lines": [
+        {
+          "installed": "2.10",
+          "target": "3.15",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:idna:ghsa-65pc-fj4g-8rjx~ebdf4219",
+      "package": "idna",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-65pc-fj4g-8rjx",
+        "PYSEC-2026-215"
+      ],
+      "lines": [
+        {
+          "installed": "3.10",
+          "target": "3.15",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:jinja2",
+      "package": "jinja2",
+      "ecosystem": "PyPI",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-cpwx-vrp4-4pq7",
+        "GHSA-gmj6-6f8f-6699",
+        "GHSA-q2x7-8rv6-6q7h",
+        "PYSEC-2026-1471",
+        "PYSEC-2026-1472",
+        "PYSEC-2026-1475"
+      ],
+      "lines": [
+        {
+          "installed": "3.1.4",
+          "target": "3.1.6",
+          "upgrade_type": "patch",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:lxml",
+      "package": "lxml",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-vfmq-68hx-4jfw",
+        "PYSEC-2026-87"
+      ],
+      "lines": [
+        {
+          "installed": "5.3.0",
+          "target": "6.1.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:mako",
+      "package": "mako",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2h4p-vjrc-8xpq",
+        "GHSA-5639-2j2p-m4mx",
+        "GHSA-v92g-xgxw-vvmm",
+        "PYSEC-2026-2617",
+        "PYSEC-2026-88"
+      ],
+      "lines": [
+        {
+          "installed": "1.3.5",
+          "target": "1.4.2",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:msgpack",
+      "package": "msgpack",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-6v7p-g79w-8964",
+        "PYSEC-2026-3625"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.0",
+          "target": "1.2.1",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:py",
+      "package": "py",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-hj5v-574p-mj7c",
+        "PYSEC-2020-92"
+      ],
+      "lines": [
+        {
+          "installed": "1.9.0",
+          "target": "1.10.0",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:pygments",
+      "package": "pygments",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-5239-wwwm-4pmq",
+        "PYSEC-2026-2987"
+      ],
+      "lines": [
+        {
+          "installed": "2.18.0",
+          "target": "2.20.0",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:pyjwt",
+      "package": "pyjwt",
+      "ecosystem": "PyPI",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-2gx3-rcp4-g85q",
+        "GHSA-42vr-xj54-vc7v",
+        "GHSA-752w-5fwx-jx9f",
+        "GHSA-993g-76c3-p5m4",
+        "GHSA-9v7f-9g4p-ffgj",
+        "GHSA-ffc3-869f-jxw9",
+        "GHSA-fhv5-28vv-h8m8",
+        "GHSA-hxm8-2xgr-2p9m",
+        "GHSA-jq35-7prp-9v3f",
+        "GHSA-jwrc-g2q2-pq5p",
+        "GHSA-p4g4-x82p-q773",
+        "GHSA-w6j9-cwv2-h6wq",
+        "GHSA-w7vc-732c-9m39",
+        "GHSA-x33g-cr3x-6449",
+        "GHSA-xgmm-8j9v-c9wx",
+        "PYSEC-2025-183",
+        "PYSEC-2026-120",
+        "PYSEC-2026-175",
+        "PYSEC-2026-176",
+        "PYSEC-2026-177",
+        "PYSEC-2026-178",
+        "PYSEC-2026-179",
+        "PYSEC-2026-4140",
+        "PYSEC-2026-4141",
+        "PYSEC-2026-4144",
+        "PYSEC-2026-4145",
+        "PYSEC-2026-4147",
+        "PYSEC-2026-4148",
+        "PYSEC-2026-4149",
+        "PYSEC-2026-4152",
+        "PYSEC-2026-4183"
+      ],
+      "lines": [
+        {
+          "installed": "2.9.0",
+          "target": "2.15.0",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:pytest",
+      "package": "pytest",
+      "ecosystem": "PyPI",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-6w46-j5rx-g56g",
+        "PYSEC-2026-1845"
+      ],
+      "lines": [
+        {
+          "installed": "4.6.11",
+          "target": "9.0.3",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1 dev direct"
+          ]
+        },
+        {
+          "installed": "5.4.3",
+          "target": "9.0.3",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1 dev direct"
+          ]
+        },
+        {
+          "installed": "7.4.4",
+          "target": "9.0.3",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend dev direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:python-dotenv",
+      "package": "python-dotenv",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-mf9w-mj56-hr94",
+        "PYSEC-2026-2270"
+      ],
+      "lines": [
+        {
+          "installed": "1.0.1",
+          "target": "1.2.2",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:python-multipart",
+      "package": "python-multipart",
+      "ecosystem": "PyPI",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-59g5-xgcq-4qw3",
+        "GHSA-5rvq-cxj2-64vf",
+        "GHSA-6jv3-5f52-599m",
+        "GHSA-mj87-hwqh-73pj",
+        "GHSA-pp6c-gr5w-3c5g",
+        "GHSA-v9pg-7xvm-68hf",
+        "GHSA-vffw-93wf-4j4q",
+        "GHSA-wp53-j4wj-2cfg",
+        "PYSEC-2026-1851",
+        "PYSEC-2026-1852",
+        "PYSEC-2026-3036",
+        "PYSEC-2026-3037",
+        "PYSEC-2026-3038",
+        "PYSEC-2026-3039",
+        "PYSEC-2026-3040",
+        "PYSEC-2026-3041"
+      ],
+      "lines": [
+        {
+          "installed": "0.0.10",
+          "target": "0.0.31",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:pyyaml",
+      "package": "pyyaml",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-8q59-q68h-6hv4",
+        "PYSEC-2021-142"
+      ],
+      "lines": [
+        {
+          "installed": "5.3.1",
+          "target": "5.4",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1 dev"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:requests:ghsa-9hjg-9r4m-mvj7~91fe83ad",
+      "package": "requests",
+      "ecosystem": "PyPI",
+      "mechanism": "manifest_bump",
+      "advisory_ids": [
+        "GHSA-9hjg-9r4m-mvj7",
+        "GHSA-9wx4-h78v-vm56",
+        "GHSA-gc5v-m9x4-r6x2",
+        "GHSA-j8r2-6x86-q33q",
+        "PYSEC-2023-74",
+        "PYSEC-2026-1872",
+        "PYSEC-2026-1873",
+        "PYSEC-2026-2275"
+      ],
+      "lines": [
+        {
+          "installed": "2.24.0",
+          "target": "2.33.0",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1 direct"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:requests:ghsa-9hjg-9r4m-mvj7~fc850a73",
+      "package": "requests",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-9hjg-9r4m-mvj7",
+        "GHSA-gc5v-m9x4-r6x2",
+        "PYSEC-2026-1872",
+        "PYSEC-2026-2275"
+      ],
+      "lines": [
+        {
+          "installed": "2.32.3",
+          "target": "2.33.0",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:starlette",
+      "package": "starlette",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-2c2j-9gv5-cj73",
+        "GHSA-82w8-qh3p-5jfq",
+        "GHSA-86qp-5c8j-p5mr",
+        "GHSA-f96h-pmfr-66vw",
+        "GHSA-jp82-jpqv-5vv3",
+        "GHSA-wqp7-x3pw-xc5r",
+        "GHSA-x746-7m8f-x49c",
+        "PYSEC-2026-161",
+        "PYSEC-2026-1941",
+        "PYSEC-2026-1943",
+        "PYSEC-2026-2280",
+        "PYSEC-2026-2281",
+        "PYSEC-2026-248",
+        "PYSEC-2026-249"
+      ],
+      "lines": [
+        {
+          "installed": "0.38.6",
+          "target": "1.3.1",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:urllib3:ghsa-2xpw-w6gg-jr37~1b58b712",
+      "package": "urllib3",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-2xpw-w6gg-jr37",
+        "GHSA-34jh-p97f-mpxf",
+        "GHSA-38jv-5279-wg99",
+        "GHSA-g4mx-q9vg-27p4",
+        "GHSA-gm62-xv2j-4w53",
+        "GHSA-pq67-6m6q-mj2v",
+        "GHSA-q2q7-5pp4-w6pg",
+        "GHSA-qccp-gfcp-xxvc",
+        "GHSA-v845-jxx5-vc9f",
+        "GHSA-vxq7-64xx-v4gw",
+        "PYSEC-2021-108",
+        "PYSEC-2023-192",
+        "PYSEC-2023-212",
+        "PYSEC-2026-141",
+        "PYSEC-2026-1994",
+        "PYSEC-2026-1995",
+        "PYSEC-2026-1996",
+        "PYSEC-2026-1998",
+        "PYSEC-2026-1999",
+        "PYSEC-2026-4177"
+      ],
+      "lines": [
+        {
+          "installed": "1.25.10",
+          "target": "2.8.0",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:urllib3:ghsa-2xpw-w6gg-jr37~647a90c3",
+      "package": "urllib3",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_refresh",
+      "advisory_ids": [
+        "GHSA-2xpw-w6gg-jr37",
+        "GHSA-38jv-5279-wg99",
+        "GHSA-48p4-8xcf-vxj5",
+        "GHSA-8988-9cw3-xx77",
+        "GHSA-gm62-xv2j-4w53",
+        "GHSA-pq67-6m6q-mj2v",
+        "GHSA-qccp-gfcp-xxvc",
+        "GHSA-vxq7-64xx-v4gw",
+        "PYSEC-2026-141",
+        "PYSEC-2026-1994",
+        "PYSEC-2026-1996",
+        "PYSEC-2026-1997",
+        "PYSEC-2026-1998",
+        "PYSEC-2026-1999",
+        "PYSEC-2026-4175",
+        "PYSEC-2026-4177"
+      ],
+      "lines": [
+        {
+          "installed": "2.2.3",
+          "target": "2.8.0",
+          "upgrade_type": "minor",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:virtualenv",
+      "package": "virtualenv",
+      "ecosystem": "PyPI",
+      "mechanism": "mixed",
+      "advisory_ids": [
+        "GHSA-597g-3phw-6986",
+        "GHSA-94p9-xgh2-xp45",
+        "GHSA-9h9j-4vrj-gf7g",
+        "GHSA-p58f-9548-mpm2",
+        "GHSA-rqc4-2hc7-8c8v",
+        "GHSA-x78j-v8h9-3j2q",
+        "PYSEC-2024-187",
+        "PYSEC-2026-2009",
+        "PYSEC-2026-4011",
+        "PYSEC-2026-4012",
+        "PYSEC-2026-4013",
+        "PYSEC-2026-4014"
+      ],
+      "lines": [
+        {
+          "installed": "20.0.31",
+          "target": "21.7.13",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1 direct"
+          ]
+        },
+        {
+          "installed": "20.26.5",
+          "target": "21.7.13",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/poly-fastapi-template-uv/backend"
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "upgrade-plan:PyPI:zipp",
+      "package": "zipp",
+      "ecosystem": "PyPI",
+      "mechanism": "lockfile_or_parent_update",
+      "advisory_ids": [
+        "GHSA-jfmj-5v4g-7637",
+        "PYSEC-2026-2074"
+      ],
+      "lines": [
+        {
+          "installed": "1.2.0",
+          "target": "3.19.1",
+          "upgrade_type": "major",
+          "clears_all_known": true,
+          "held": null,
+          "sites": [
+            "<ctx>/py-poetry-1.1"
+          ]
+        }
+      ]
+    }
+  ]
+}

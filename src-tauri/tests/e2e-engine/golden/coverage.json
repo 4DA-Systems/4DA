@@ -1,0 +1,28 @@
+{
+  "skipped_dirs": [
+    {
+      "path": "js-hono-bun/benchmarks/handle-event",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/jsx",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/query-param",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/routers",
+      "reason": "example / fixture / scaffolding path"
+    }
+  ],
+  "unsupported": [],
+  "failed": [],
+  "counts": {
+    "lockfiles_read": 9,
+    "skipped_dir_count": 4,
+    "unsupported_count": 0,
+    "failed_count": 0
+  }
+}
