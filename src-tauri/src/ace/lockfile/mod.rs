@@ -79,9 +79,10 @@ pub(crate) const NON_UTF8_REASON: &str =
     "path is not valid UTF-8: 4DA cannot read this file, so its installed versions are not checked";
 
 /// The dependency files directly in `dir` (and in its `requirements/`
-/// folder), found with `std::fs` for a directory the readers cannot be
-/// handed. Sorted, like the readers' own order within a kind.
-fn dependency_files_std(dir: &Path) -> Vec<PathBuf> {
+/// folder), found with `std::fs`: for a directory the readers cannot be
+/// handed, and to name the files of a directory the walk skips. Sorted,
+/// like the readers' own order within a kind.
+pub(crate) fn dependency_files_std(dir: &Path) -> Vec<PathBuf> {
     let listed = |d: &Path| -> Vec<PathBuf> {
         std::fs::read_dir(d)
             .map(|entries| {
@@ -133,6 +134,15 @@ pub(crate) fn probe(dir: &Path) -> Option<PathBuf> {
         Some(host) => engine::probe(&StdFs, host).map(PathBuf::from),
         None => dependency_files_std(dir).into_iter().next(),
     }
+}
+
+/// The first manifest in `dir` that [`read_dir`] reports when no lockfile
+/// pins it (`package.json`, `Cargo.toml`, `pyproject.toml` ...). The walk
+/// selects such a directory too, so a manifest-only project is counted.
+pub(crate) fn probe_manifest(dir: &Path) -> Option<PathBuf> {
+    dir.to_str()
+        .and_then(|host| engine::probe_manifest(&StdFs, host))
+        .map(PathBuf::from)
 }
 
 /// Read every dependency file in `dir`. Never fails: a file that cannot be

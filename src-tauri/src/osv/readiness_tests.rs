@@ -358,6 +358,128 @@ fn before_the_first_lockfile_walk_versionless_rows_are_not_started() {
     assert_eq!(advisory_sync(&db).state, AdvisorySyncState::NoInventory);
 }
 
+// --- Per-project coverage (W0-D, 2026-11-11) ------------------------------
+// Coverage was judged per ECOSYSTEM: one pinned project made "PyPI" ready,
+// and everything the walk saw but did not check (fixture lockfiles, ranged
+// requirements, manifests with no lockfile, a sibling project's versionless
+// rows) vanished from what Preemption showed beside its all-clear.
+
+/// What the walk saw and did not check reaches `not_covered`, with counts and
+/// names, while the checked part stays Ready.
+#[test]
+fn what_the_walk_did_not_check_is_named_beside_a_ready_check() {
+    let db = crate::test_utils::test_db();
+    db.set_kv(
+        crate::ace::lockfile::report::REPORT_KV_KEY,
+        r#"{"lockfiles_read":2,"unsupported_count":0,"failed_count":0,
+           "skipped_lockfile_count":2,"skipped_lockfiles":[
+            {"path":"C:\\dev\\hono\\benchmarks\\jsx\\yarn.lock","reason":"example / fixture / scaffolding path"},
+            {"path":"C:\\dev\\hono\\benchmarks\\routers\\yarn.lock","reason":"example / fixture / scaffolding path"}],
+           "unpinned_count":3,"unpinned":[{"path":"C:\\dev\\svc\\requirements.txt","count":3}],
+           "manifest_only_count":1,"manifest_only_dependencies":12,
+           "manifest_only":[{"path":"C:\\dev\\tool\\package.json","ecosystem":"javascript","dependencies":12}]}"#,
+    )
+    .unwrap();
+    db.store_dependency("/project", "serde", Some("1.0.200"), "rust", false, None)
+        .unwrap();
+    db.update_osv_sync_status("crates.io", 0, None).unwrap();
+
+    let r = advisory_sync(&db);
+    assert_eq!(
+        r.state,
+        AdvisorySyncState::Ready,
+        "the read part is checked"
+    );
+    let nc = r
+        .not_covered
+        .expect("unchecked dependencies are never clean");
+    assert_eq!(nc.skipped_count, Some(2));
+    let skipped = nc.skipped.expect("skipped lockfiles are named");
+    assert!(skipped[0].path.ends_with("yarn.lock"));
+    assert_eq!(skipped[0].reason, "example / fixture / scaffolding path");
+    assert_eq!(nc.unpinned_count, Some(3));
+    assert_eq!(
+        nc.unpinned,
+        Some(vec![CountedFile {
+            path: "C:\\dev\\svc\\requirements.txt".into(),
+            count: 3
+        }])
+    );
+    assert_eq!(nc.manifest_only_count, Some(1));
+    assert_eq!(nc.manifest_only.expect("named")[0].count, 12);
+    assert_eq!(nc.count, 0);
+    assert_eq!(nc.unversioned_count, None);
+}
+
+/// One project's pins no longer make a sibling's versionless dependencies
+/// read as checked: each project's unversioned rows are counted.
+#[test]
+fn a_sibling_projects_pins_do_not_cover_a_versionless_project() {
+    let db = crate::test_utils::test_db();
+    db.set_kv(
+        crate::ace::lockfile::report::REPORT_KV_KEY,
+        r#"{"lockfiles_read":1}"#,
+    )
+    .unwrap();
+    db.store_dependency("c:/dev/a", "serde", Some("1.0.200"), "rust", false, None)
+        .unwrap();
+    db.store_dependency("c:/dev/b", "tokio", None, "rust", false, None)
+        .unwrap();
+    db.store_dependency("c:/dev/b", "anyhow", None, "rust", false, None)
+        .unwrap();
+    // The same name pinned in its own project is covered.
+    db.store_dependency("c:/dev/a", "anyhow", Some("1.0.80"), "rust", false, None)
+        .unwrap();
+    db.update_osv_sync_status("crates.io", 0, None).unwrap();
+
+    let r = advisory_sync(&db);
+    assert_eq!(r.state, AdvisorySyncState::Ready);
+    let nc = r
+        .not_covered
+        .expect("project b has nothing an advisory can be matched against");
+    assert_eq!(nc.unversioned_count, Some(2));
+    let projects = nc.unversioned.expect("named");
+    assert_eq!(projects.len(), 1);
+    assert!(projects[0].path.ends_with("/b"), "{projects:?}");
+    assert_eq!(projects[0].count, 2);
+}
+
+/// A project the report already names (a manifest with no lockfile) is not
+/// counted again from its versionless rows.
+#[test]
+fn a_manifest_only_project_is_named_once() {
+    let saved: serde_json::Value = serde_json::from_str(
+        r#"{"manifest_only_count":1,"manifest_only":[
+            {"path":"C:\\dev\\tool\\package.json","ecosystem":"javascript","dependencies":2}]}"#,
+    )
+    .unwrap();
+    let nc = not_covered_with(
+        Some(&saved),
+        &[
+            ("c:/dev/tool".to_string(), 2),
+            ("c:/dev/other".to_string(), 1),
+        ],
+    )
+    .expect("something unchecked");
+    assert_eq!(nc.manifest_only_count, Some(1));
+    assert_eq!(nc.unversioned_count, Some(1), "{nc:?}");
+    assert!(nc.unversioned.expect("named")[0].path.ends_with("other"));
+    // Nothing unchecked anywhere: no record at all.
+    assert_eq!(not_covered_with(None, &[]), None);
+    assert_eq!(not_covered_with(None, &[("c:/x".to_string(), 0)]), None);
+}
+
+/// A feed stamped by a build before W0-D still deserializes.
+#[test]
+fn a_not_covered_record_without_the_w0d_fields_still_reads() {
+    let old: NotCovered = serde_json::from_str(
+        r#"{"count":1,"files":[{"path":"a/pom.xml","ecosystem":"Maven"}],"unreadable_count":0,"unreadable":[]}"#,
+    )
+    .unwrap();
+    assert_eq!(old.skipped_count, None);
+    assert_eq!(old.unversioned, None);
+}
+
 // --- Advisory freshness truth (2026-11-11) --------------------------------
 // With the network blocked, a sync re-read its cached archives and recorded
 // every ecosystem as synced "now" with no error, so the mirror could never

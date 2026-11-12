@@ -392,6 +392,14 @@ fn not_covered(
                 reason: (*reason).to_string(),
             })
             .collect(),
+        skipped_count: None,
+        skipped: None,
+        unpinned_count: None,
+        unpinned: None,
+        manifest_only_count: None,
+        manifest_only: None,
+        unversioned_count: None,
+        unversioned: None,
     }
 }
 
@@ -424,6 +432,57 @@ fn the_all_clear_names_what_was_not_checked() {
              spring-petclinic/pom.xml (Maven)."
         ),
         "{out}"
+    );
+}
+
+/// W0-D: what the walk saw and did not check is named in the brief too, so
+/// its all-clear is scoped ("the code 4DA checked") and the gaps are counted.
+#[test]
+fn the_not_checked_line_names_skipped_unpinned_and_manifest_only() {
+    use crate::osv::readiness::{CountedFile, UnreadableFile};
+    let mut nc = not_covered(&[], &[]);
+    nc.skipped_count = Some(4);
+    nc.skipped = Some(vec![UnreadableFile {
+        path: "C:/dev/hono/benchmarks/jsx/yarn.lock".into(),
+        reason: "example / fixture / scaffolding path".into(),
+    }]);
+    nc.unpinned_count = Some(2);
+    nc.unpinned = Some(vec![CountedFile {
+        path: "C:/dev/svc/requirements.txt".into(),
+        count: 2,
+    }]);
+    nc.manifest_only_count = Some(1);
+    nc.manifest_only = Some(vec![CountedFile {
+        path: "C:/dev/tool/package.json".into(),
+        count: 12,
+    }]);
+    nc.unversioned_count = Some(3);
+    nc.unversioned = Some(vec![CountedFile {
+        path: "c:/dev/b".into(),
+        count: 3,
+    }]);
+    let facts = ready_with_gaps(nc);
+    assert_eq!(
+        super::all_clear_line(&facts),
+        "Nothing new touches the code 4DA checked today."
+    );
+    let line = super::not_covered_line(&facts).expect("a line");
+    assert!(
+        line.contains("Not scanned: 4 lockfiles in example, fixture or other skipped folders: jsx/yarn.lock (example / fixture / scaffolding path), and 3 more."),
+        "{line}"
+    );
+    assert!(
+        line.contains("2 requirements pin no exact version, so they were not checked: svc/requirements.txt (2)."),
+        "{line}"
+    );
+    assert!(
+        line.contains("1 manifest with no lockfile declares ranges, not installed versions, so its dependencies were not checked"),
+        "{line}"
+    );
+    assert!(line.contains("tool/package.json (12)"), "{line}");
+    assert!(
+        line.contains("3 dependencies have no installed version 4DA could read"),
+        "{line}"
     );
 }
 

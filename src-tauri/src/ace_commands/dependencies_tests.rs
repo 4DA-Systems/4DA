@@ -229,6 +229,103 @@ fn walk_skips_and_reports_projects_inside_the_temp_root() {
     );
 }
 
+/// W0-D (fresh profile 2026-11-11): the four `benchmarks/*` lockfiles of
+/// honojs/hono were skipped with a log line only. They stay unscanned (the
+/// policy is deliberate) but every one is named with the reason; a project
+/// with only a manifest is selected so `read_dir` can count it; a workspace
+/// member whose root holds the lockfile is not reported.
+#[test]
+fn skipped_fixture_lockfiles_are_named_and_manifest_only_projects_counted() {
+    let tmp = tempfile::tempdir().unwrap();
+    let hono = tmp.path().join("hono");
+    lockfile(&hono, "bun.lock");
+    for bench in ["jsx", "routers"] {
+        let dir = hono.join("benchmarks").join(bench);
+        lockfile(&dir, "yarn.lock");
+        lockfile(&dir, "package.json");
+    }
+    let tool = tmp.path().join("tool");
+    // A repository root bounds the upward lockfile search to the project.
+    repo(&tool, "https://github.com/example/tool.git");
+    std::fs::write(
+        tool.join("package.json"),
+        r#"{"dependencies":{"express":"^4"},"devDependencies":{"vitest":"^1"}}"#,
+    )
+    .unwrap();
+    let member = hono.join("packages").join("core");
+    std::fs::create_dir_all(&member).unwrap();
+    std::fs::write(member.join("package.json"), r#"{"dependencies":{"x":"1"}}"#).unwrap();
+
+    let mut report = LockfileReport::default();
+    let selected = collect_lockfile_dirs_reporting(&[tmp.path().to_path_buf()], &[], &mut report);
+    assert!(selected.contains(&hono), "{selected:?}");
+    assert!(
+        selected.contains(&tool),
+        "a manifest-only project is visited"
+    );
+
+    let mut skipped: Vec<String> = report
+        .skipped_lockfiles
+        .iter()
+        .map(|s| {
+            Path::new(&s.path)
+                .strip_prefix(&hono)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
+    skipped.sort();
+    assert_eq!(
+        skipped,
+        ["benchmarks/jsx/yarn.lock", "benchmarks/routers/yarn.lock"],
+        "every skipped lockfile is named (the manifest beside it is not a lockfile)"
+    );
+    assert!(report
+        .skipped_lockfiles
+        .iter()
+        .all(|s| s.reason == "example / fixture / scaffolding path"));
+
+    for dir in &selected {
+        for outcome in lockfile::read_dir(dir) {
+            report.record(&outcome);
+        }
+    }
+    assert_eq!(report.manifest_only.len(), 1, "{:?}", report.manifest_only);
+    assert!(report.manifest_only[0].path.ends_with("package.json"));
+    assert!(Path::new(&report.manifest_only[0].path).starts_with(&tool));
+    assert_eq!(report.manifest_only[0].dependencies, 2);
+    let saved = report.to_json();
+    assert_eq!(saved["skipped_lockfile_count"], 2);
+    assert_eq!(saved["manifest_only_count"], 1);
+    assert_eq!(saved["manifest_only_dependencies"], 2);
+}
+
+/// Ranged requirements and an unreadable `-r` include reach the report: the
+/// first as a per-file count, the second as a file that could not be read.
+#[test]
+fn unpinned_requirements_and_a_missing_include_reach_the_report() {
+    let tmp = tempfile::tempdir().unwrap();
+    let svc = tmp.path().join("svc");
+    std::fs::create_dir_all(&svc).unwrap();
+    std::fs::write(
+        svc.join("requirements.txt"),
+        "-r base.txt\nflask==3.0.0\nrequests>=2\nclick\n",
+    )
+    .unwrap();
+    let mut report = LockfileReport::default();
+    for outcome in lockfile::read_dir(&svc) {
+        report.record(&outcome);
+    }
+    assert_eq!(report.unpinned.len(), 1, "{:?}", report.unpinned);
+    assert_eq!(report.unpinned[0].count, 2);
+    assert_eq!(report.failed.len(), 1, "{:?}", report.failed);
+    assert!(report.failed[0].path.ends_with("base.txt"));
+    let saved = report.to_json();
+    assert_eq!(saved["unpinned_count"], 2);
+    assert_eq!(saved["failed_count"], 1);
+}
+
 /// A workspace root's lockfile, cut down from the live 2026-10-02 shape: the
 /// members `acme-cli` / `acme-core` have no `source`; `tempfile` is a
 /// dev-dependency and `fastrand` reaches the project only through it.

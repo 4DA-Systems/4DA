@@ -738,7 +738,12 @@ fn project_manifest_absent(path: &str) -> bool {
             return false;
         }
     }
-    true
+    // Whatever the lockfile walk reads keeps the project: a pip-compile
+    // layout pins in `requirements/*.txt` with no file at the top level, and
+    // its rows were written by the walk and then deleted here as a
+    // "manifest-less shell" in the same scan (fresh profile 2026-11-11:
+    // pallets/flask read 55 packages, stored 0).
+    crate::ace::lockfile::probe(dir).is_none()
 }
 
 /// Reconcile dependency tables against the filesystem: `prune_removed_dependencies`

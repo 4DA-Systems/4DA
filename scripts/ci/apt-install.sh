@@ -43,16 +43,13 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 use_fallback_mirror() {
-  # Ubuntu runner images fetch through `mirror+file:/etc/apt/apt-mirrors.txt`
-  # (Azure first). Replace the list with the canonical archive. Images without the
-  # file use plain sources; rewrite their azure host the same way.
-  if [ -f /etc/apt/apt-mirrors.txt ]; then
-    echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-  fi
-  sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' \
-    /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
-  echo "apt-install: switched to archive.ubuntu.com for the next attempt"
+  # Off the runner's Azure default, onto the first mirror this runner resolves
+  # (apt-mirror-select.sh): archive.ubuntu.com, else mirrors.edge.kernel.org.
+  bash "$(dirname "$0")/apt-mirror-select.sh" --avoid-default
 }
+
+# Before the first attempt: a mirror that does not even resolve is not tried at all.
+bash "$(dirname "$0")/apt-mirror-select.sh"
 
 for attempt in 1 2 3; do
   if [ "$attempt" -ge 2 ]; then

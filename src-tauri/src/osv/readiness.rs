@@ -106,20 +106,84 @@ pub struct AdvisorySync {
     pub private_not_looked_up: Option<u32>,
 }
 
-/// Dependency files the lockfile walk does not read installed versions
-/// from. The MCP server's `not_covered` shape (`files` as `{path,
-/// ecosystem}`, plus a count) with an addition the MCP side does not have
-/// yet: `unreadable`, the lockfiles the last walk failed to read.
+/// Everything the advisory check did NOT cover, with counts: the record a
+/// clean or short worklist is read against (label, never suppress: the MCP
+/// server's `coverage` block, 4da-mcp-server#59). Started as the MCP's
+/// `not_covered` shape (`files` as `{path, ecosystem}`, plus a count);
+/// W0-D (2026-11-11) added what the walk saw per project and did not check.
+/// Every list may be shorter than its count.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export, export_to = "bindings/")]
 pub struct NotCovered {
     /// Every unsupported file found (`files` may list fewer).
     pub count: u32,
     pub files: Vec<NotCoveredFile>,
-    /// Lockfiles 4DA reads but could not read on the last walk: what they
-    /// pinned may be stale or missing, so they are not covered either.
+    /// Lockfiles 4DA reads but could not read on the last walk (and `-r`
+    /// includes it could not follow): what they pinned may be stale or
+    /// missing, so they are not covered either.
     pub unreadable_count: u32,
     pub unreadable: Vec<UnreadableFile>,
+    /// Dependency files found but not scanned, with why: fixture, example
+    /// and benchmark paths (left out by policy), temp copies, user
+    /// exclusions, nested checkouts, past the walk's depth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub skipped_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub skipped: Option<Vec<UnreadableFile>>,
+    /// Requirements that name a package with no exact pin (`requests>=2`,
+    /// a bare name), summed over files; `unpinned` counts them per file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub unpinned_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub unpinned: Option<Vec<CountedFile>>,
+    /// Manifests with no lockfile (`manifest_only` gives each one's
+    /// dependency count): declared ranges, not installed versions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub manifest_only_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub manifest_only: Option<Vec<CountedFile>>,
+    /// Dependencies in the inventory with no installed version, per project
+    /// (`path` is the project): never matched against advisories (#974),
+    /// whatever another project of the same ecosystem pinned. A project whose
+    /// files are already named above (unsupported, unreadable, skipped,
+    /// manifest-only) is not repeated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub unversioned_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub unversioned: Option<Vec<CountedFile>>,
+}
+
+impl NotCovered {
+    /// Every count, for the brief's cache key: a newly unchecked file must
+    /// not reuse yesterday's text (#987 review S4).
+    pub(crate) fn fingerprint(&self) -> String {
+        format!(
+            "{}/{}/{}/{}/{}/{}",
+            self.count,
+            self.unreadable_count,
+            self.skipped_count.unwrap_or(0),
+            self.unpinned_count.unwrap_or(0),
+            self.manifest_only_count.unwrap_or(0),
+            self.unversioned_count.unwrap_or(0),
+        )
+    }
+}
+
+/// A file (or project folder) and how many of its dependencies were not
+/// checked.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export, export_to = "bindings/")]
+pub struct CountedFile {
+    pub path: String,
+    pub count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
@@ -261,7 +325,7 @@ pub(crate) fn advisory_sync(db: &Database) -> AdvisorySync {
             .as_ref()
             .map_or(0, crate::ace::lockfile::report::skipped_temp_count);
     }
-    out.not_covered = report.as_ref().and_then(not_covered);
+    out.not_covered = not_covered_with(report.as_ref(), &coverage.unversioned);
     with_lookup_status(out, crate::registry_privacy::lookup_status())
 }
 
@@ -274,6 +338,74 @@ pub(crate) fn with_lookup_status(
     out.private_not_looked_up =
         (!status.off && status.private_withheld > 0).then_some(status.private_withheld);
     out
+}
+
+/// [`not_covered`] of the saved report, plus the inventory's per-project
+/// versionless dependencies (projects the report names as manifest-only are
+/// not repeated). `None` when nothing went unchecked.
+pub(crate) fn not_covered_with(
+    saved: Option<&serde_json::Value>,
+    unversioned: &[(String, u32)],
+) -> Option<NotCovered> {
+    let mut out = saved.and_then(not_covered).unwrap_or(NotCovered {
+        count: 0,
+        files: Vec::new(),
+        unreadable_count: 0,
+        unreadable: Vec::new(),
+        skipped_count: None,
+        skipped: None,
+        unpinned_count: None,
+        unpinned: None,
+        manifest_only_count: None,
+        manifest_only: None,
+        unversioned_count: None,
+        unversioned: None,
+    });
+    // A project whose files are already named (a pom.xml 4DA does not read,
+    // a manifest with no lockfile, a lockfile it could not read) has
+    // versionless rows for that same reason: named once, not twice.
+    let named_dirs: Vec<String> = out
+        .files
+        .iter()
+        .map(|f| f.path.as_str())
+        .chain(out.unreadable.iter().map(|f| f.path.as_str()))
+        .chain(out.skipped.iter().flatten().map(|f| f.path.as_str()))
+        .chain(out.manifest_only.iter().flatten().map(|m| m.path.as_str()))
+        .map(|p| path_key(parent_of(p)))
+        .collect();
+    let projects: Vec<CountedFile> = unversioned
+        .iter()
+        .filter(|(project, n)| *n > 0 && !named_dirs.contains(&path_key(project)))
+        .map(|(project, n)| CountedFile {
+            path: project.clone(),
+            count: *n,
+        })
+        .collect();
+    if !projects.is_empty() {
+        out.unversioned_count = Some(projects.iter().map(|p| p.count).sum());
+        out.unversioned = Some(projects);
+    }
+    nonzero(&out).then_some(out)
+}
+
+fn nonzero(n: &NotCovered) -> bool {
+    n.count
+        + n.unreadable_count
+        + n.skipped_count.unwrap_or(0)
+        + n.unpinned_count.unwrap_or(0)
+        + n.manifest_only_count.unwrap_or(0)
+        + n.unversioned_count.unwrap_or(0)
+        > 0
+}
+
+/// A path compared across the report's host spelling (`C:\\a\\b`) and the
+/// inventory's canonical one (`c:/a/b`).
+fn path_key(path: &str) -> String {
+    path.replace('\\', "/").trim_end_matches('/').to_lowercase()
+}
+
+fn parent_of(path: &str) -> &str {
+    path.rfind(['/', '\\']).map_or(path, |i| &path[..i])
 }
 
 /// The last lockfile walk's saved report, if readable.
@@ -291,7 +423,10 @@ fn lockfile_report(db: &Database) -> Option<serde_json::Value> {
 pub(crate) fn not_covered(saved: &serde_json::Value) -> Option<NotCovered> {
     let count = report_count(saved, "unsupported_count");
     let unreadable_count = report_count(saved, "failed_count");
-    if count == 0 && unreadable_count == 0 {
+    let skipped_count = report_count(saved, "skipped_lockfile_count");
+    let unpinned_count = report_count(saved, "unpinned_count");
+    let manifest_only_count = report_count(saved, "manifest_only_count");
+    if count + unreadable_count + skipped_count + unpinned_count + manifest_only_count == 0 {
         return None;
     }
     let files = report_entries(saved, "unsupported")
@@ -306,12 +441,41 @@ pub(crate) fn not_covered(saved: &serde_json::Value) -> Option<NotCovered> {
     let unreadable = report_entries(saved, "failed")
         .map(|(path, reason)| UnreadableFile { path, reason })
         .collect();
+    let some = |n: u32| (n > 0).then_some(n);
+    let skipped = report_entries(saved, "skipped_lockfiles")
+        .map(|(path, reason)| UnreadableFile { path, reason })
+        .collect();
     Some(NotCovered {
         count,
         files,
         unreadable_count,
         unreadable,
+        skipped_count: some(skipped_count),
+        skipped: some(skipped_count).map(|_| skipped),
+        unpinned_count: some(unpinned_count),
+        unpinned: some(unpinned_count).map(|_| counted_entries(saved, "unpinned", "count")),
+        manifest_only_count: some(manifest_only_count),
+        manifest_only: some(manifest_only_count)
+            .map(|_| counted_entries(saved, "manifest_only", "dependencies")),
+        unversioned_count: None,
+        unversioned: None,
     })
+}
+
+/// `{path, <field>}` entries of one of the report's lists as counted files.
+fn counted_entries(saved: &serde_json::Value, key: &str, field: &str) -> Vec<CountedFile> {
+    saved
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            Some(CountedFile {
+                path: e.get("path")?.as_str()?.to_string(),
+                count: u32::try_from(e.get(field)?.as_u64()?).ok()?,
+            })
+        })
+        .collect()
 }
 
 fn report_count(saved: &serde_json::Value, key: &str) -> u32 {

@@ -34,7 +34,8 @@
 //!   by the lockfile readers (C0.3) from `files` held as a
 //!   [`crate::lockfile::MemFs`] (companions such as `go.sum` or `-r` includes
 //!   are read from `files` too). An outcome is `{"read":{..}}`,
-//!   `{"failed":{..}}` or `{"unsupported":{..}}`. At most
+//!   `{"failed":{..}}`, `{"unsupported":{..}}` or `{"manifest_only":{..}}`
+//!   (a manifest no lockfile pins: its declared dependency count). At most
 //!   [`MAX_LOCKFILE_FILES`] files and [`MAX_LOCKFILE_BYTES`] bytes of them;
 //!   a request over either cap is an error.
 //! - `{"op":"parent_links","eco":"npm","package":"braces","round":0,"lines":[{"installed_version",

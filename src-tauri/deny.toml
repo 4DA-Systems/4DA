@@ -67,23 +67,29 @@ ignore = [
     # -----------------------------------------------------------------------
     # RUSTSEC-2023-0071 — RSA "Marvin Attack" (timing sidechannel)
     #
-    # The `rsa` crate (v0.9.x) has a known timing sidechannel vulnerability
-    # in PKCS#1 v1.5 decryption (CVE-2023-49092). No patched version exists
-    # as of 2026-04.
+    # The `rsa` crate before 0.10.0 has a known timing sidechannel
+    # vulnerability in PKCS#1 v1.5 decryption (CVE-2023-49092). rsa 0.10.0
+    # (2026-11-08) is the first release with the fix.
     #
-    # Risk assessment:
+    # Why the ignore is still needed (checked 2026-11-11):
+    #   - rsa 0.9.10 via jsonwebtoken 11.1.0, newest release, no fixed line
+    #     admitted: jsonwebtoken requires rsa ^0.9.6 and no 0.9 release has
+    #     the fix.
+    #   - Direct rsa is on 0.10.0 (SAML signature verification, sso_crypto.rs).
+    #
+    # Risk assessment for the remaining 0.9.10 copy:
     #   - Only compiled when the `enterprise` feature is enabled (SSO crypto).
     #   - Used for JWT RS256 signature VERIFICATION, not decryption.
     #   - The Marvin Attack requires: (a) attacker-controlled ciphertexts,
     #     (b) a decryption oracle with measurable timing. Our usage is
     #     signature verification on locally-held public keys — neither
     #     condition applies.
-    #   - If a fix lands in rsa 0.10+, we will upgrade immediately.
     #
+    # REVISIT: drop when jsonwebtoken moves to rsa >=0.10.
     # Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
     # Internal ref: Cargo.toml comment on `rsa` dependency
     # -----------------------------------------------------------------------
-    { id = "RUSTSEC-2023-0071", reason = "enterprise-only, signature verification not decryption, no fix upstream" },
+    { id = "RUSTSEC-2023-0071", reason = "rsa 0.9.10 via jsonwebtoken 11.1.0, newest release, no fixed line admitted; direct rsa is on 0.10.0; enterprise-only, signature verification not decryption" },
     { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" },
     # zip <9 extract() advisories: full reachability note in .cargo/audit.toml.
     # 4DA's own code, calamine 0.37 and tauri-plugin-updater 2.14.1 are on zip 9.1.

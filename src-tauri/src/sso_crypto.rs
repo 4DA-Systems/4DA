@@ -248,11 +248,11 @@ pub(crate) async fn verify_oidc_token(
 // ============================================================================
 
 /// Cached SAML certificate (PEM hash -> parsed RSA public key).
-static SAML_CERT_CACHE: LazyLock<Mutex<Option<(String, rsa::RsaPublicKey)>>> =
+static SAML_CERT_CACHE: LazyLock<Mutex<Option<(String, rsa::PublicKey)>>> =
     LazyLock::new(|| Mutex::new(None));
 
 /// Parse a PEM-encoded X.509 certificate and extract the RSA public key.
-fn parse_certificate_pem(cert_pem: &str) -> crate::error::Result<rsa::RsaPublicKey> {
+fn parse_certificate_pem(cert_pem: &str) -> crate::error::Result<rsa::PublicKey> {
     use rsa::sha2::Digest;
 
     // Compute cache key (SHA-256 of PEM text)
@@ -293,7 +293,7 @@ fn parse_certificate_pem(cert_pem: &str) -> crate::error::Result<rsa::RsaPublicK
 
     let public_key = {
         use pkcs8::DecodePublicKey;
-        rsa::RsaPublicKey::from_public_key_der(&spki_der)
+        rsa::PublicKey::from_public_key_der(&spki_der)
     }
     .map_err(|e| format!("Failed to extract RSA public key from certificate: {e}"))?;
 
@@ -388,7 +388,7 @@ mod tests {
         // which is what rand_core's blanket `CryptoRng` impl requires.
         // getrandom is already a direct dependency — no new crate needed.
         let mut rng = getrandom::rand_core::UnwrapErr(getrandom::SysRng);
-        let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let private_key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let public_key = private_key.to_public_key();
 
         let private_pem = private_key

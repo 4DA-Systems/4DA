@@ -7,9 +7,13 @@ ignore = [
     # Will be resolved when Tauri migrates to GTK4. Not exploitable.
     "RUSTSEC-2024-0413",
 
-    # rsa@0.9.x (RUSTSEC-2023-0071) — Marvin Attack timing sidechannel, no fix upstream.
+    # rsa (RUSTSEC-2023-0071) — Marvin Attack timing sidechannel, fixed in rsa 0.10.0.
+    # Still needed: rsa 0.9.10 via jsonwebtoken 11.1.0, newest release, no fixed line
+    # admitted (it requires rsa ^0.9.6, and no 0.9 release has the fix); direct rsa is
+    # on 0.10.0. Checked 2026-11-11.
     # Only compiled under `enterprise` feature for JWT RS256 verification (not decryption).
     # Full risk assessment in deny.toml. Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
+    # REVISIT: drop when jsonwebtoken moves to rsa >=0.10.
     "RUSTSEC-2023-0071",
 
     # quick-xml <0.41 (RUSTSEC-2026-0194 / RUSTSEC-2026-0195) was ignored here

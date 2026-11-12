@@ -183,9 +183,13 @@ tauri-plugin-deep-link = "2.4.7"
 
 # SSO cryptographic verification (enterprise feature)
 jsonwebtoken = { version = "11", features = ["rust_crypto"], optional = true }
-# SECURITY: RUSTSEC-2023-0071 (Marvin Attack timing sidechannel) addressed in 0.10.0-pre.
-# Only compiled when enterprise feature is enabled (SSO crypto). Monitor: https://rustsec.org/advisories/RUSTSEC-2023-0071
-rsa = { version = "0.10.0-pre", features = ["sha2"], optional = true }
+# SECURITY: RUSTSEC-2023-0071 (Marvin Attack timing sidechannel) is fixed in rsa 0.10.0
+# (2026-11-08), the first stable release with the fix; this was on its release candidates.
+# 0.10.0 made SHA-2 unconditional (the `sha2` feature is gone) and put PKCS#1 v1.5 behind
+# `pkcs1v15`, which SAML RSA-SHA256 verification needs (sso_crypto.rs).
+# Only compiled when the enterprise feature is enabled (SSO crypto). jsonwebtoken 11.1.0
+# still brings its own rsa 0.9.10: see the RUSTSEC-2023-0071 note in deny.toml.
+rsa = { version = "0.10.0", features = ["pkcs1v15"], optional = true }
 pkcs8 = { version = "0.11", features = ["pem"], optional = true }
 x509-cert = { version = "0.3.0-pre", optional = true }
 

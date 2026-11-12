@@ -88,6 +88,21 @@ With your permission, we will acknowledge your contribution in the release notes
 - **cargo-deny.** Enforced in CI to audit Rust dependencies for known vulnerabilities, duplicate crates, and license compliance.
 - **SBOM.** A CycloneDX Software Bill of Materials is published with every release, accompanied by a cosign attestation.
 
+### Advisories in dependencies 4DA ships, and why they do not apply
+
+4DA's own Preemption tab reports these against 4DA's repository; this is the reasoning behind leaving them in place until upstream moves, and the commands that check it. Re-checked 2026-11-11.
+
+**`zip` 8.6.0, through `docx-rs` 0.4.22** (DOCX text extraction, `src-tauri/src/extractors/office.rs`). `docx-rs` 0.4.22 is its newest release and requires `zip ^8.6.0`, so no lockfile change reaches the fixed `zip` 9.0.5. 4DA's own direct `zip` is 9.1.3, which is not affected. How 4DA reaches 8.6.0: `read_docx` opens the document as a `ZipArchive` over bytes already in memory and reads its XML parts. Nothing is extracted to disk, and only the deflate codecs are compiled in (`cargo tree -i zip@8.6.0 -e features`). Before `read_docx` runs, the file is size-capped and streamed once to reject decompression bombs (`guard_ooxml_bomb`).
+
+| Advisory | What it needs | In 4DA |
+|---|---|---|
+| GHSA-m665-v7pm-7grj (critical, "Zip Cloaking") | a security decision made with one reader (`ZipArchive`) and extraction to disk with the other (`ZipStreamReader`) | not affected: one reader, nothing extracted |
+| GHSA-9hj8-73fh-9963 | the `legacy-zip` feature and `extract()` | not affected: feature not compiled |
+| GHSA-8hxf-qr8p-62x4 | AES-encrypted entries (the AES feature) | not affected: feature not compiled |
+| GHSA-hjqx-j4rw-g7xv, GHSA-q7v9-x93c-xqv3, RUSTSEC-2026-0367, RUSTSEC-2026-0368, RUSTSEC-2026-0369, RUSTSEC-2026-0429 | `ZipArchive::extract()` / `ZipStreamReader::extract()` to a directory (symlinks, permissions, SUID bits) | not affected: never called |
+
+Checks: `cargo tree -i zip@8.6.0 -e features` (no `legacy-zip`, no `aes-crypto`), and `grep -rn "extract(" <docx-rs 0.4.22 source>/src` (no extraction call). REVISIT: when `docx-rs` admits `zip >= 9.0.5`, update and drop this entry.
+
 ## Scope
 
 ### In Scope
