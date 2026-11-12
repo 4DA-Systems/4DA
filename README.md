@@ -63,7 +63,7 @@ Sixteen tools in all: 11 standalone (`dependency_check`, `upgrade_impact`, `vuln
 | **macOS** 10.15+ | [`.dmg`, separate Apple Silicon and Intel builds](https://github.com/4DA-Systems/4DA/releases/latest) | In-app |
 | **Linux** x86_64 (Ubuntu 22.04+, WebKitGTK 4.1) | [`.AppImage` / `.deb` / `.rpm`](https://github.com/4DA-Systems/4DA/releases/latest) | Notice with a download link |
 
-> **The current release, v1.0.3 (5 October 2026), predates the redesign on this page.** It has four tabs, reads news from every source by default and bundles the search model. The dependency-first build shown here ships in the next release; until then, [build from source](#build-from-source) to run it.
+> **The current release, v1.0.3 (5 October 2026), predates the redesign on this page.** It has four tabs, reads news from every source by default and bundles the search model. The dependency-first build shown here ships as v1.0.4, which is being prepared (see the [changelog](CHANGELOG.md)); until it is published, [build from source](#build-from-source) to run it. On Intel Macs, v1.0.4 has no built-in local embeddings (Ollama works).
 
 No account, no card. Open the app, point it at the folders that hold your projects, and read the Brief.
 
