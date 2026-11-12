@@ -22,6 +22,7 @@ const mockGenerateBriefing = vi.fn();
 const mockSetActiveView = vi.fn();
 
 let briefingError: string | null = null;
+let resultRows: Array<{ id: number }> = [];
 
 vi.mock('../../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
@@ -30,7 +31,7 @@ vi.mock('../../store', () => ({
         loading: false,
         analysisComplete: false,
         status: 'Ready',
-        relevanceResults: [],
+        relevanceResults: resultRows,
         progress: 0,
         progressStage: '',
       },
@@ -98,8 +99,18 @@ describe('BriefingReadyState', () => {
   });
 
   it('shows results analyzed count', () => {
+    resultRows = [{ id: 1 }];
     render(<BriefingReadyState />);
     expect(screen.getByText('briefing.resultsAnalyzed')).toBeInTheDocument();
+    resultRows = [];
+  });
+
+  // An offline first run finishes with no rows; the facts brief needs none,
+  // so the screen must not say "0 results analyzed".
+  it('says the brief needs no articles when the analysis found none', () => {
+    render(<BriefingReadyState />);
+    expect(screen.getByText('briefing.factsNeedNoArticles')).toBeInTheDocument();
+    expect(screen.queryByText('briefing.resultsAnalyzed')).not.toBeInTheDocument();
   });
 
   it('shows generate briefing button', () => {

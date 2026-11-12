@@ -1503,6 +1503,7 @@
   "briefing.browseResults": "Browse {{count}} results while you wait",
   "briefing.readyToGenerate": "Briefing Ready to Generate",
   "briefing.resultsAnalyzed": "{{count}} results analyzed. Generate an AI briefing to surface what matters most.",
+  "briefing.factsNeedNoArticles": "No new articles this run. Your brief is computed from your lockfiles and advisories and needs none.",
   "briefing.personalizeTitle": "Personalize your feed",
   "briefing.personalizeBody": "Add your interests and tech stack in Settings for better results.",
   "commandDeck.git.loading": "Loading git status...",

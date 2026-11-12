@@ -204,7 +204,7 @@ function App() {
   // AI Briefing (extracted hook)
   const {
     aiBriefing,
-  } = useBriefing(state.relevanceResults, state.analysisComplete);
+  } = useBriefing(state.analysisComplete);
 
   // Global keyboard shortcuts + analyze handler (extracted hook)
   const { focusedIndex, analysisPulse, handleAnalyze } = useAppShortcuts({

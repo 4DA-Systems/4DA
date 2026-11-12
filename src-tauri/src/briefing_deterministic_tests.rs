@@ -649,3 +649,28 @@ fn a_maintenance_notice_fact_is_worded_as_unmaintained() {
     );
     assert!(!line.contains("Low") && !line.contains("advisor"), "{line}");
 }
+
+/// Audit 2026-11-11: a failed model call returned an error and no brief, though
+/// the facts need no model. The floor serves them and says why the written
+/// brief is missing, never claiming advisories it did not finish.
+#[test]
+fn a_failed_narration_serves_the_facts_and_says_why() {
+    let out = build_deterministic_brief(&BriefFacts::default(), FloorReason::ModelFailed);
+    assert!(
+        out.contains("The AI provider did not return a written brief"),
+        "{out}"
+    );
+    let none = BriefFacts {
+        no_dependencies_known: true,
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&none, FloorReason::ModelFailed);
+    assert!(out.contains(NO_LOCKFILES_LINE), "{out}");
+    assert!(!out.contains("from your lockfiles"), "{out}");
+    let unchecked = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::Failed),
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&unchecked, FloorReason::ModelFailed);
+    assert!(!out.contains("OSV advisories"), "{out}");
+}

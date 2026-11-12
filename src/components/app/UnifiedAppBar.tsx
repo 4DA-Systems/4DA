@@ -34,7 +34,7 @@ interface UnifiedAppBarProps {
    * pipeline-only "69 relevant" must not read as a judged 69.
    */
   judged: boolean;
-  aiBriefing: { error: string | null; pending?: string | null };
+  aiBriefing: { error: string | null; pending?: string | null; notice?: string | null };
   onAnalyze: () => void;
   onOpenSettings: () => void;
   analysisPulse: boolean;
@@ -293,6 +293,13 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         <div role="status" className="mx-4 mt-2 px-3 py-2 bg-bg-secondary border border-border rounded-md text-text-secondary text-xs flex items-center gap-2">
           <span className="w-3 h-3 border-2 border-text-muted/30 border-t-text-muted rounded-full animate-spin" aria-hidden="true" />
           <span className="flex-1">{aiBriefing.pending}</span>
+        </div>
+      )}
+
+      {/* The brief on screen is the facts view because the model call failed */}
+      {aiBriefing.notice && !aiBriefing.pending && !aiBriefing.error && (
+        <div role="status" className="mx-4 mt-2 px-3 py-2 bg-bg-secondary border border-border rounded-md text-text-secondary text-xs">
+          {aiBriefing.notice}
         </div>
       )}
 

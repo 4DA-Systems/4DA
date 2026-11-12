@@ -222,12 +222,21 @@ pub(crate) async fn generate_briefing_internal(
         let response = match llm_client.complete(&system_prompt, messages).await {
             Ok(r) => r,
             Err(e) => {
-                error!(target: "4da::briefing", error = %e, "Failed to generate briefing");
-                return Ok(serde_json::json!({
-                    "success": false,
-                    "error": provider_error_message(&e.to_string()),
-                    "briefing": null
-                }));
+                // The facts need no model: a failed narration serves them,
+                // with the reason beside the brief, instead of an error and
+                // no brief at all.
+                error!(target: "4da::briefing", error = %e, "Narration failed; serving the facts brief");
+                let mut served = serve_deterministic(
+                    db,
+                    &facts,
+                    auto_triggered,
+                    crate::briefing_deterministic::FloorReason::ModelFailed,
+                );
+                served["narration_error"] = serde_json::Value::String(provider_error_message(
+                    &e.to_string(),
+                    crate::llm_egress::provider_is_on_machine(&llm_settings),
+                ));
+                return Ok(served);
             }
         };
         let (content, rejects) =
@@ -335,13 +344,18 @@ fn serve_deterministic(
         Some(0),
     ) {
         Ok(id) => {
-            remember_fingerprint(
-                db,
-                id,
-                &facts.fingerprint,
-                &crate::brief_cadence::act_now_ids(facts),
-                briefing_reuse::Readiness::of(facts.advisories),
-            );
+            // A failed narration is not a settled brief: leave the reuse
+            // fingerprint alone so the next automatic ask tries the model
+            // again instead of reusing these facts for the rest of the day.
+            if reason != crate::briefing_deterministic::FloorReason::ModelFailed {
+                remember_fingerprint(
+                    db,
+                    id,
+                    &facts.fingerprint,
+                    &crate::brief_cadence::act_now_ids(facts),
+                    briefing_reuse::Readiness::of(facts.advisories),
+                );
+            }
             crate::brief_cadence::note_brief_written(db, auto_triggered);
         }
         Err(e) => {
@@ -367,16 +381,24 @@ fn serve_deterministic(
     })
 }
 
-/// The user-facing message for a provider error.
-fn provider_error_message(e_str: &str) -> String {
+/// The user-facing message for a provider error. `on_machine`: the model
+/// runs on this machine (`llm_egress::provider_is_on_machine`), so a refused
+/// connection means the local server is down; for a cloud provider it means
+/// the provider could not be reached (offline, proxy, DNS).
+fn provider_error_message(e_str: &str, on_machine: bool) -> String {
     // A budget refusal passes through whole: it already names the cause and
     // the reset, and its `[budget_reset:…]` token lets the UI say it in the
     // user's language. It must never be re-classified by the checks below.
     if e_str.contains("[budget_reset:") || e_str.contains("Daily AI budget reached") {
         e_str.to_string()
     } else if e_str.contains("Connection refused") || e_str.contains("connect") {
-        "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
-            .to_string()
+        if on_machine {
+            "The local model server is not running. Start it (for Ollama: 'ollama serve') or check your AI provider in Settings."
+                .to_string()
+        } else {
+            "Could not reach your AI provider. Check your internet connection or proxy, then try again."
+                .to_string()
+        }
     } else if e_str.contains("401")
         || e_str.contains("authentication_error")
         || e_str.contains("invalid x-api-key")
@@ -391,7 +413,11 @@ fn provider_error_message(e_str: &str) -> String {
         "Rate limit exceeded. Wait a moment and try again, or check your API plan limits."
             .to_string()
     } else if e_str.contains("model") {
-        "The configured model may not be available. Try 'ollama pull qwen3:14b' or 'ollama pull gemma3:12b'.".to_string()
+        if on_machine {
+            "The configured model may not be available. Try 'ollama pull qwen3:14b' or 'ollama pull gemma3:12b'.".to_string()
+        } else {
+            "The configured model may not be available to your API key. Check the model name in Settings → AI Provider.".to_string()
+        }
     } else {
         e_str.to_string()
     }
@@ -461,10 +487,30 @@ mod tests {
         let refusal =
             "Daily AI budget reached \u{2014} resets at 00:00 local time (in 3 h 12 min) \
                        [budget_reset:00:00:192]. Daily LLM cost limit exceeded";
-        assert_eq!(super::provider_error_message(refusal), refusal);
+        assert_eq!(super::provider_error_message(refusal, false), refusal);
         let preflight = "This call would exceed today's AI budget (estimated ~1.0c), connect \
                          [budget_reset:00:00:5]";
-        assert_eq!(super::provider_error_message(preflight), preflight);
+        assert_eq!(super::provider_error_message(preflight, true), preflight);
+    }
+
+    /// Audit 2026-11-11: any error containing "connect" read "Ollama is not
+    /// running", which is wrong for a cloud key on a machine that is offline.
+    #[test]
+    fn a_connection_failure_names_the_provider_actually_configured() {
+        let offline = "error sending request: error trying to connect: dns error";
+        let cloud = super::provider_error_message(offline, false);
+        assert!(!cloud.contains("Ollama"), "{cloud}");
+        assert!(
+            cloud.contains("Could not reach your AI provider"),
+            "{cloud}"
+        );
+        let local = super::provider_error_message("Connection refused (os error 10061)", true);
+        assert!(
+            local.contains("local model server is not running"),
+            "{local}"
+        );
+        let model = super::provider_error_message("model not found", false);
+        assert!(!model.contains("ollama pull"), "{model}");
     }
 
     /// End-to-end on a REAL corpus snapshot with the user's configured model:

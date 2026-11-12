@@ -95,6 +95,11 @@ export interface BriefingState {
    * neutral status, never with Retry.
    */
   pending?: string | null;
+  /**
+   * Not an error either: why the shown brief is the facts view (the model
+   * call failed). Shown beside the brief, which stays on screen.
+   */
+  notice?: string | null;
   model: string | null;
   lastGenerated: Date | null;
 }

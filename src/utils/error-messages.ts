@@ -59,7 +59,11 @@ function t(key: string, fallback: string, opts?: Record<string, unknown>): strin
   } catch {
     // i18n not available — use fallback
   }
-  return fallback;
+  // The English fallback still gets its values: "{{reason}}" never shows raw.
+  return opts
+    ? fallback.replace(/\{\{(\w+)\}\}/g, (whole, name: string) =>
+      name in opts ? String(opts[name]) : whole)
+    : fallback;
 }
 
 /** A `FourDaError` as the frontend receives it (Rust `UserError`, error.rs). */
@@ -241,6 +245,18 @@ export function briefStillWritingMessage(): string {
   return t(
     'errors:errorMsg.briefStillWriting',
     'Still writing your brief. It will appear here as soon as it is ready.',
+  );
+}
+
+/**
+ * The model call failed, so the backend served the facts brief instead:
+ * a notice beside the brief (why there is no written one), not an error.
+ */
+export function narrationFailedMessage(reason: string): string {
+  return t(
+    'errors:errorMsg.narrationFailed',
+    'Showing the facts brief. The written brief could not be generated: {{reason}}',
+    { reason: budgetRefusalMessage(reason) ?? reason },
   );
 }
 

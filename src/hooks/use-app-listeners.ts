@@ -5,6 +5,12 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store';
 import type { ToastType } from '../store/types';
+import {
+  autoAnalysisStartedThisSession,
+  markAutoAnalysisStarted,
+  onboardingDecision,
+  onboardingSettled,
+} from '../lib/auto-analysis-gate';
 import { cmd } from '../lib/commands';
 import { isVictauriDogfoodMode } from '../lib/startup-runtime';
 import { safeListen } from '../lib/tauri-events';
@@ -159,13 +165,15 @@ export function useAppListeners({
         }
 
         if (cancelled || useAppStore.getState().isFirstRun) return;
+        // Never behind the onboarding wizard: an analysis fetches from the
+        // network, and the first-run flow starts its own after the wizard.
+        if ((await onboardingDecision()) !== 'complete' || cancelled) return;
         const s = useAppStore.getState();
-        // Cooldown: don't auto-analyze if we started recently (prevents hot-reload restart loops).
-        // Only affects dev hot-reload — production cold starts clear sessionStorage automatically.
-        const lastAutoAnalysis = Number(window.sessionStorage.getItem('4da-last-auto-analysis') ?? '0');
-        if (Date.now() - lastAutoAnalysis < 15_000) return;
-        if (!s.isFirstRun && !s.showOnboarding) {
-          window.sessionStorage.setItem('4da-last-auto-analysis', String(Date.now()));
+        // At most one analysis of the app's own per session (hot reloads and
+        // remounts included).
+        if (autoAnalysisStartedThisSession()) return;
+        if (!s.isFirstRun && onboardingSettled(s)) {
+          markAutoAnalysisStarted();
           startAnalysis();
         }
       } catch {

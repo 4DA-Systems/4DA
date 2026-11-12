@@ -87,7 +87,9 @@ export function BriefingReadyState() {
       <div className="flex flex-col items-center justify-center py-20 px-8">
         <h2 className="text-xl font-medium text-text-primary mb-2">{t('briefing.readyToGenerate')}</h2>
         <p className="text-sm text-text-muted text-center max-w-md mb-6">
-          {t('briefing.resultsAnalyzed', { count: results.length })}
+          {results.length > 0
+            ? t('briefing.resultsAnalyzed', { count: results.length })
+            : t('briefing.factsNeedNoArticles')}
         </p>
         {briefingPending && !briefingError && !busy && (
           <p role="status" className="text-xs text-text-secondary text-center max-w-md mb-4">
