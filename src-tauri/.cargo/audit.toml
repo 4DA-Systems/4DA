@@ -1,11 +1,13 @@
 # Cargo audit advisory ignore list
 # Only add entries with clear justification — every ignore weakens the audit.
+# Every entry carries `REVISIT BY <date>` on its line; scripts/check-remove-by.cjs
+# fails an undated entry and one whose date has passed (see deny.toml's header).
 
 [advisories]
 ignore = [
     # atk@0.18.2 (RUSTSEC-2024-0413) — GTK3 bindings unmaintained, Linux only.
     # Will be resolved when Tauri migrates to GTK4. Not exploitable.
-    "RUSTSEC-2024-0413",
+    "RUSTSEC-2024-0413", # REVISIT BY 2027-05-12
 
     # rsa (RUSTSEC-2023-0071) — Marvin Attack timing sidechannel, fixed in rsa 0.10.0.
     # Still needed: rsa 0.9.10 via jsonwebtoken 11.1.0, newest release, no fixed line
@@ -14,7 +16,7 @@ ignore = [
     # Only compiled under `enterprise` feature for JWT RS256 verification (not decryption).
     # Full risk assessment in deny.toml. Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
     # REVISIT: drop when jsonwebtoken moves to rsa >=0.10.
-    "RUSTSEC-2023-0071",
+    "RUSTSEC-2023-0071", # REVISIT BY 2027-02-12
 
     # quick-xml <0.41 (RUSTSEC-2026-0194 / RUSTSEC-2026-0195) was ignored here
     # until 2026-08-14. RESOLVED, not suppressed: calamine 0.36, docx-rs 0.4.21
@@ -31,16 +33,16 @@ ignore = [
     # 4DA calls none of these directly (glib::VariantStrIter in particular is
     # never used). Extends the existing atk (RUSTSEC-2024-0413) ignore.
     # REVISIT: drop when Tauri's Linux backend moves to GTK4 / webkit6.
-    "RUSTSEC-2024-0411", # gdkwayland-sys
-    "RUSTSEC-2024-0412", # gdk
-    "RUSTSEC-2024-0414", # gdkx11-sys
-    "RUSTSEC-2024-0415", # gtk
-    "RUSTSEC-2024-0416", # atk-sys
-    "RUSTSEC-2024-0417", # gdkx11
-    "RUSTSEC-2024-0418", # gdk-sys
-    "RUSTSEC-2024-0419", # gtk3-macros
-    "RUSTSEC-2024-0420", # gtk-sys
-    "RUSTSEC-2024-0429", # glib unsound (VariantStrIter) — not used by 4DA
+    "RUSTSEC-2024-0411", # gdkwayland-sys (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0412", # gdk (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0414", # gdkx11-sys (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0415", # gtk (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0416", # atk-sys (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0417", # gdkx11 (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0418", # gdk-sys (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0419", # gtk3-macros (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0420", # gtk-sys (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0429", # glib unsound (VariantStrIter) — not used by 4DA (REVISIT BY 2027-02-12)
 
     # -----------------------------------------------------------------------
     # unic-* Unicode crates — unmaintained (RUSTSEC-2025-0075/0080/0081/0098/0100).
@@ -49,11 +51,11 @@ ignore = [
     # binary's runtime. Pure Unicode table lookups; no known vulnerability, only
     # a maintenance-status flag. No maintained drop-in exists yet.
     # REVISIT: drop when tauri-utils/urlpattern move off the unic-* crates.
-    "RUSTSEC-2025-0075", # unic-char-range
-    "RUSTSEC-2025-0080", # unic-common
-    "RUSTSEC-2025-0081", # unic-char-property
-    "RUSTSEC-2025-0100", # unic-ucd-ident
-    "RUSTSEC-2025-0098", # unic-ucd-version
+    "RUSTSEC-2025-0075", # unic-char-range (REVISIT BY 2027-05-12)
+    "RUSTSEC-2025-0080", # unic-common (REVISIT BY 2027-05-12)
+    "RUSTSEC-2025-0081", # unic-char-property (REVISIT BY 2027-05-12)
+    "RUSTSEC-2025-0100", # unic-ucd-ident (REVISIT BY 2027-05-12)
+    "RUSTSEC-2025-0098", # unic-ucd-version (REVISIT BY 2027-05-12)
 
     # -----------------------------------------------------------------------
     # proc-macro build-time unmaintained: paste (RUSTSEC-2024-0436),
@@ -61,16 +63,16 @@ ignore = [
     # Compile-time only (proc-macro expansion) — zero runtime/attack surface in
     # the shipped app. Deep transitive deps of gtk3-macros / dependency macros.
     # REVISIT: drop as consumers migrate to maintained macro crates.
-    "RUSTSEC-2024-0370", # proc-macro-error
-    "RUSTSEC-2024-0436", # paste
-    "RUSTSEC-2026-0173", # proc-macro-error2
+    "RUSTSEC-2024-0370", # proc-macro-error (REVISIT BY 2027-05-12)
+    "RUSTSEC-2024-0436", # paste (REVISIT BY 2027-05-12)
+    "RUSTSEC-2026-0173", # proc-macro-error2 (REVISIT BY 2027-05-12)
 
     # -----------------------------------------------------------------------
     # ttf-parser unmaintained (RUSTSEC-2026-0192). Transitive font parser; the
     # only surface is local font/glyph handling in the rendering/OCR path — no
     # network input. No known vulnerability, maintenance-status flag only.
     # REVISIT: drop when the upstream consumer moves to a maintained parser.
-    "RUSTSEC-2026-0192", # ttf-parser
+    "RUSTSEC-2026-0192", # ttf-parser (REVISIT BY 2027-05-12)
 
     # -----------------------------------------------------------------------
     # zip <9.0.0 extract() path handling (RUSTSEC-2026-0367 SUID/SGID kept,
@@ -86,10 +88,10 @@ ignore = [
     #   docx-rs 0.4.22 (zip 8.6.0, the newest docx-rs), which only reads
     #   entries through ZipArchive.
     # REVISIT: drop when docx-rs moves to zip >=9.
-    "RUSTSEC-2026-0367", # zip SUID/SGID on extract
-    "RUSTSEC-2026-0368", # zip symlink escape on extract
-    "RUSTSEC-2026-0369", # zip permissions through symlinks on extract
-    "RUSTSEC-2026-0429", # zip abort on a large symlink entry on extract
+    "RUSTSEC-2026-0367", # zip SUID/SGID on extract (REVISIT BY 2027-02-12)
+    "RUSTSEC-2026-0368", # zip symlink escape on extract (REVISIT BY 2027-02-12)
+    "RUSTSEC-2026-0369", # zip permissions through symlinks on extract (REVISIT BY 2027-02-12)
+    "RUSTSEC-2026-0429", # zip abort on a large symlink entry on extract (REVISIT BY 2027-02-12)
     # -----------------------------------------------------------------------
     # crypto-bigint <0.7.6 timing variability (RUSTSEC-2026-0387). The 0.7
     # copy is bumped to 0.7.10. The remaining 0.5.5 copy has no fix (patched
@@ -102,5 +104,5 @@ ignore = [
     #   IdP id_token: public key, signature and message are all public, so a
     #   timing leak there reveals no secret.
     # REVISIT: drop when jsonwebtoken moves to p256/p384 0.14 (crypto-bigint 0.7).
-    "RUSTSEC-2026-0387", # crypto-bigint 0.5 timing, enterprise-only ES verify
+    "RUSTSEC-2026-0387", # crypto-bigint 0.5 timing, enterprise-only ES verify (REVISIT BY 2027-02-12)
 ]

@@ -242,3 +242,55 @@ test('scanRepo reads the tree and allowlist relative to the given root', () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---- advisory suppressions (audit 2026-11-11, Q4) --------------------------------------
+const { undatedSuppressions, scanRepo, SUPPRESSION_FILES } = require('./check-remove-by.cjs');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+test('an advisory ignore without a REVISIT BY date is reported, in both file formats', () => {
+  const deny = [
+    '[advisories]',
+    'ignore = [',
+    '    # RUSTSEC-2023-0071 mentioned in a comment is not an entry',
+    '    { id = "RUSTSEC-2023-0071", reason = "x" }, # REVISIT BY 2027-02-12',
+    '    { id = "RUSTSEC-2026-0097", reason = "no date" },',
+    ']',
+    '[bans]',
+    'skip = [ "RUSTSEC-0000-0000" ]',
+  ].join('\n');
+  assert.deepStrictEqual(undatedSuppressions('deny.toml', deny), [{ rel: 'deny.toml', lineNo: 5, id: 'RUSTSEC-2026-0097' }]);
+  const audit = 'ignore = [\r\n    "RUSTSEC-2024-0411", # gdk (REVISIT BY 2027-05-12)\r\n    "RUSTSEC-2024-0412", # gtk\r\n]\r\n';
+  assert.deepStrictEqual(undatedSuppressions('audit.toml', audit).map((u) => u.id), ['RUSTSEC-2024-0412']);
+});
+
+test('a REVISIT BY date is enforced exactly like REMOVE BY', () => {
+  const { expired, upcoming } = analyze('    "RUSTSEC-2024-0411", # REVISIT BY 2026-08-12\n    "RUSTSEC-2024-0412", # REVISIT BY 2026-09-30\n');
+  assert.deepStrictEqual(expired.map((e) => e.lineNo), [1]);
+  assert.deepStrictEqual(upcoming.map((e) => e.lineNo), [2]);
+});
+
+test('the repository: every advisory ignore carries a date that has not passed', () => {
+  const root = path.resolve(__dirname, '..');
+  const r = scanRepo(root);
+  assert.deepStrictEqual(r.undated, [], 'every ignore in the suppression files is dated');
+  const suppressionMarkers = [...r.expired, ...r.dueSoon, ...r.upcoming].filter((e) => SUPPRESSION_FILES.includes(e.rel));
+  assert.ok(suppressionMarkers.length >= 55, `expected >= 55 dated ignores, found ${suppressionMarkers.length}`);
+});
+
+test('scanRepo fails a past-dated suppression and an undated one', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'remove-by-supp-'));
+  try {
+    fs.mkdirSync(path.join(root, 'src-tauri', '.cargo'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'src-tauri', '.cargo', 'audit.toml'),
+      'ignore = [\n    "RUSTSEC-2024-0411", # REVISIT BY 2026-08-01\n    "RUSTSEC-2024-0412",\n]\n'
+    );
+    const r = scanRepo(root, TODAY);
+    assert.deepStrictEqual(r.expired.map((e) => [e.rel, e.lineNo]), [['src-tauri/.cargo/audit.toml', 2]]);
+    assert.deepStrictEqual(r.undated.map((u) => u.id), ['RUSTSEC-2024-0412']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
