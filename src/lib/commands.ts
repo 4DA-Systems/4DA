@@ -431,7 +431,10 @@ interface CommandMap {
   ace_record_interaction: { params: { itemId: number; actionType: string; actionData: string | null; itemTopics: string[]; itemSource: string }; result: void };
   ace_record_accuracy_feedback: { params: { itemId: number; predictedScore: number; feedbackType: string }; result: void };
   record_item_feedback: { params: { itemId: number; relevant: boolean }; result: void };
-  triage_alert: { params: { itemId: number; action: string; advisoryId: string | null; reason: string | null; expiresAt: string | null }; result: void };
+  // One store for banner and Preemption dismissals: `alertKey` (or `itemId`,
+  // stored as `item:<id>`). Without `expiresAt` the backend expires it in 7 days.
+  triage_alert: { params: { itemId: number | null; alertKey?: string | null; action: string; advisoryId: string | null; reason: string | null; expiresAt: string | null }; result: void };
+  untriage_alert: { params: { itemId: number | null; alertKey: string | null }; result: void };
   get_triage_states: { params: { itemIds: number[] }; result: Array<{ item_id: number; advisory_id: string | null; action: string; reason: string | null; resolved_at: string; expires_at: string | null }> };
   ace_get_suggested_interests: { params: Record<string, never>; result: SuggestedInterest[] };
   ace_get_detected_tech: { params: Record<string, never>; result: { detected_tech: Array<{ name: string; category: string; confidence: number }> } };
@@ -568,11 +571,11 @@ interface CommandMap {
   // feed.tier_scope === 'free_floor'; Signal/trial gets 'full'.
   // get_blind_spot_teaser is free: real counts only, no item detail.
   // AD-035 (2026-08-31): the LIST response is filtered+counted backend-side
-  // from `dismissedIds` (the view's persisted local dismissals) and trimmed
+  // from the dismissals in the triage store (lib/alert-dismissals) and trimmed
   // to what the collapsed cards render; `fullPlan` fetches the collapsed
   // Upgrade Plan tail. get_preemption_item_detail returns ONE item with its
   // complete evidence/notes/tooltips for the card's lazy expansion.
-  get_preemption_alerts: { params: { dismissedIds: string[]; fullPlan: boolean }; result: EvidenceFeed };
+  get_preemption_alerts: { params: { fullPlan: boolean }; result: EvidenceFeed };
   get_preemption_item_detail: { params: { itemId: string }; result: EvidenceItem };
   // Signal Lane 1, the stack-change stream (AD-054): advisories (free floor)
   // plus graded registry releases (Signal). total_tracked === 0 = no lockfile

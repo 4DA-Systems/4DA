@@ -2561,5 +2561,9 @@
   "agentHandoff.needsFirstRun": "To open Claude Code from here, start Claude Code once and send any message.",
   "agentHandoff.openFailed": "Could not open your agent.",
   "agentHandoff.copyFailed": "Could not copy the prompt.",
-  "settings.translation.cloudConsentLlmHelp": "Translation uses your AI model, which runs in the cloud: card text is sent to it only when this is on."
+  "settings.translation.cloudConsentLlmHelp": "Translation uses your AI model, which runs in the cloud: card text is sent to it only when this is on.",
+  "alerts.dismissedFor": "Hidden for {{days}} days. It comes back then if it still applies.",
+  "alerts.undo": "Undo",
+  "alerts.triageFailed": "Could not save that: {{error}}. The alert stays.",
+  "alerts.moreNotShown": "{{count}} more in Preemption"
 }

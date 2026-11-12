@@ -357,6 +357,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "get_domain_precision_report",
     "get_false_positive_analysis",
     "triage_alert",
+    "untriage_alert",
     "get_triage_states",
     "get_learned_preferences",
     "pin_preference",

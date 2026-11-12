@@ -1998,7 +1998,8 @@ impl PreemptionAlert {
 ///
 /// LIST transport (AD-035, 2026-08-31 live audit): the response is mapped
 /// through `evidence::present_preemption_list` — ONE visibility filter
-/// (`dismissed_ids` from the view's persisted local dismissals, plan-covered
+/// (the live dismissals in the triage store shared with the critical banner,
+/// `alert_triage::live_evidence_dismissals`; plan-covered
 /// per-package alerts regrouped away) so the returned counts equal what the
 /// header renders, then a per-item trim (embedded citations capped with
 /// `evidence_total` recording the real count, unrendered text dropped) plus
@@ -2007,11 +2008,19 @@ impl PreemptionAlert {
 /// `get_preemption_item_detail` serves them when a card expands.
 #[tauri::command]
 pub async fn get_preemption_alerts(
-    dismissed_ids: Option<Vec<String>>,
     full_plan: Option<bool>,
 ) -> std::result::Result<EvidenceFeed, String> {
     let feed = feed_cache::current_tier_feed_off_thread().await?;
-    let dismissed = dismissed_ids.unwrap_or_default();
+    // An unreadable store shows every item: a dismissal that cannot be read
+    // must never hide a security finding.
+    let dismissed = crate::ipc_blocking::off_ui_thread_infallible("preemption dismissals", || {
+        crate::open_db_connection()
+            .ok()
+            .and_then(|conn| crate::alert_triage::live_evidence_dismissals(&conn).ok())
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
     let mut list =
         crate::evidence::present_preemption_list(feed, &dismissed, full_plan.unwrap_or(false));
     // An empty worklist means "no threats" only when there is a stack to
