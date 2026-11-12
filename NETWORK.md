@@ -53,13 +53,20 @@ All shared outbound requests use a pooled `reqwest` client
   TLS-inspection root installed on the machine is therefore accepted.
 - **Proxy:** the system proxy applies to every request: `HTTPS_PROXY` / `HTTP_PROXY` /
   `ALL_PROXY` with `NO_PROXY`, and on Windows the Internet Options proxy (reqwest's system-proxy
-  support). `network.proxy_url` in `settings.json` (an `http://` or `https://` proxy URL) is applied
-  to every outbound client on top of that (`http_client::proxy_for`); this machine and the private
-  address ranges (`localhost`, `127.0.0.1`, `::1`, `10/8`, `172.16/12`, `192.168/16`,
-  `169.254/16`) and the hosts in `NO_PROXY` bypass it. A `proxy_url` this build cannot use (for
-  example `socks5://`: SOCKS support is not compiled in) makes requests fail rather than go out
-  directly (`http_client::usable_proxy_url`). The setting is read at start-up; change it, then
-  restart 4DA.
+  support). `network.proxy_url` in `settings.json` is applied to every outbound client in its
+  place (`http_client::proxy_for`). These bypass it: this machine and private networks
+  (`localhost`, `*.local`, single-label host names, `127/8`, `10/8`, `172.16/12`, `192.168/16`,
+  `169.254/16`, `100.64/10`, `::1`, `fc00::/7`, `fe80::/10`) and the hosts in `NO_PROXY`; a bare
+  `NO_PROXY=*` does not switch off a proxy set in 4DA's settings (`http_client::bypasses_proxy`).
+  Only an `http://` or `https://` proxy URL is used. Anything else (a `socks5://` URL, since SOCKS
+  support is not compiled in, a typo such as `htpp://`, `ftp://`) makes requests fail rather than
+  go out directly (`http_client::usable_proxy_url`). If the settings cannot be read when a client
+  is built, that client refuses requests rather than going direct. The setting is read at
+  start-up; change it, then restart 4DA.
+- **Exception, app updates:** the update check (§2f) runs in the Tauri updater plugin, which builds
+  its own HTTP client, so `network.proxy_url` and the OS trust store do not apply to it
+  (`tauri-plugin-updater`).
+  It sends no dependency name, only a fixed request for the update manifest.
 
 ---
 
@@ -401,6 +408,8 @@ contacts `4da.ai` only near expiry, to renew (§2k); a lifetime key contacts not
 - **Trigger:** shortly after startup, once per session; silent on failure.
 - **Data sent:** plain `GET` — no version reporting, no device info. Updates are
   **minisign-verified** against the embedded public key before install; the user must click to apply.
+- **Proxy:** the updater plugin builds its own client, so `network.proxy_url` and the OS trust
+  store do not apply to it (see "HTTP client identity"). It sends no dependency name.
 
 ### 2g. Team relay (only if you create/join a team)
 
@@ -572,13 +581,14 @@ builds a registry URL without asking.
 
   | Ecosystem | Never sent |
   |---|---|
-  | Go | modules matching `GOPRIVATE`, `GONOPROXY` or `GONOSUMDB` (from the environment, else the `go env -w` file), with Go's own prefix-pattern rules; modules a `go.mod` `replace`s with a local directory; the module a scanned `go.mod` declares |
-  | npm | packages in a scope an `.npmrc` (the project's, its parent folders', `~/.npmrc`) routes to a non-public registry; every npm package of a project whose `.npmrc` sets a non-public `registry=`; every npm package when `~/.npmrc` or `npm_config_registry` does |
+  | Go | modules matching `GOPRIVATE`, `GONOPROXY` or `GONOSUMDB` (from the environment, else the `go env -w` file), with Go's own prefix-pattern rules; every module when `GOPROXY` does not include `proxy.golang.org` (a corporate proxy, `direct`, `off`); modules a `go.mod` `replace`s with a local directory; the module a scanned `go.mod` declares |
+  | npm | packages in a scope that an `.npmrc`, a Yarn 2+ `.yarnrc.yml` (`npmScopes`) or a Yarn 1 `.yarnrc` (`"@scope:registry"`) routes to a non-public registry (the project's files, its parent folders', and the ones in your home folder); every npm package of a project whose `.npmrc` `registry=`, `.yarnrc.yml` `npmRegistryServer` or `.yarnrc` `registry` is not the public one; every npm package when your home folder's files, `npm_config_registry`, `YARN_NPM_REGISTRY_SERVER` or `YARN_REGISTRY` do |
   | Cargo | crates whose `Cargo.lock` source is not crates.io (git, another registry, no source: workspace members and path crates); crates a `Cargo.toml` takes from `path`, `git` or `registry`; the project's own `[package]` |
-  | PyPI | packages a `uv.lock` / `poetry.lock` takes from anywhere but pypi.org; packages a requirements file takes from a URL (`name @ git+…`); the project's own name (`pyproject.toml`); every PyPI package of a project whose requirements (`-i`, `--index-url`, `--extra-index-url`, `--find-links`) or `pyproject.toml` (`[[tool.uv.index]]`, `[[tool.poetry.source]]`) name another index; every PyPI package when `PIP_INDEX_URL`, `PIP_EXTRA_INDEX_URL`, `UV_INDEX_URL`, `UV_DEFAULT_INDEX`, `UV_INDEX`, `UV_EXTRA_INDEX_URL` or your pip / uv configuration file does |
+  | PyPI | packages a `uv.lock` / `poetry.lock` takes from anywhere but pypi.org; packages a requirements file or a PEP 621 dependency list takes from a URL (`name @ git+…`); Poetry dependencies with `git`, `path`, `url` or `source`; `[tool.uv.sources]` entries with `git`, `path`, `url`, `index` or `workspace`; `Pipfile` packages with `git`, `path`, `file` or `index`; the project's own name (`pyproject.toml`); every PyPI package of a project whose requirements (`-i`, `--index-url`, `--extra-index-url`, `--find-links`), `pyproject.toml` (`[[tool.uv.index]]`, `[[tool.poetry.source]]`) or `Pipfile` (`[[source]]`) name another index; every PyPI package when `PIP_INDEX_URL`, `PIP_EXTRA_INDEX_URL`, `UV_INDEX_URL`, `UV_DEFAULT_INDEX`, `UV_INDEX`, `UV_EXTRA_INDEX_URL` or your pip / uv configuration file does |
 
-  Project files are read from each project folder in the dependency inventory; the set is
-  recomputed every 10 minutes. Preemption counts the dependencies withheld this way ("N private
+  Project files are read from each project folder in the dependency inventory. The set is
+  recomputed when the inventory changes (checked every 30 seconds) and at least every 10 minutes.
+  If the inventory cannot be read, every registry name is withheld until it can be. Preemption counts the dependencies withheld this way ("N private
   packages are never looked up"; `private_not_looked_up`), because their releases are not checked.
 
 ---

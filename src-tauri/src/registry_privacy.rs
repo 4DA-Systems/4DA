@@ -13,21 +13,28 @@
 //! 2. **Private names are never sent**, whatever the setting:
 //!    - Go modules matching `GOPRIVATE`, `GONOPROXY` or `GONOSUMDB` (the
 //!      environment, then the `go env -w` file), with Go's own pattern rules;
-//!      a module a `go.mod` replaces with a local directory; and any module
-//!      a scanned `go.mod` declares (the user's own code).
-//!    - npm packages in a scope an `.npmrc` (the project's and its parents',
-//!      and `~/.npmrc`) routes to a registry other than the public one; every
-//!      npm package of a project whose `.npmrc` sets a non-public default
-//!      `registry=`, and every npm package when `~/.npmrc` or
-//!      `npm_config_registry` does.
+//!      every module when `GOPROXY` leaves out `proxy.golang.org`; a module a
+//!      `go.mod` replaces with a local directory; and any module a scanned
+//!      `go.mod` declares (the user's own code).
+//!    - npm packages in a scope an `.npmrc`, `.yarnrc.yml` or `.yarnrc` (the
+//!      project's, its parents', the home folder's) routes to a non-public
+//!      registry; every npm package of a project whose files set a non-public
+//!      default registry, and every npm package when the home folder's files
+//!      or `npm_config_registry` / `YARN_NPM_REGISTRY_SERVER` do.
 //!    - Cargo crates whose `Cargo.lock` source is not crates.io (git, another
 //!      registry, a path or workspace member), crates a `Cargo.toml` takes from
 //!      `path`, `git` or another `registry`, and the project's own crate.
 //!    - PyPI packages a `uv.lock` / `poetry.lock` takes from anywhere but
-//!      pypi.org, packages a requirements file takes from a URL or path, the
-//!      project's own package, every PyPI package of a project whose
-//!      requirements or `pyproject.toml` name another index, and every PyPI
-//!      package when the user's pip / uv configuration or environment does.
+//!      pypi.org; packages a requirements file, a PEP 621 list, Poetry,
+//!      `[tool.uv.sources]` or a `Pipfile` takes from a URL, path or named
+//!      index; the project's own package; every PyPI package of a project
+//!      whose requirements, `pyproject.toml` or `Pipfile` name another index,
+//!      and every PyPI package when the user's pip / uv configuration or
+//!      environment does.
+//!
+//! The set follows the inventory (recomputed when a scan changes it) and is
+//! never computed from a failed read: an unreadable inventory withholds every
+//! name.
 //!
 //! A dependency that is not looked up is not checked: the readiness record
 //! carries both facts ([`LookupStatus`]) so no surface reads it as current.
@@ -136,13 +143,27 @@ pub(crate) struct LookupStatus {
 pub(crate) fn lookup_status() -> LookupStatus {
     LookupStatus {
         off: !registry_lookups_enabled(),
-        private_withheld: CACHE.lock().as_ref().map_or(0, |(_, n)| n.withheld),
+        private_withheld: CACHE.lock().as_ref().map_or(0, |e| e.names.withheld),
     }
 }
 
-/// The last computed private set and when it was computed.
-static CACHE: parking_lot::Mutex<Option<(Instant, Arc<PrivateNames>)>> =
-    parking_lot::Mutex::new(None);
+/// The last computed private set, the inventory it was computed from, and
+/// when (review of #1130: a set computed before a scan must not outlive it).
+struct CacheEntry {
+    /// When the inventory was last compared with `fingerprint`.
+    checked: Instant,
+    /// When the set was computed (user configuration is re-read after
+    /// [`REFRESH`] even when the inventory is unchanged).
+    computed: Instant,
+    fingerprint: u64,
+    names: Arc<PrivateNames>,
+}
+
+static CACHE: parking_lot::Mutex<Option<CacheEntry>> = parking_lot::Mutex::new(None);
+
+/// How long a computed set is used before the inventory is compared again.
+/// A scan that changes the inventory is picked up within this window.
+const RECHECK: Duration = Duration::from_secs(30);
 
 // ============================================================================
 // The private set
@@ -159,20 +180,36 @@ pub(crate) struct PrivateNames {
     npm_all: bool,
     /// The user's default Python index is not pypi.org.
     pypi_all: bool,
+    /// `GOPROXY` does not include the public proxy.
+    go_all: bool,
     /// Exact `(osv ecosystem, normalized name)` pairs.
     exact: HashSet<(&'static str, String)>,
     /// How many inventory dependencies the rules above withhold.
     pub(crate) withheld: u32,
+    /// The inventory could not be read, so the project rules are unknown:
+    /// every registry name is withheld until it can be (fail closed).
+    unknown: bool,
 }
 
 impl PrivateNames {
+    /// The set used when the inventory cannot be read: nothing is sent.
+    pub(crate) fn unknown() -> Self {
+        Self {
+            unknown: true,
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn is_private(&self, eco: Ecosystem, name: &str) -> bool {
+        if self.unknown {
+            return true;
+        }
         let name = name.trim();
         if self.exact.contains(&(eco.osv_name(), normalize(eco, name))) {
             return true;
         }
         match eco {
-            Ecosystem::Go => go_matches_any(&self.go_patterns, name),
+            Ecosystem::Go => self.go_all || go_matches_any(&self.go_patterns, name),
             Ecosystem::Npm => {
                 self.npm_all || scope_of(name).is_some_and(|scope| self.npm_scopes.contains(&scope))
             }
@@ -221,16 +258,61 @@ fn scope_of(name: &str) -> Option<String> {
         .then(|| name.split('/').next().unwrap_or(name).to_ascii_lowercase())
 }
 
-/// The cached private set, recomputed every [`REFRESH`].
+/// The private set for the current inventory. Recomputed when the inventory
+/// changes (compared every [`RECHECK`]) and every [`REFRESH`]. A failed
+/// inventory read is never cached: it answers [`PrivateNames::unknown`],
+/// which withholds every name, and the next call reads again.
 fn private_names() -> Arc<PrivateNames> {
-    if let Some((at, names)) = CACHE.lock().as_ref() {
-        if at.elapsed() < REFRESH {
-            return names.clone();
+    if let Some(entry) = CACHE.lock().as_ref() {
+        if entry.checked.elapsed() < RECHECK {
+            return entry.names.clone();
         }
     }
-    let names = Arc::new(compute_private_names());
-    *CACHE.lock() = Some((Instant::now(), names.clone()));
+    let projects = match read_inventory_projects() {
+        Ok(projects) => projects,
+        Err(e) => {
+            tracing::warn!(
+                target: "4da::privacy",
+                error = %e,
+                "Dependency inventory unreadable: registry lookups withheld this time"
+            );
+            return Arc::new(PrivateNames::unknown());
+        }
+    };
+    let fingerprint = inventory_fingerprint(&projects);
+    let now = Instant::now();
+    if let Some(entry) = CACHE.lock().as_mut() {
+        if entry.fingerprint == fingerprint && entry.computed.elapsed() < REFRESH {
+            entry.checked = now;
+            return entry.names.clone();
+        }
+    }
+    let names = Arc::new(build(&read_user_config(), &projects));
+    *CACHE.lock() = Some(CacheEntry {
+        checked: now,
+        computed: now,
+        fingerprint,
+        names: names.clone(),
+    });
     names
+}
+
+/// Identifies an inventory: every (project, ecosystem, name), order-blind.
+pub(crate) fn inventory_fingerprint(projects: &[ProjectDeps]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut rows: Vec<(String, &str, &str)> = projects
+        .iter()
+        .flat_map(|p| {
+            let root = p.root.to_string_lossy().into_owned();
+            p.deps
+                .iter()
+                .map(move |(e, n)| (root.clone(), e.as_str(), n.as_str()))
+        })
+        .collect();
+    rows.sort_unstable();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    rows.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// One project in the inventory: its folder and the dependencies stored for
@@ -252,13 +334,18 @@ pub(crate) struct UserConfig {
     pub npmrc: Option<String>,
     /// The texts of the user's pip / uv configuration files.
     pub python_configs: Vec<String>,
+    /// The texts of `~/.yarnrc.yml` and `~/.yarnrc`.
+    pub yarnrcs: Vec<String>,
 }
 
 const ENV_KEYS: &[&str] = &[
     "GOPRIVATE",
     "GONOPROXY",
     "GONOSUMDB",
+    "GOPROXY",
     "npm_config_registry",
+    "YARN_NPM_REGISTRY_SERVER",
+    "YARN_REGISTRY",
     "NPM_CONFIG_REGISTRY",
     "PIP_INDEX_URL",
     "PIP_EXTRA_INDEX_URL",
@@ -267,12 +354,6 @@ const ENV_KEYS: &[&str] = &[
     "UV_INDEX",
     "UV_EXTRA_INDEX_URL",
 ];
-
-fn compute_private_names() -> PrivateNames {
-    let user = read_user_config();
-    let projects = read_inventory_projects();
-    build(&user, &projects)
-}
 
 /// Read the user-level configuration from this machine.
 fn read_user_config() -> UserConfig {
@@ -306,6 +387,11 @@ fn read_user_config() -> UserConfig {
     UserConfig {
         env,
         go_env_file: go_env_path.and_then(|p| std::fs::read_to_string(p).ok()),
+        yarnrcs: home
+            .iter()
+            .flat_map(|h| [h.join(".yarnrc.yml"), h.join(".yarnrc")])
+            .filter_map(|p| std::fs::read_to_string(p).ok())
+            .collect(),
         npmrc: home.and_then(|h| std::fs::read_to_string(h.join(".npmrc")).ok()),
         python_configs: python_paths
             .iter()
@@ -316,39 +402,36 @@ fn read_user_config() -> UserConfig {
 
 /// Every project folder in the inventory with its stored dependencies, read
 /// on a connection of its own (this runs inside source fetches).
-fn read_inventory_projects() -> Vec<ProjectDeps> {
-    let Ok(conn) = crate::open_db_connection() else {
-        return Vec::new();
-    };
+fn read_inventory_projects() -> Result<Vec<ProjectDeps>, String> {
+    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
     let mut by_root: HashMap<String, Vec<(String, String)>> = HashMap::new();
     for sql in [
         "SELECT project_path, ecosystem, package_name FROM user_dependencies",
         "SELECT project_path, language, package_name FROM project_dependencies",
         "SELECT project_path, ecosystem, package_name FROM dependency_instances",
     ] {
-        let Ok(mut stmt) = conn.prepare(sql) else {
-            continue;
-        };
-        let Ok(rows) = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        }) else {
-            continue;
-        };
-        for (root, eco, name) in rows.flatten() {
+        let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (root, eco, name) = row.map_err(|e| e.to_string())?;
             by_root.entry(root).or_default().push((eco, name));
         }
     }
-    by_root
+    Ok(by_root
         .into_iter()
         .map(|(root, deps)| ProjectDeps {
             root: PathBuf::from(root),
             deps,
         })
-        .collect()
+        .collect())
 }
 
 /// The private set for this configuration and these projects (reads each
@@ -373,6 +456,11 @@ pub(crate) fn build(user: &UserConfig, projects: &[ProjectDeps]) -> PrivateNames
                 .map(str::to_string),
         );
     }
+    // A GOPROXY without the public proxy (a corporate proxy, `direct`,
+    // `off`): every module path stays off proxy.golang.org.
+    if let Some(goproxy) = user.env.get("GOPROXY").or_else(|| go_file.get("GOPROXY")) {
+        out.go_all |= goproxy_is_private(goproxy);
+    }
 
     // npm, user level.
     if let Some(npmrc) = &user.npmrc {
@@ -380,7 +468,17 @@ pub(crate) fn build(user: &UserConfig, projects: &[ProjectDeps]) -> PrivateNames
             .extend(crate::ace::npm_local::private_registry_scopes(npmrc));
         out.npm_all |= npmrc_default_registry_is_private(npmrc);
     }
-    for key in ["npm_config_registry", "NPM_CONFIG_REGISTRY"] {
+    for yarnrc in &user.yarnrcs {
+        let (default_private, scopes) = yarnrc_private(yarnrc);
+        out.npm_all |= default_private;
+        out.npm_scopes.extend(scopes);
+    }
+    for key in [
+        "npm_config_registry",
+        "NPM_CONFIG_REGISTRY",
+        "YARN_NPM_REGISTRY_SERVER",
+        "YARN_REGISTRY",
+    ] {
         if let Some(url) = user.env.get(key) {
             out.npm_all |= !url.trim().is_empty() && !url_on(url, NPM_PUBLIC_HOSTS);
         }
@@ -449,6 +547,13 @@ fn add_project(out: &mut PrivateNames, project: &ProjectDeps) {
                 .extend(crate::ace::npm_local::private_registry_scopes(&npmrc));
             npm_project_private |= npmrc_default_registry_is_private(&npmrc);
         }
+        for yarnrc in [".yarnrc.yml", ".yarnrc"] {
+            if let Ok(text) = std::fs::read_to_string(dir.join(yarnrc)) {
+                let (default_private, scopes) = yarnrc_private(&text);
+                npm_project_private |= default_private;
+                out.npm_scopes.extend(scopes);
+            }
+        }
     }
     if npm_project_private {
         for name in project_names(Ecosystem::Npm) {
@@ -484,6 +589,13 @@ fn add_project(out: &mut PrivateNames, project: &ProjectDeps) {
             for name in facts.names {
                 out.add(Ecosystem::PyPI, &name);
             }
+        }
+    }
+    if let Ok(pipfile) = std::fs::read_to_string(root.join("Pipfile")) {
+        let facts = pipfile_private(&pipfile);
+        pypi_project_private |= facts.other_index;
+        for name in facts.names {
+            out.add(Ecosystem::PyPI, &name);
         }
     }
     if let Ok(pyproject) = std::fs::read_to_string(root.join("pyproject.toml")) {

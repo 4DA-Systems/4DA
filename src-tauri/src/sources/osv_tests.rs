@@ -241,3 +241,38 @@ fn mirror_lane_surfaces_one_go_item_named_for_the_pinned_module() {
         items[0].content
     );
 }
+
+/// Review of #1130: mirror items kept no publish date (an old advisory read
+/// as new) and dropped a GHSA grade that has no CVSS vector.
+#[test]
+fn a_mirror_item_keeps_its_date_and_a_grade_without_a_score() {
+    let m = crate::osv::types::MatchedAdvisory {
+        advisory_id: "GHSA-aaaa-bbbb-cccc".to_string(),
+        summary: "Prototype pollution".to_string(),
+        details: None,
+        package_name: "lodash".to_string(),
+        ecosystem: "npm".to_string(),
+        installed_version: Some("4.17.20".to_string()),
+        fixed_version: Some("4.17.21".to_string()),
+        severity_type: None,
+        cvss_score: None,
+        source_url: None,
+        is_version_confirmed: true,
+        project_paths: vec!["/stack".to_string()],
+        published_at: Some("2021-02-15T00:00:00Z".to_string()),
+        dependency_instances: vec![],
+        aliases: vec![],
+        severity_label: Some("high".to_string()),
+        cwe_ids: Vec::new(),
+        severity_from: None,
+        informational: None,
+    };
+    let item = matched_advisory_to_source_item(&m);
+    assert!(item.content.contains("Severity: HIGH"), "{}", item.content);
+    let meta = item.metadata.clone().expect("metadata");
+    assert_eq!(meta["published"], "2021-02-15T00:00:00Z");
+    assert_eq!(
+        crate::source_fetching::extract_published_at(&item).as_deref(),
+        Some("2021-02-15 00:00:00")
+    );
+}

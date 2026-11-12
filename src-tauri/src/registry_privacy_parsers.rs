@@ -2,7 +2,7 @@
 //! The configuration-file readers behind `registry_privacy` (pure: text in,
 //! names out), and Go's private-pattern matching.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::{NPM_PUBLIC_HOSTS, PYPI_PUBLIC_HOSTS};
@@ -323,16 +323,27 @@ pub(super) fn requirement_name(spec: &str) -> String {
         .to_string()
 }
 
-/// `pyproject.toml`: the project's own name (`[project]`, `[tool.poetry]`),
-/// and whether it names another index (`[[tool.uv.index]]`, `[tool.uv]
-/// index-url`, `[[tool.poetry.source]]`, `[[tool.pdm.source]]`).
+/// `pyproject.toml`:
+/// - the project's own name (`[project]`, `[tool.poetry]`);
+/// - whether it names another index (`[[tool.uv.index]]`, `[tool.uv]
+///   index-url`, `[[tool.poetry.source]]`, `[[tool.pdm.source]]`);
+/// - dependencies that come from somewhere other than an index: PEP 621
+///   `"x @ git+..."` / `"x @ file:..."`, Poetry `x = { git | path | url |
+///   source = ... }` and uv `[tool.uv.sources] x = { git | path | url |
+///   index | workspace = ... }`. These work without a lockfile.
 pub(crate) fn pyproject_private(text: &str) -> PythonFacts {
     let mut out = PythonFacts::default();
     let mut section = String::new();
     for line in text.lines() {
-        let trimmed = line.split('#').next().unwrap_or("").trim();
-        if trimmed.starts_with('[') {
-            section = trimmed.trim_matches(|c| c == '[' || c == ']').to_string();
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && !trimmed.starts_with("[\"") && !trimmed.starts_with("['") {
+            section = trimmed
+                .split('#')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches(|c| c == '[' || c == ']')
+                .to_string();
             if matches!(
                 section.as_str(),
                 "tool.uv.index" | "tool.poetry.source" | "tool.pdm.source"
@@ -341,19 +352,166 @@ pub(crate) fn pyproject_private(text: &str) -> PythonFacts {
             }
             continue;
         }
+        if section == "project" || section.starts_with("project.optional-dependencies") {
+            out.names.extend(direct_reference_names(trimmed));
+        }
         let Some((key, value)) = trimmed.split_once('=') else {
             continue;
         };
-        let key = key.trim();
-        let value = value.trim().trim_matches('"').trim_matches('\'');
+        let key = key.trim().trim_matches('"');
+        let value = value.trim();
         if (section == "project" || section == "tool.poetry") && key == "name" {
-            out.names.push(value.to_string());
+            out.names
+                .push(value.trim_matches('"').trim_matches('\'').to_string());
         }
         if section == "tool.uv" && matches!(key, "index-url" | "extra-index-url") {
-            out.other_index |= names_private_index(value);
+            out.other_index |= names_private_index(value.trim_matches('"').trim_matches('\''));
+        }
+        let poetry_deps = section == "tool.poetry.dependencies"
+            || section == "tool.poetry.dev-dependencies"
+            || (section.starts_with("tool.poetry.group.") && section.ends_with(".dependencies"));
+        if poetry_deps
+            && value.starts_with('{')
+            && ["git", "path", "url", "source"]
+                .iter()
+                .any(|k| inline_has_key(value, k))
+        {
+            out.names.push(key.to_string());
+        }
+        if section == "tool.uv.sources"
+            && value.starts_with('{')
+            && ["git", "path", "url", "index", "workspace"]
+                .iter()
+                .any(|k| inline_has_key(value, k))
+        {
+            out.names.push(key.to_string());
         }
     }
     out
+}
+
+/// The names of the PEP 508 direct references (`"name @ url"`) quoted on
+/// one line of a dependency array.
+pub(super) fn direct_reference_names(line: &str) -> Vec<String> {
+    line.split('"')
+        .skip(1)
+        .step_by(2)
+        .chain(line.split('\'').skip(1).step_by(2))
+        .filter_map(|spec| {
+            spec.split_once(" @ ")
+                .map(|(name, _)| requirement_name(name))
+        })
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+/// `Pipfile`: a `[[source]]` other than pypi.org, and packages taken from a
+/// VCS, a path, a file or a named non-default index.
+pub(crate) fn pipfile_private(text: &str) -> PythonFacts {
+    let mut out = PythonFacts::default();
+    let mut section = String::new();
+    for line in text.lines() {
+        let trimmed = line.split(" #").next().unwrap_or("").trim();
+        if trimmed.starts_with('[') {
+            section = trimmed.trim_matches(|c| c == '[' || c == ']').to_string();
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().trim_matches('"');
+        let value = value.trim();
+        if section == "source" && key == "url" {
+            out.other_index |= !url_on(value.trim_matches('"'), PYPI_PUBLIC_HOSTS);
+        }
+        if (section == "packages" || section == "dev-packages")
+            && value.starts_with('{')
+            && ["git", "path", "file", "hg", "svn", "bzr", "index"]
+                .iter()
+                .any(|k| inline_has_key(value, k))
+        {
+            out.names.push(key.to_string());
+        }
+    }
+    out
+}
+
+fn unquote(v: &str) -> String {
+    v.trim().trim_matches('"').trim_matches('\'').to_string()
+}
+
+/// What a Yarn configuration file (`.yarnrc.yml` for Yarn 2+, `.yarnrc` for
+/// Yarn 1) says: whether its default registry is not the public one, and the
+/// scopes it routes to a non-public registry.
+pub(crate) fn yarnrc_private(text: &str) -> (bool, HashSet<String>) {
+    let mut default_private = false;
+    let mut scopes = HashSet::new();
+    let mut in_scopes = false;
+    let mut current_scope: Option<String> = None;
+    for raw in text.lines() {
+        let line = raw.split(" #").next().unwrap_or("");
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let indent = line.len() - line.trim_start().len();
+        // Yarn 2+: `key: value` YAML.
+        let yaml = trimmed
+            .split_once(':')
+            .filter(|(k, _)| !trimmed.starts_with('"') && !k.trim().contains(char::is_whitespace));
+        if let Some((key, value)) = yaml {
+            let key = key.trim().trim_matches('"').trim_matches('\'');
+            if indent == 0 {
+                in_scopes = key == "npmScopes";
+                current_scope = None;
+                if key == "npmRegistryServer" {
+                    let url = unquote(value);
+                    default_private |= !url.is_empty() && !url_on(&url, NPM_PUBLIC_HOSTS);
+                }
+                continue;
+            }
+            if in_scopes && value.trim().is_empty() && !key.starts_with("npm") {
+                current_scope = Some(format!(
+                    "@{}",
+                    key.trim_start_matches('@').to_ascii_lowercase()
+                ));
+                continue;
+            }
+            if in_scopes && key == "npmRegistryServer" {
+                if let Some(scope) = &current_scope {
+                    let url = unquote(value);
+                    if !url.is_empty() && !url_on(&url, NPM_PUBLIC_HOSTS) {
+                        scopes.insert(scope.clone());
+                    }
+                }
+            }
+            continue;
+        }
+        // Yarn 1: `key "value"` or `"@scope:registry" "value"`.
+        let mut parts = trimmed.splitn(2, char::is_whitespace);
+        let key = parts.next().unwrap_or("").trim_matches('"');
+        let value = unquote(parts.next().unwrap_or(""));
+        if key == "registry" {
+            default_private |= !value.is_empty() && !url_on(&value, NPM_PUBLIC_HOSTS);
+        } else if let Some(scope) = key.strip_suffix(":registry") {
+            if scope.starts_with('@') && !value.is_empty() && !url_on(&value, NPM_PUBLIC_HOSTS) {
+                scopes.insert(scope.to_ascii_lowercase());
+            }
+        }
+    }
+    (default_private, scopes)
+}
+
+/// A `GOPROXY` value that does not include the public proxy (a corporate
+/// proxy, `direct`, `off`): the user keeps module paths away from
+/// `proxy.golang.org`, so 4DA sends none.
+pub(crate) fn goproxy_is_private(value: &str) -> bool {
+    let entries: Vec<&str> = value
+        .split([',', '|'])
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .collect();
+    !entries.is_empty() && !entries.iter().any(|e| url_on(e, &["proxy.golang.org"]))
 }
 
 /// `uv.lock` / `poetry.lock` packages taken from anywhere but pypi.org.

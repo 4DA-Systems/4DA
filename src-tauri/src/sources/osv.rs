@@ -119,11 +119,15 @@ fn matched_advisory_to_source_item(m: &crate::osv::types::MatchedAdvisory) -> So
     }
     // The line the scoring pipeline reads a CVSS score from
     // (`scoring::pipeline_v2::extract_cvss_from_content`, "Severity: TYPE: score").
+    // With no CVSS score, the advisory's graded label (a GHSA "HIGH"), which
+    // that function reads as severity without a score.
     if let Some(score) = m.cvss_score {
         content_parts.push(format!(
             "Severity: {}: {score:.1}",
             m.severity_type.as_deref().unwrap_or("CVSS")
         ));
+    } else if let Some(label) = m.severity_label.as_deref().filter(|l| !l.trim().is_empty()) {
+        content_parts.push(format!("Severity: {}", label.trim().to_ascii_uppercase()));
     }
     if let Some(installed) = &m.installed_version {
         content_parts.push(format!("Installed: {installed}"));
@@ -141,6 +145,10 @@ fn matched_advisory_to_source_item(m: &crate::osv::types::MatchedAdvisory) -> So
         "fixed_version": m.fixed_version,
         "cvss_score": m.cvss_score,
         "severity": m.severity_type,
+        "severity_label": m.severity_label,
+        // The advisory's own date, so an old advisory never reads as new
+        // (review of #1130; `source_fetching::extract_published_at`).
+        "published": m.published_at,
         "is_version_confirmed": m.is_version_confirmed,
         "manifest_grounded": true,
         "source_name": "osv",

@@ -118,6 +118,22 @@ fn extract_cvss_from_content(content: &str) -> (Option<f32>, Option<String>) {
             }
         }
     }
+    // No numeric score anywhere: a graded label (`Severity: HIGH`, the grade
+    // GitHub-reviewed advisories carry when OSV has no CVSS vector) is still
+    // severity evidence, with no score.
+    for line in content.lines() {
+        let Some(rest) = line.trim().strip_prefix("Severity:") else {
+            continue;
+        };
+        let severity = match rest.trim().to_ascii_lowercase().as_str() {
+            "critical" => "critical",
+            "high" => "high",
+            "moderate" | "medium" => "medium",
+            "low" => "low",
+            _ => continue,
+        };
+        return (None, Some(severity.to_string()));
+    }
     (None, None)
 }
 
@@ -5165,10 +5181,13 @@ mod tests {
         assert_eq!(score3, Some(5.0));
         assert_eq!(sev3.as_deref(), Some("medium"));
 
-        // A non-numeric severity line still yields no score (behavior unchanged).
+        // A graded label with no numeric score anywhere yields its grade and
+        // no score (review of #1130: GHSA-graded advisories without a CVSS
+        // vector were read as ungraded); an unknown word yields nothing.
         let (score4, sev4) = extract_cvss_from_content("Severity: HIGH");
         assert_eq!(score4, None);
-        assert_eq!(sev4, None);
+        assert_eq!(sev4.as_deref(), Some("high"));
+        assert_eq!(extract_cvss_from_content("Severity: Unknown"), (None, None));
 
         // VECTOR-format score (the OSV default per the schema): compute the base score, don't drop it.
         // A 9.8 critical encoded as a vector must NOT read as NONE (the pre-fix behavior for the

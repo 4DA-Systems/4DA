@@ -153,22 +153,32 @@ pub(crate) fn publish_proxy(url: Option<&str>) {
 }
 
 /// The configured proxy URL, if any. Before settings have been published,
-/// reads them once without initializing them (never blocks on the lock).
+/// reads them without initializing them. If they are being written at that
+/// moment, it waits for them; if it still cannot read them, requests are
+/// refused ([`REFUSE_PROXY`]) rather than sent without a proxy that may be
+/// configured.
 pub(crate) fn configured_proxy() -> Option<String> {
     if PROXY_PUBLISHED.load(std::sync::atomic::Ordering::SeqCst) {
         return CONFIGURED_PROXY.read().clone();
     }
-    crate::state::try_get_settings_manager()
-        .and_then(|m| m.try_lock())
-        .and_then(|guard| guard.get().network.proxy_url.clone())
-        .map(|u| u.trim().to_string())
-        .filter(|u| !u.is_empty())
+    let manager = crate::state::try_get_settings_manager()?;
+    match manager.try_lock_for(Duration::from_secs(5)) {
+        Some(guard) => guard
+            .get()
+            .network
+            .proxy_url
+            .clone()
+            .map(|u| u.trim().to_string())
+            .filter(|u| !u.is_empty()),
+        None => {
+            tracing::error!(
+                target: "4da::http",
+                "settings could not be read to find network.proxy_url; this client refuses requests"
+            );
+            Some(REFUSE_PROXY.to_string())
+        }
+    }
 }
-
-/// Destinations that never go through the configured proxy: this machine
-/// and the private network ranges (a LAN Ollama, a local llama-server).
-const LOCAL_NO_PROXY: &str =
-    "localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16";
 
 /// Where requests go when `network.proxy_url` cannot be used: a closed
 /// loopback port, so they fail instead of silently leaving without the
@@ -177,32 +187,128 @@ const LOCAL_NO_PROXY: &str =
 const REFUSE_PROXY: &str = "http://127.0.0.1:1";
 
 /// `url` when this build can use it as a proxy, else [`REFUSE_PROXY`].
+/// Only `http://` and `https://` proxies with a host qualify: hyper-util
+/// silently ignores any other scheme (`socks://`, a typo such as `htpp://`,
+/// `ftp://`), and because a configured proxy also turns the system proxy
+/// off, such a URL used to send every request out directly. SOCKS support
+/// is not compiled in.
 pub(crate) fn usable_proxy_url(url: &str) -> &str {
-    match reqwest::Proxy::all(url) {
-        Ok(_) => url,
-        Err(e) => {
-            tracing::error!(
-                target: "4da::http",
-                error = %e,
-                "network.proxy_url is not a proxy this build can use; outbound requests are refused until it is fixed"
-            );
-            REFUSE_PROXY
-        }
+    let usable = url::Url::parse(url).is_ok_and(|u| {
+        matches!(u.scheme(), "http" | "https") && u.host_str().is_some_and(|h| !h.is_empty())
+    }) && reqwest::Proxy::all(url).is_ok();
+    if usable {
+        url
+    } else {
+        tracing::error!(
+            target: "4da::http",
+            "network.proxy_url is not an http:// or https:// proxy; outbound requests are refused until it is fixed"
+        );
+        REFUSE_PROXY
     }
 }
 
-/// The proxy for `url`, bypassed for [`LOCAL_NO_PROXY`] and the hosts in
-/// `NO_PROXY` / `no_proxy`. An unusable URL refuses ([`usable_proxy_url`]).
+/// Destinations that never go through the configured proxy: this machine
+/// and the private networks (a LAN Ollama, a local llama-server, a NAS):
+/// loopback, RFC 1918, link-local, CGNAT (Tailscale), unique-local IPv6,
+/// `localhost`, `*.local` and single-label host names.
+const LOCAL_NETS: &[&str] = &[
+    "127.0.0.0/8",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "169.254.0.0/16",
+    "100.64.0.0/10",
+    "::1/128",
+    "fc00::/7",
+    "fe80::/10",
+];
+
+/// Whether `ip` is inside the CIDR block `net` (`a.b.c.d/n` or `x::/n`).
+fn in_cidr(ip: std::net::IpAddr, net: &str) -> bool {
+    let Some((base, bits)) = net.split_once('/') else {
+        return base_matches(ip, net);
+    };
+    let (Ok(base), Ok(bits)) = (base.parse::<std::net::IpAddr>(), bits.parse::<u32>()) else {
+        return false;
+    };
+    match (ip, base) {
+        (std::net::IpAddr::V4(a), std::net::IpAddr::V4(b)) if bits <= 32 => {
+            let mask = if bits == 0 {
+                0
+            } else {
+                u32::MAX << (32 - bits)
+            };
+            u32::from(a) & mask == u32::from(b) & mask
+        }
+        (std::net::IpAddr::V6(a), std::net::IpAddr::V6(b)) if bits <= 128 => {
+            let mask = if bits == 0 {
+                0
+            } else {
+                u128::MAX << (128 - bits)
+            };
+            u128::from(a) & mask == u128::from(b) & mask
+        }
+        _ => false,
+    }
+}
+
+fn base_matches(ip: std::net::IpAddr, entry: &str) -> bool {
+    entry.parse::<std::net::IpAddr>().is_ok_and(|e| e == ip)
+}
+
+/// Whether a request to `host` bypasses the configured proxy: a local
+/// destination, or a `NO_PROXY` entry (host, `.domain`, IP or CIDR). A bare
+/// `*` in `NO_PROXY` is ignored: it would switch off the proxy the user set
+/// in 4DA's own settings.
+pub(crate) fn bypasses_proxy(host: &str, env_no_proxy: &str) -> bool {
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if host.is_empty() {
+        return false;
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return LOCAL_NETS.iter().any(|n| in_cidr(ip, n))
+            || env_no_proxy
+                .split(',')
+                .map(str::trim)
+                .filter(|e| !e.is_empty() && *e != "*")
+                .any(|e| in_cidr(ip, e));
+    }
+    let last_label = host.rsplit('.').next().unwrap_or("");
+    if last_label == "localhost" || (last_label == "local" && host.contains('.')) {
+        return true;
+    }
+    if !host.contains('.') {
+        return true;
+    }
+    env_no_proxy
+        .split(',')
+        .map(|e| e.trim().trim_start_matches("*.").trim_start_matches('.'))
+        .map(str::to_ascii_lowercase)
+        .filter(|e| {
+            !e.is_empty() && e != "*" && e.parse::<std::net::IpAddr>().is_err() && !e.contains('/')
+        })
+        .any(|e| host == e || host.ends_with(&format!(".{e}")))
+}
+
+/// The proxy for `url`, bypassed per [`bypasses_proxy`]. An unusable URL
+/// refuses ([`usable_proxy_url`]).
 pub(crate) fn proxy_for(url: &str) -> reqwest::Proxy {
     let env_no_proxy = std::env::var("NO_PROXY")
         .or_else(|_| std::env::var("no_proxy"))
         .unwrap_or_default();
-    let no_proxy = reqwest::NoProxy::from_string(&format!("{LOCAL_NO_PROXY},{env_no_proxy}"));
-    match reqwest::Proxy::all(usable_proxy_url(url)) {
-        Ok(proxy) => proxy.no_proxy(no_proxy),
-        // REFUSE_PROXY is a constant that parses; never fall back to direct.
-        Err(_) => reqwest::Proxy::custom(|_| Some(REFUSE_PROXY)),
-    }
+    let target = usable_proxy_url(url).to_string();
+    reqwest::Proxy::custom(move |dest| {
+        let host = dest.host_str().unwrap_or("");
+        if bypasses_proxy(host, &env_no_proxy) {
+            None
+        } else {
+            Some(target.clone())
+        }
+    })
 }
 
 /// The builder every outbound async client starts from: certificates from
@@ -574,33 +680,123 @@ mod outbound_tests {
     }
 
     /// A proxy URL this build cannot use refuses requests instead of
-    /// letting them leave without the proxy the user asked for.
+    /// letting them leave without the proxy the user asked for. Review of
+    /// #1130: hyper-util drops any scheme but http/https/socks and a set proxy
+    /// turns the system proxy off, so `socks://`, `htpp://` or `ftp://`
+    /// passed the old parse-only check and sent everything direct.
     #[test]
     fn an_unusable_proxy_url_refuses_rather_than_going_direct() {
-        assert_eq!(
-            usable_proxy_url("http://proxy.corp.example:8080"),
-            "http://proxy.corp.example:8080"
-        );
-        assert_eq!(usable_proxy_url("::not a proxy url"), REFUSE_PROXY);
+        for good in [
+            "http://proxy.corp.example:8080",
+            "https://user:pw@proxy.corp.example",
+        ] {
+            assert_eq!(usable_proxy_url(good), good);
+        }
+        for bad in [
+            "::not a proxy url",
+            "socks://127.0.0.1:1080",
+            "socks5://127.0.0.1:9050",
+            "htpp://proxy.corp:8080",
+            "ftp://proxy.corp:21",
+            "http://",
+        ] {
+            assert_eq!(usable_proxy_url(bad), REFUSE_PROXY, "{bad}");
+        }
         assert!(builder_with(Some("::not a proxy url")).build().is_ok());
+    }
+
+    /// Local destinations bypass the configured proxy; `NO_PROXY=*` does not
+    /// switch off a proxy set in 4DA's own settings.
+    #[test]
+    fn local_destinations_and_no_proxy_entries_bypass_the_proxy() {
+        for local in [
+            "localhost",
+            "127.0.0.1",
+            "[::1]",
+            "192.168.1.20",
+            "10.1.2.3",
+            "100.101.102.103",
+            "fd12:3456::1",
+            "ollama-box",
+            "nas.local",
+        ] {
+            assert!(bypasses_proxy(local, ""), "{local}");
+        }
+        for remote in ["registry.npmjs.org", "8.8.8.8", "2606:4700::1111"] {
+            assert!(!bypasses_proxy(remote, ""), "{remote}");
+            assert!(
+                !bypasses_proxy(remote, "*"),
+                "NO_PROXY=* must not bypass {remote}"
+            );
+        }
+        assert!(bypasses_proxy("git.corp.example", ".corp.example"));
+        assert!(bypasses_proxy("corp.example", "corp.example"));
+        assert!(bypasses_proxy("203.0.113.9", "203.0.113.0/24"));
+        assert!(!bypasses_proxy("notcorp.example", "corp.example"));
+    }
+
+    /// Blank every `#[cfg(test)]` item (a `mod tests { ... }`, a test-only fn
+    /// or `use`), keeping line numbers.
+    fn strip_test_items(text: &str) -> String {
+        let mut out: Vec<char> = text.chars().collect();
+        let marker: Vec<char> = "#[cfg(test)]".chars().collect();
+        let mut i = 0;
+        while i + marker.len() <= out.len() {
+            if out[i..i + marker.len()] != marker[..] {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            let mut j = i + marker.len();
+            while j < out.len() && out[j] != '{' && out[j] != ';' {
+                j += 1;
+            }
+            let mut end = j;
+            if j < out.len() && out[j] == '{' {
+                let mut depth = 0i32;
+                while end < out.len() {
+                    match out[end] {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    end += 1;
+                }
+            }
+            for c in out.iter_mut().take(end + 1).skip(start) {
+                if *c != '\n' {
+                    *c = ' ';
+                }
+            }
+            i = end + 1;
+        }
+        out.into_iter().collect()
+    }
+
+    #[test]
+    fn the_guard_sees_production_code_after_a_test_item() {
+        let text = "#[cfg(test)]\nfn helper() { let _ = reqwest::Client::new(); }\nfn real() { let c = Client::builder(); }\n";
+        let stripped = strip_test_items(text);
+        assert!(!stripped.contains("reqwest::Client::new()"));
+        assert!(stripped.contains("Client::builder()"));
     }
 
     /// P5: every client used to be built with `reqwest::Client::builder()`
     /// at its call site (bundled roots only, no configured proxy). Production
     /// code now builds them from `outbound_builder` / `outbound_blocking_builder`
-    /// only; a new raw builder fails here.
+    /// only; a new raw builder (also through an import alias:
+    /// `Client::builder()`, `ClientBuilder::new()`) fails here. Every
+    /// production line of every file is read; only `#[cfg(test)]` items are
+    /// skipped.
     #[test]
     fn every_production_client_starts_from_outbound_builder() {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let raw = [
-            "reqwest::Client::builder()",
-            "reqwest::Client::new()",
-            "reqwest::blocking::Client::builder()",
-            "reqwest::blocking::Client::new()",
-        ];
-        let test_mod =
-            regex::Regex::new(r"#\[cfg\(test\)\]\s*\n\s*(pub(\(crate\)|\(super\))? )?mod ")
-                .expect("regex");
+        let raw = ["Client::builder()", "Client::new()", "ClientBuilder::new()"];
         let mut offenders = Vec::new();
         let mut stack = vec![src.clone()];
         while let Some(dir) = stack.pop() {
@@ -619,10 +815,7 @@ mod outbound_tests {
                     continue;
                 }
                 let text = std::fs::read_to_string(&path).expect("read");
-                let code = match test_mod.find(&text) {
-                    Some(m) => &text[..m.start()],
-                    None => text.as_str(),
-                };
+                let code = strip_test_items(&text);
                 for (i, line) in code.lines().enumerate() {
                     let trimmed = line.trim_start();
                     if trimmed.starts_with("//") {

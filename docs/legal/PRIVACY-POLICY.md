@@ -6,7 +6,7 @@
 
 ## The Short Version
 
-4DA is a desktop application that runs on your computer. Your data stays on your computer unless you choose to use a cloud AI provider with your own key — and even then it goes directly to that provider, never to us. We do not collect it, transmit it to our servers, or sell it. To check your dependencies, the App sends the names and versions of your packages (never your code) to the public vulnerability and package services described in Section 2.6. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
+4DA is a desktop application that runs on your computer. Your data stays on your computer unless you choose to use a cloud AI provider with your own key — and even then it goes directly to that provider, never to us. We do not collect it, transmit it to our servers, or sell it. To check your dependencies, the App downloads public vulnerability archives and compares them on your machine, and sends the names of your packages (never your code, never their versions, never private package names) to the public package registries described in Section 2.6; you can turn that off. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
 
 ---
 
@@ -39,7 +39,7 @@ No cloud account is required. No sign-up. No registration. You download the App 
 The App processes the following data **entirely on your local machine**:
 
 - **Content from public APIs:** The App fetches publicly available content from sources including Hacker News, GitHub, arXiv, Reddit, and RSS feeds. These requests go directly from your machine to the public APIs. No personal data is included in these requests beyond your device's IP address, which is inherent to any network request.
-- **Your project files:** The Autonomous Context Engine (ACE) can scan local project directories you configure to understand your development context and improve content relevance. This data is processed locally; the file contents never leave your machine. The names and versions of the packages listed in your lockfiles are sent to public services to check them for known vulnerabilities and new releases (see Section 2.6).
+- **Your project files:** The Autonomous Context Engine (ACE) can scan local project directories you configure to understand your development context and improve content relevance. This data is processed locally; the file contents never leave your machine. Known vulnerabilities are checked on your machine against downloaded public archives; the names of the packages listed in your lockfiles are sent to the public package registries to check for new releases (see Section 2.6).
 - **Your preferences and settings:** Configuration data stored in a local JSON file on your device. This file contains non-sensitive preferences such as theme, source configuration, and display options. Sensitive credentials are stored separately in your operating system's keychain (see Section 2.4).
 - **Local database:** A SQLite database (with sqlite-vec for vector search) stored on your device containing aggregated content, embeddings, and relevance scores. This database is never synced to, uploaded to, or transmitted to any external service.
 - **Local telemetry:** Usage analytics are stored locally for your own reference. This telemetry data is never sent to 4DA Systems or any third party.
@@ -108,8 +108,8 @@ All of these requests go directly from your machine to the respective service. Y
 
 **Dependency checks.** When the App finds lockfiles in the projects you configure, it checks the packages they list:
 
-- **OSV.dev** (`api.osv.dev`, operated by Google): receives the package names, their ecosystems and, where the lockfile gives it, the installed version of each, to look up known vulnerabilities.
-- **Package registries** (npm, crates.io, PyPI and the Go module proxy): receive package names, to look up releases, deprecations and changelogs. Go module paths are sent in full, so a private module path (for example `github.com/yourco/internal-svc`) names that repository.
+- **OSV vulnerability archives** (`osv-vulnerabilities.storage.googleapis.com`, operated by Google): the App downloads the public per-ecosystem archive and compares it with your installed versions on your machine. Nothing about your packages is sent; Google sees only that the archive was downloaded (and your IP address).
+- **Package registries** (npm, crates.io, PyPI and the Go module proxy): receive package names, to look up releases, deprecations and changelogs. Names your configuration marks private (for example Go modules matching `GOPRIVATE`, npm scopes routed to a private registry, packages from a private index or a git or path source) are never sent, and **Settings → Privacy → Registry lookups** stops these requests entirely.
 - Your source code and file contents are never sent. The complete, source-referenced list of the App's connections is published in [NETWORK.md](../../NETWORK.md).
 
 ### 2.7 Digest Email (Optional)
@@ -226,7 +226,7 @@ To be unambiguous:
 | RSS/Atom feeds | App | Standard HTTP requests (your IP visible) | Content aggregation |
 | Keygen | App (Signal tier only) | License key | License validation |
 | 4DA licensing endpoint (4da.ai) | App (Signal subscriptions near key expiry; Recover License by Email, only when you use it) | License key; for recovery, the email address you enter | License renewal; re-sending a lost key |
-| OSV.dev (Google) | App (dependency checks) | Package names, ecosystems and installed versions from your lockfiles (your IP visible) | Known-vulnerability lookup |
+| OSV archive storage (Google) | App (dependency checks) | Nothing from your lockfiles: a download of the public archive (your IP visible) | Known-vulnerability data, matched on your device |
 | npm, crates.io, PyPI, Go module proxy | App (dependency checks) | Package names, including full Go module paths (your IP visible) | Releases, deprecations and changelogs |
 | Hugging Face | App (versions after 1.0.3; once, when a feature first needs the local search model) | A plain download request (your IP visible) | Downloading the local embedding model |
 | User's SMTP provider | App (optional, user-configured) | Digest email contents | Email delivery |
@@ -334,7 +334,7 @@ To make a CCPA request, contact privacy@4da.ai or write to us at the address in 
 
 ### 10.1 The App
 
-Your project data, scores and reading history stay on your device and are not transferred anywhere. The package names and versions used for dependency checks go to OSV.dev (operated by Google) and to the package registries (npm, crates.io, PyPI, the Go module proxy), whose servers are primarily in the United States. When you choose to use LLM provider APIs, data flows directly from your device to the provider's servers. The location of those servers depends on the provider you choose:
+Your project data, scores and reading history stay on your device and are not transferred anywhere. The package names used for release checks go to the package registries (npm, crates.io, PyPI, the Go module proxy), whose servers are primarily in the United States; vulnerability archives are downloaded from Google's storage, and nothing about your packages is sent for them. When you choose to use LLM provider APIs, data flows directly from your device to the provider's servers. The location of those servers depends on the provider you choose:
 
 - **Anthropic:** Servers primarily in the United States
 - **OpenAI:** Servers primarily in the United States

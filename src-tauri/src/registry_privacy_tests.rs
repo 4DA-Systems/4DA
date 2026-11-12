@@ -472,3 +472,126 @@ fn every_registry_lookup_asks_registry_privacy() {
         "registry call sites that do not ask registry_privacy: {unguarded:?}"
     );
 }
+
+// --- Review of #1130 ------------------------------------------------------
+
+/// An unreadable inventory used to cache an empty rule set for 10 minutes,
+/// so every name looked public. It now withholds every registry name.
+#[test]
+fn an_unreadable_inventory_withholds_every_name() {
+    let unknown = PrivateNames::unknown();
+    for (eco, name) in [
+        (Ecosystem::Npm, "react"),
+        (Ecosystem::Cargo, "serde"),
+        (Ecosystem::PyPI, "requests"),
+        (Ecosystem::Go, "golang.org/x/net"),
+    ] {
+        assert!(unknown.is_private(eco, name), "{name}");
+    }
+    assert!(!allowed(true, &unknown, "npm", "react"));
+}
+
+/// A scan that changes the inventory changes the fingerprint, so the rules
+/// are recomputed instead of serving a set computed before the scan.
+#[test]
+fn a_changed_inventory_changes_the_fingerprint() {
+    let a = vec![project(
+        Path::new("/p"),
+        &[("npm", "react"), ("npm", "vite")],
+    )];
+    let reordered = vec![project(
+        Path::new("/p"),
+        &[("npm", "vite"), ("npm", "react")],
+    )];
+    let added = vec![
+        project(Path::new("/p"), &[("npm", "react"), ("npm", "vite")]),
+        project(Path::new("/q"), &[("go", "github.com/corp/svc")]),
+    ];
+    assert_eq!(inventory_fingerprint(&a), inventory_fingerprint(&reordered));
+    assert_ne!(inventory_fingerprint(&a), inventory_fingerprint(&added));
+}
+
+#[test]
+fn yarn_berry_and_yarn_classic_registries_and_scopes() {
+    let berry = "nodeLinker: node-modules\nnpmRegistryServer: \"https://npm.corp.example\"\nnpmScopes:\n  corp:\n    npmRegistryServer: \"https://npm.pkg.github.com\"\n    npmAlwaysAuth: true\n  public:\n    npmRegistryServer: \"https://registry.npmjs.org\"\n";
+    let (all, scopes) = yarnrc_private(berry);
+    assert!(all);
+    assert!(scopes.contains("@corp"));
+    assert!(!scopes.contains("@public"));
+
+    let classic = "registry \"https://registry.yarnpkg.com\"\n\"@team:registry\" \"https://npm.team.example/\"\n";
+    let (all, scopes) = yarnrc_private(classic);
+    assert!(!all, "the Yarn public registry is public");
+    assert!(scopes.contains("@team"));
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    write(dir.path(), ".yarnrc.yml", berry);
+    let names = build(
+        &UserConfig::default(),
+        &[project(
+            dir.path(),
+            &[("npm", "left-pad"), ("npm", "@corp/ui")],
+        )],
+    );
+    assert!(
+        names.is_private(Ecosystem::Npm, "left-pad"),
+        "project registry"
+    );
+    assert!(names.is_private(Ecosystem::Npm, "@corp/ui"));
+}
+
+#[test]
+fn a_goproxy_without_the_public_proxy_withholds_every_module() {
+    assert!(goproxy_is_private("https://goproxy.corp.example,direct"));
+    assert!(goproxy_is_private("direct"));
+    assert!(goproxy_is_private("off"));
+    assert!(!goproxy_is_private("https://proxy.golang.org,direct"));
+    assert!(!goproxy_is_private(""));
+    let user = UserConfig {
+        go_env_file: Some("GOPROXY=https://athens.corp.example\n".into()),
+        ..UserConfig::default()
+    };
+    assert!(build(&user, &[]).is_private(Ecosystem::Go, "golang.org/x/net"));
+    assert!(!build(&UserConfig::default(), &[]).is_private(Ecosystem::Go, "golang.org/x/net"));
+}
+
+#[test]
+fn lockfile_less_python_sources_are_private() {
+    let pipfile = "[[source]]\nurl = \"https://pypi.org/simple\"\nname = \"pypi\"\n\n[packages]\nrequests = \"*\"\ncorp-sdk = {git = \"https://git.corp.example/sdk.git\", ref = \"main\"}\nlocal-lib = {path = \"./lib\", editable = true}\n";
+    let facts = pipfile_private(pipfile);
+    assert!(!facts.other_index);
+    assert_eq!(facts.names, ["corp-sdk", "local-lib"]);
+    assert!(
+        pipfile_private("[[source]]\nurl = \"https://nexus.corp.example/simple\"\n").other_index
+    );
+
+    let pyproject = r#"
+[project]
+name = "svc"
+dependencies = [
+    "requests>=2",
+    "corp-auth @ git+https://git.corp.example/auth.git",
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+corp-models = { git = "https://git.corp.example/models.git" }
+corp-index = { version = "1.0", source = "corp" }
+flask = "^3.0"
+
+[tool.uv.sources]
+corp-tools = { workspace = true }
+"#;
+    let mut names = pyproject_private(pyproject).names;
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "corp-auth",
+            "corp-index",
+            "corp-models",
+            "corp-tools",
+            "svc"
+        ]
+    );
+}
