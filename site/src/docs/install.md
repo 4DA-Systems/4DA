@@ -17,9 +17,9 @@ Pre-built binaries — no Rust toolchain required.
 |---|---|:---:|
 | **Windows** | [`.exe` installer](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
 | **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
-| **Linux** | [`.AppImage` / `.deb`](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
+| **Linux** | [`.AppImage` / `.deb`](https://github.com/4DA-Systems/4DA/releases/latest) | Notified; you install the new package |
 
-Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars so you can verify the binary before you run it. The updater checks GitHub Releases once per session and validates signatures with minisign.
+Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars so you can verify the binary before you run it. The app checks GitHub Releases for a new version a few seconds after it starts, every 6 hours while it runs, and when you come back to its window. On Windows and macOS it downloads the update (showing progress), verifies its minisign signature and restarts into the new version. On Linux it tells you a new version is out and links to the release, because a `.deb` or `.rpm` install cannot be replaced from inside the app.
 
 > **Windows users:** the Windows installer is not yet code-signed, so SmartScreen shows "Windows protected your PC / Unknown publisher". Check the installer's SHA-256 against `SHASUMS256.txt` first, then click **More info → Run anyway**. Code signing is in progress.
 

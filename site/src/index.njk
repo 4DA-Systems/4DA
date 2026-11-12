@@ -1058,7 +1058,12 @@ permalink: "/index.html"
         <div class="start-card">
           <div class="start-card-label">Want the desktop app?</div>
           <a href="/download/" class="btn btn-primary" id="hero-download">Download for Free</a>
-          <div class="start-card-sub">Windows &middot; macOS &middot; Linux &middot; ~300 MB &middot; auto-updates</div>
+          {% if release.published %}
+          <div class="start-card-sub">Windows &middot; macOS &middot; Linux &middot; v{{ release.version }} &middot; in-app updates</div>
+          {% else %}
+          <div class="start-card-sub">Windows &middot; macOS &middot; Linux &middot; ~300 MB &middot; in-app updates</div>
+          <div class="start-card-sub" id="download-stale-note">The download is v{{ release.version }}, older than the screenshots below (v{{ release.next }}, being prepared).</div>
+          {% endif %}
           <a href="/docs/install/" class="start-card-link">Install guide &rarr;</a>
         </div>
       </div>
@@ -1230,8 +1235,8 @@ permalink: "/index.html"
         </div>
         <div class="pricing-card recommended">
           <h3>Signal</h3>
-          <div class="pricing-price">$12 <span>/month</span></div>
-          <div class="pricing-note">Or $99/year. Time saved on upgrades.</div>
+          <div class="pricing-price">$12 AUD <span>/month</span></div>
+          <div class="pricing-note">Or $99 AUD/year. Time saved on upgrades.</div>
           <ul class="pricing-features">
             <li>Everything in Free, plus:</li>
             <li>The in-app Upgrade Plan: every fix across your projects, in order</li>
@@ -1248,7 +1253,7 @@ permalink: "/index.html"
       <!-- Download table integrated into pricing -->
       <div style="margin-top: 56px; text-align: left;">
         <h3 style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">Download</h3>
-        <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;">Pre-built binaries with auto-updates. No Rust toolchain required.</p>
+        <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;">Pre-built binaries with in-app updates. No Rust toolchain required.</p>
         <table class="download-table">
           <thead>
             <tr>
@@ -1271,7 +1276,7 @@ permalink: "/index.html"
             <tr>
               <td class="platform-name">Linux</td>
               <td><a href="/download/">.AppImage / .deb</a></td>
-              <td>Yes</td>
+              <td>Notified; you install the new package</td>
             </tr>
           </tbody>
         </table>
@@ -1441,7 +1446,11 @@ npx <span class="string">@4da/mcp-server</span>
         </details>
         <details>
           <summary>How big is the download?</summary>
-          <div class="faq-answer">About 280–300 MB on Windows and macOS, and about 370 MB for the Linux AppImage. Most of that is the local embedding model, which ships inside the installer so semantic search works offline from the first run. 4DA is built with Tauri 2.0 (Rust), not Electron. Pre-built binaries with auto-updates for Windows, macOS, and Linux.</div>
+          {% if release.published %}
+          <div class="faq-answer">The installer no longer carries the local embedding model: the dependency engine does not need it, and it is downloaded (about 260 MB, every file SHA-256 checked) only when you turn on interests or natural-language search. 4DA is built with Tauri 2.0 (Rust), not Electron. Windows and macOS install updates from inside the app; on Linux the app tells you when a new version is out and you install the new package.</div>
+          {% else %}
+          <div class="faq-answer">About 280–300 MB on Windows and macOS, and about 370 MB for the Linux AppImage. Most of that is the local embedding model, which ships inside the current installer (v{{ release.version }}) so semantic search works offline from the first run; v{{ release.next }} downloads it only when a feature needs it. 4DA is built with Tauri 2.0 (Rust), not Electron. Windows and macOS install updates from inside the app; on Linux the app tells you when a new version is out and you install the new package.</div>
+          {% endif %}
         </details>
         <details>
           <summary>Is it open source?</summary>

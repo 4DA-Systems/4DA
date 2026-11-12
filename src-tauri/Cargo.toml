@@ -1,6 +1,6 @@
 [package]
 name = "fourda"
-version = "1.0.3"
+version = "1.0.4"
 description = "4DA - All signal. No feed."
 authors = ["4DA Systems Pty Ltd"]
 license = "FSL-1.1-Apache-2.0"
@@ -206,6 +206,7 @@ zeroize = "1"
 # Keyring — cross-platform credential storage (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 keyring = { version = "3", features = ["sync-secret-service", "linux-native", "apple-native", "windows-native"] }
 ammonia = "4"
+tauri-plugin-process = "2.4.0"
 
 # Platform-specific dependencies
 [target.'cfg(not(windows))'.dependencies]

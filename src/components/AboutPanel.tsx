@@ -5,6 +5,7 @@ import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
 import { useAppVersion } from '../hooks/use-app-version';
 import { LogoMarkSVG } from './geometry/LogoMarkSVG';
+import { UpdateCheckStatus } from './UpdateCheckStatus';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
 const PrivacySection = lazy(() => import('./settings/PrivacySection').then(m => ({ default: m.PrivacySection })));
@@ -43,6 +44,7 @@ export function AboutPanel() {
         <p className="text-xs text-text-muted">
           {t('about.copyright', { version: appVersion })}
         </p>
+        <UpdateCheckStatus />
         <div className="flex items-center justify-center gap-3 mt-1.5">
           <a
             href="https://4da.ai/privacy"
