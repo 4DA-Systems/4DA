@@ -38,6 +38,7 @@ import {
   evaluateG7,
   evaluateG8,
   evaluateG9,
+  g7Version,
   parseColdStart,
   projectSteadyState,
   renderText,
@@ -160,6 +161,75 @@ export function readMcp(root, useGh) {
     }
   }
   return { testFound: true, testPath, threshold: bars.length ? Math.min(...bars) : null, ci };
+}
+
+// --- G7 (MCP repo bench results + npm) ----------------------------------------
+const G7_RESULTS = 'bench/g7/results';
+const isG7Summary = (f) => /^summary-final-[\w.-]+\.json$/.test(f);
+
+/**
+ * The G7 summaries the MCP repo publishes: from GitHub (its main branch) when gh is
+ * allowed, else from a local checkout. [{file, version, summary}] or {error}.
+ */
+export function readG7Results(root, useGh, { ghJson = gh } = {}) {
+  if (useGh) {
+    try {
+      const listing = ghJson(['api', `repos/4DA-Systems/4da-mcp-server/contents/${G7_RESULTS}?ref=main`]);
+      return listing
+        .filter((e) => e.type === 'file' && isG7Summary(e.name))
+        .map((e) => {
+          const blob = ghJson(['api', `repos/4DA-Systems/4da-mcp-server/contents/${G7_RESULTS}/${e.name}?ref=main`]);
+          const summary = JSON.parse(Buffer.from(blob.content, 'base64').toString('utf8'));
+          return { file: `4da-mcp-server@main:${G7_RESULTS}/${e.name}`, version: g7Version(e.name, summary), summary };
+        });
+    } catch (e) {
+      return { error: `gh failed: ${String(e.message).split('\n')[0]}` };
+    }
+  }
+  const dir = [process.env.FOURDA_MCP_REPO, join(dirname(root), 'runyourempire', '4da-mcp-server'), join(dirname(root), '4da-mcp-server')]
+    .filter(Boolean)
+    .map((r) => join(r, ...G7_RESULTS.split('/')))
+    .find((d) => existsSync(d));
+  if (!dir) return { error: 'MCP repo not found (set FOURDA_MCP_REPO)' };
+  return readdirSync(dir)
+    .filter(isG7Summary)
+    .map((f) => {
+      const summary = readJson(join(dir, f));
+      return { file: join(dir, f), version: g7Version(f, summary), summary };
+    });
+}
+
+/** The version npm serves as `latest` for @4da/mcp-server, or {error}. */
+export async function publishedMcpVersion({ fetchImpl = globalThis.fetch } = {}) {
+  try {
+    const res = await fetchImpl('https://registry.npmjs.org/@4da%2fmcp-server', {
+      headers: { accept: 'application/vnd.npm.install-v1+json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return { error: `npm registry HTTP ${res.status}` };
+    const version = (await res.json())?.['dist-tags']?.latest;
+    return version ? { version } : { error: 'npm registry has no latest tag' };
+  } catch (e) {
+    return { error: `npm registry unreachable: ${String(e.message).split('\n')[0]}` };
+  }
+}
+
+// --- G9 (the build the dogfood window must be on) -----------------------------
+/** HEAD of the checkout the app is built from, and how far it is past `windowBuild`. */
+export function currentBuild(appRoot, windowBuild) {
+  const git = (args) => execFileSync('git', args, { cwd: appRoot, encoding: 'utf8', windowsHide: true }).trim();
+  try {
+    const sha = git(['rev-parse', 'HEAD']);
+    let behind;
+    try {
+      if (windowBuild) behind = Number(git(['rev-list', '--count', `${windowBuild}..HEAD`]));
+    } catch {
+      behind = undefined; // the window's build is not in this clone: the shas still differ
+    }
+    return { sha, behind };
+  } catch (e) {
+    return { error: `git failed in ${appRoot}: ${String(e.message).split('\n')[0]}` };
+  }
 }
 
 // --- DB (G4/G6) -------------------------------------------------------------
@@ -400,9 +470,13 @@ export async function collect(opts) {
       g4,
       evaluateG5({ lane1Records: readLane1(lane1File), source: lane1File, today }),
       evaluateG6({ db: footprint, idle, cold: latestColdStart(join(root, 'data', 'logs')) }),
-      evaluateG7(),
+      evaluateG7({ results: readG7Results(root, opts.gh), published: await publishedMcpVersion() }),
       evaluateG8({ signingConfigured }),
-      evaluateG9({ dogfood, issues: dogfood ? dogfoodIssues(dogfood.label || 'dogfood-defect', opts.gh) : [] }),
+      evaluateG9({
+        dogfood,
+        issues: dogfood ? dogfoodIssues(dogfood.label || 'dogfood-defect', opts.gh) : [],
+        build: currentBuild(appRoot, dogfood?.windows?.at(-1)?.build),
+      }),
     ],
   };
 }

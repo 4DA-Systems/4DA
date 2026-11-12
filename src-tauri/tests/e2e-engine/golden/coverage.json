@@ -1,0 +1,124 @@
+{
+  "counts": {
+    "failed_count": 0,
+    "lockfiles_read": 9,
+    "manifest_only_count": 0,
+    "manifest_only_dependencies": 0,
+    "packages_read": 4661,
+    "skipped_dir_count": 4,
+    "skipped_lockfile_count": 5,
+    "skipped_temp_count": 0,
+    "unpinned_count": 0,
+    "unpinned_file_count": 0,
+    "unsupported_count": 0
+  },
+  "failed": [],
+  "manifest_only": [],
+  "read": [
+    {
+      "ecosystem": "go",
+      "format": "go.mod",
+      "non_registry_entries": 0,
+      "packages": 72,
+      "path": "go-gh-cli-v2.20/go.mod"
+    },
+    {
+      "ecosystem": "javascript",
+      "format": "pnpm-lock.yaml",
+      "non_registry_entries": 0,
+      "packages": 929,
+      "path": "js-h3-pnpm9/pnpm-lock.yaml"
+    },
+    {
+      "ecosystem": "javascript",
+      "format": "bun.lock",
+      "non_registry_entries": 0,
+      "packages": 998,
+      "path": "js-hono-bun/bun.lock"
+    },
+    {
+      "ecosystem": "javascript",
+      "format": "yarn.lock (berry)",
+      "non_registry_entries": 69,
+      "packages": 2025,
+      "path": "js-jest-yarn-berry/yarn.lock"
+    },
+    {
+      "ecosystem": "python",
+      "format": "uv.lock",
+      "non_registry_entries": 1,
+      "packages": 80,
+      "path": "poly-fastapi-template-uv/backend/uv.lock"
+    },
+    {
+      "ecosystem": "javascript",
+      "format": "package-lock.json",
+      "non_registry_entries": 0,
+      "packages": 319,
+      "path": "poly-fastapi-template-uv/frontend/package-lock.json"
+    },
+    {
+      "ecosystem": "python",
+      "format": "poetry.lock",
+      "non_registry_entries": 0,
+      "packages": 83,
+      "path": "py-poetry-1.1/poetry.lock"
+    },
+    {
+      "ecosystem": "rust",
+      "format": "Cargo.lock",
+      "non_registry_entries": 1,
+      "packages": 146,
+      "path": "rs-bat-0.18/Cargo.lock"
+    },
+    {
+      "ecosystem": "javascript",
+      "format": "package-lock.json",
+      "non_registry_entries": 2,
+      "packages": 9,
+      "path": "synth-npm-edges/package-lock.json"
+    }
+  ],
+  "skipped_dirs": [
+    {
+      "path": "js-hono-bun/benchmarks/handle-event",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/jsx",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/query-param",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/routers",
+      "reason": "example / fixture / scaffolding path"
+    }
+  ],
+  "skipped_lockfiles": [
+    {
+      "path": "js-hono-bun/benchmarks/handle-event/yarn.lock",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/jsx/yarn.lock",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/query-param/bun.lockb",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/query-param/package-lock.json",
+      "reason": "example / fixture / scaffolding path"
+    },
+    {
+      "path": "js-hono-bun/benchmarks/routers/yarn.lock",
+      "reason": "example / fixture / scaffolding path"
+    }
+  ],
+  "unpinned": [],
+  "unsupported": []
+}
