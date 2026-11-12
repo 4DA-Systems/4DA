@@ -54,6 +54,12 @@ pub mod jobs {
     /// cannot reset the cadence to "fire immediately" — without this the job
     /// re-fires on every cold boot.
     pub const CHAIN_NOTIFY: &str = "chain_notify";
+    /// The headless engine's daily retention pass (the GUI runs retention
+    /// inside its daily decay block, stamped as `behavior_decay`).
+    pub const RETENTION: &str = "retention";
+    /// The headless engine's last Upgrade Plan snapshot rebuild, so a cycle
+    /// whose inputs did not change can skip it (`headless_gates`).
+    pub const PLAN_SNAPSHOT: &str = "plan_snapshot";
 }
 
 /// kv_store key holding the dependency-set epoch HASH used by the

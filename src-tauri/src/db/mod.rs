@@ -31,6 +31,7 @@ pub(crate) mod migrations;
 mod osv_advisories;
 #[cfg(test)]
 mod phase126_tests;
+pub(crate) mod retention;
 mod scoring_explanations;
 mod scoring_queries;
 pub mod source_item_deps;

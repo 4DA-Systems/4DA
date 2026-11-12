@@ -112,6 +112,27 @@ pub fn persist_upgrade_plan(
     }
 }
 
+/// Attribute the stored snapshot to the engine run that built it. The engine
+/// builds the plan early in its cycle (dependency intelligence first, audit
+/// R7), before that cycle's receipt exists; this sets `engine_run_id` once the
+/// receipt is written. Only the id changes; a snapshot that is absent or not
+/// an object is left alone. Best-effort.
+pub fn stamp_plan_engine_run(db: &Database, engine_run_id: i64) {
+    let Ok(Some(json)) = db.get_kv(PLAN_KV_KEY) else {
+        return;
+    };
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&json) else {
+        return;
+    };
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+    obj.insert("engine_run_id".to_string(), engine_run_id.into());
+    if let Err(e) = db.set_kv(PLAN_KV_KEY, &value.to_string()) {
+        tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to attribute the plan snapshot to its engine run");
+    }
+}
+
 /// Read the persisted plan snapshot. Returns `None` when absent, unparseable, or
 /// written by an incompatible schema version (fail closed — a reader must never
 /// act on a snapshot it cannot fully trust).
