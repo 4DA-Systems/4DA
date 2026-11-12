@@ -17,11 +17,20 @@
     "find": "\"version\": \"0.0.10\"",
     "replace": "\"version\": \"1.2.8\"",
     "occurrences": 1,
-    "removed": ["npm|.|minimist|0.0.10"],
+    "removed": [
+      "npm|.|minimist|0.0.10"
+    ],
     "added": []
   },
   "budgets": {
-    "fresh": { "wall_seconds": 600, "peak_rss_mb": 2048 },
-    "rerun": { "wall_seconds": 300, "peak_rss_mb": 2048 }
+    "$comment": "Measured 2026-11-12 (Windows, debug, warm disk): runs 37-66 s, peak working set 79-86 MB. Budgets leave room for a hosted runner; tighten from CI timings, never loosen without a reason in the PR.",
+    "fresh": {
+      "wall_seconds": 240,
+      "peak_rss_mb": 512
+    },
+    "rerun": {
+      "wall_seconds": 240,
+      "peak_rss_mb": 512
+    }
   }
 }

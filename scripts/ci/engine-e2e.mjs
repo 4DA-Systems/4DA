@@ -215,25 +215,27 @@ async function readDb(dbPath) {
   }
 }
 
-/** The coverage record, case-relative: what the walk skipped, could not read, or does not support. */
+/**
+ * The coverage record, case-relative: every list the walk saved (what it read, skipped,
+ * could not read, does not support, found unpinned or without a lockfile) with paths
+ * relative to the context root, and every count. Lists the engine does not write are
+ * absent, so an older or newer record shape is a golden difference, never a silent pass.
+ */
 function coverageRecord(report, ctxDir) {
   if (!report) return null;
   const rel = (p) => {
     const at = locate(p, ctxDir);
     return at ? `${at.caseId}/${at.dir}` : `<outside>${p}`;
   };
-  const list = (xs) => (xs || []).map((e) => ({ path: rel(e.path), reason: e.reason })).sort((a, b) => a.path.localeCompare(b.path));
-  return {
-    skipped_dirs: list(report.skipped_dirs),
-    unsupported: list(report.unsupported),
-    failed: list(report.failed),
-    counts: {
-      lockfiles_read: report.lockfiles_read,
-      skipped_dir_count: report.skipped_dir_count,
-      unsupported_count: report.unsupported_count,
-      failed_count: report.failed_count,
-    },
-  };
+  const out = { counts: {} };
+  for (const [k, v] of Object.entries(report).sort(([a], [b]) => a.localeCompare(b))) {
+    if (Array.isArray(v)) {
+      out[k] = v
+        .map((e) => (e && typeof e === 'object' && 'path' in e ? { ...e, path: rel(e.path) } : e))
+        .sort((a, b) => String(a?.path ?? JSON.stringify(a)).localeCompare(String(b?.path ?? JSON.stringify(b))));
+    } else if (typeof v === 'number') out.counts[k] = v;
+  }
+  return out;
 }
 
 /** The case-relative directories a coverage record says were skipped, per case. */
