@@ -465,6 +465,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Point apt at a mirror this runner resolves
+        # playwright install --with-deps runs apt-get itself (2026-11-11: *.ubuntu.com did not resolve)
+        run: bash scripts/ci/apt-mirror-select.sh
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
