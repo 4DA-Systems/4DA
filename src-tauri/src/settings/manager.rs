@@ -71,6 +71,13 @@ pub struct SettingsManager {
     keychain_enabled: bool,
     /// Where each present secret is stored (see `secret_storage`).
     secret_posture: secret_storage::PostureMap,
+    /// True when settings.json existed but could not be READ at startup (a
+    /// sharing violation, an I/O error, bytes that are not text). What is in
+    /// memory then came from the `.bak` or the defaults, so writing it would
+    /// replace the user's real file — and its backup — with a stand-in. Every
+    /// write is refused for the rest of this run; the next start reads the
+    /// file again.
+    persist_blocked: bool,
 }
 
 // Constructor (new) lives in manager_init.rs — separate impl block.
@@ -89,6 +96,23 @@ impl SettingsManager {
         // Every change to the privacy level is followed by a save, so this keeps
         // the lock-free mirror current (see `llm_egress`).
         crate::llm_egress::publish_content_level(&self.settings.privacy.llm_content_level);
+
+        if self.persist_blocked {
+            return Err(
+                "settings.json could not be read when 4DA started, so it is not \
+                        overwritten this session. Restart 4DA to load it again."
+                    .into(),
+            );
+        }
+        // A panic that wiped the secrets in memory (crash_guard) must never
+        // reach the disk as blank keys.
+        if crate::crash_guard::secrets_zeroized() {
+            return Err(
+                "Settings are not saved after an internal error cleared the \
+                        keys in memory. Restart 4DA."
+                    .into(),
+            );
+        }
 
         self.ensure_keys_hydrated();
         self.secret_posture = if self.keychain_enabled {

@@ -187,7 +187,35 @@ fn install_console_ctrl_handler() {
 
 #[cfg(not(windows))]
 fn install_console_ctrl_handler() {
-    // Unix: Tauri's signal handlers are sufficient.
+    // Unix: termination signals are handled once the app exists
+    // (`spawn_termination_listener`).
+}
+
+/// SIGTERM / SIGHUP / SIGINT (logout, `kill`, a service manager) killed the
+/// process with no `Drop` and no `RunEvent::Exit`: the `.process.lock` and the
+/// crash-trail markers stayed behind, so the next launch read a crash and
+/// could find a live, reused PID in the lock (audit O3). Route them through
+/// the normal clean exit instead.
+#[cfg(unix)]
+fn spawn_termination_listener(app: tauri::AppHandle) {
+    use tokio::signal::unix::{signal, SignalKind};
+    tauri::async_runtime::spawn(async move {
+        let (Ok(mut term), Ok(mut hup), Ok(mut int)) = (
+            signal(SignalKind::terminate()),
+            signal(SignalKind::hangup()),
+            signal(SignalKind::interrupt()),
+        ) else {
+            warn!(target: "4da::shutdown", "Could not listen for termination signals");
+            return;
+        };
+        let name = tokio::select! {
+            _ = term.recv() => "SIGTERM",
+            _ = hup.recv() => "SIGHUP",
+            _ = int.recv() => "SIGINT",
+        };
+        warn!(target: "4da::shutdown", signal = name, "Termination signal received — exiting cleanly");
+        app.exit(0);
+    });
 }
 
 /// The WebView2 service-worker cache of the app with this `identifier`:
@@ -2064,6 +2092,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // first heartbeat check doesn't have to wait a minute.
     crate::startup_watchdog::write_heartbeat();
     crate::startup_watchdog::start_heartbeat();
+
+    #[cfg(unix)]
+    spawn_termination_listener(app.handle().clone());
 
     // ========================================================================
     // Calibration Fitter Scheduler (Intelligence Mesh Phase 5b.3)

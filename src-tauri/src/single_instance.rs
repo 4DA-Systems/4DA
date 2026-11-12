@@ -173,7 +173,7 @@ pub fn acquire_instance_lock(data_dir: &Path) -> Result<InstanceLock, InstanceEr
         Err(InstanceError::Io(e)) if e.kind() == std::io::ErrorKind::AlreadyExists => {
             // Lock file exists — inspect PID.
             match read_lock_pid(&lock_path) {
-                Some(pid) if is_instance_alive(pid) => {
+                Some(pid) if is_instance_alive(pid, read_lock_written_at(&lock_path)) => {
                     warn!(target: "4da::single_instance", pid, path = ?lock_path,
                         "Live 4DA instance detected");
                     Err(InstanceError::AlreadyRunning(pid))
@@ -233,6 +233,84 @@ fn read_lock_pid(lock_path: &Path) -> Option<u32> {
     contents.lines().next()?.trim().parse::<u32>().ok()
 }
 
+/// The unix time the lock was written (its second line), when present.
+fn read_lock_written_at(lock_path: &Path) -> Option<u64> {
+    let contents = std::fs::read_to_string(lock_path).ok()?;
+    contents
+        .lines()
+        .nth(1)?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|ts| *ts > 0)
+}
+
+/// What the OS reports about the process holding a PID (Unix check).
+#[cfg(any(not(target_os = "windows"), test))]
+struct ProcIdentity {
+    /// Executable file name (from the exe path, else the process name).
+    image: Option<String>,
+    /// Process start, unix seconds.
+    start_time: u64,
+}
+
+/// Seconds of clock slack between a process starting and it writing its lock.
+#[cfg(any(not(target_os = "windows"), test))]
+const LOCK_START_SLACK_SECS: u64 = 5;
+
+/// Whether the live process behind a lock's PID is the 4DA that wrote it.
+/// A PID reused after a crash runs another program, or started after the
+/// lock was written; either way the lock is stale. Nothing readable about the
+/// process means "assume it is ours", so a real instance is never stomped.
+#[cfg(any(not(target_os = "windows"), test))]
+fn identity_is_instance(
+    who: Option<&ProcIdentity>,
+    want_image: Option<&str>,
+    lock_written_at: Option<u64>,
+) -> bool {
+    let Some(who) = who else {
+        return true;
+    };
+    if let (Some(want), Some(have)) = (want_image, who.image.as_deref()) {
+        // Linux truncates a process name to 15 bytes; an exe path is whole.
+        let same = have == want || (have.len() >= 15 && want.starts_with(have));
+        if !same {
+            return false;
+        }
+    }
+    match lock_written_at {
+        Some(ts) if who.start_time > 0 => who.start_time <= ts + LOCK_START_SLACK_SECS,
+        _ => true,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn proc_identity(pid: u32) -> Option<ProcIdentity> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let pid = Pid::from_u32(pid);
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+    );
+    let p = sys.process(pid)?;
+    let image = p
+        .exe()
+        .and_then(|e| e.file_name())
+        .map(|n| {
+            n.to_string_lossy()
+                .trim_end_matches(" (deleted)")
+                .to_string()
+        })
+        .or_else(|| Some(p.name().to_string_lossy().into_owned()))
+        .filter(|s| !s.is_empty());
+    Some(ProcIdentity {
+        image,
+        start_time: p.start_time(),
+    })
+}
+
 /// Check whether a given PID refers to a live process on this machine.
 ///
 /// Windows: invokes `tasklist /FI "PID eq <pid>" /FO CSV /NH`. A live PID
@@ -260,18 +338,26 @@ pub(crate) fn is_process_alive(pid: u32) -> bool {
 /// could name an unrelated live process, and this launch would then refuse to
 /// start, with no window and no message, until that process exited. So the PID
 /// must also be running this executable's image. If the image name is unknown,
-/// a live PID is enough, as before.
-fn is_instance_alive(pid: u32) -> bool {
+/// a live PID is enough, as before. Linux and macOS reuse PIDs too, and there a
+/// bare `kill(pid, 0)` made the app exit silently on a reused PID (audit O3), so
+/// they also compare the image and require the process to predate the lock.
+fn is_instance_alive(pid: u32, lock_written_at: Option<u64>) -> bool {
+    let image = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
     #[cfg(target_os = "windows")]
     {
-        let image = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+        let _ = lock_written_at;
         tasklist_for_pid(pid).is_none_or(|out| tasklist_lists(&out, pid, image.as_deref()))
     }
     #[cfg(not(target_os = "windows"))]
     {
         is_process_alive(pid)
+            && identity_is_instance(
+                proc_identity(pid).as_ref(),
+                image.as_deref(),
+                lock_written_at,
+            )
     }
 }
 
@@ -469,6 +555,62 @@ mod tests {
         let _ = other.wait();
         let lock = taken.expect("a live non-4DA PID must not block startup");
         assert_eq!(read_lock_pid(&lock.path), Some(std::process::id()));
+    }
+
+    /// Audit O3: on Linux/macOS a stale lock whose PID was reused by another
+    /// program (or by any process started after the lock) made 4DA exit
+    /// silently as "already running".
+    #[test]
+    fn a_reused_pid_is_not_a_live_instance() {
+        let ours = |start| ProcIdentity {
+            image: Some("fourda".into()),
+            start_time: start,
+        };
+        let other = ProcIdentity {
+            image: Some("bash".into()),
+            start_time: 100,
+        };
+        assert!(identity_is_instance(
+            Some(&ours(100)),
+            Some("fourda"),
+            Some(110)
+        ));
+        assert!(
+            !identity_is_instance(Some(&other), Some("fourda"), Some(110)),
+            "another program on the PID"
+        );
+        assert!(
+            !identity_is_instance(Some(&ours(5_000)), Some("fourda"), Some(110)),
+            "our image, but started long after the lock was written"
+        );
+        assert!(
+            identity_is_instance(Some(&ours(112)), Some("fourda"), Some(110)),
+            "clock slack between start and lock write"
+        );
+        assert!(
+            identity_is_instance(None, Some("fourda"), Some(110)),
+            "unknown = assume ours"
+        );
+        let truncated = ProcIdentity {
+            image: Some("fourda-engine-l".into()),
+            start_time: 1,
+        };
+        assert!(
+            identity_is_instance(Some(&truncated), Some("fourda-engine-long"), None),
+            "Linux truncates names to 15 bytes"
+        );
+    }
+
+    #[test]
+    fn lock_records_when_it_was_written() {
+        let dir = TempDir::new().expect("tempdir");
+        let lock = acquire_instance_lock(dir.path()).expect("acquire");
+        let ts = read_lock_written_at(&lock.path).expect("timestamp line");
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert!(ts <= now && now - ts < 60);
     }
 
     #[test]

@@ -212,27 +212,17 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
         return CorruptionRecovery::Healthy;
     }
 
-    // 3. Quarantine the corrupt file.
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let quarantine_path = db_path.with_extension(format!("db.corrupt-{timestamp}"));
-
-    if let Err(e) = std::fs::rename(db_path, &quarantine_path) {
-        return CorruptionRecovery::RecoveryFailed {
-            reason: format!(
-                "Could not quarantine corrupt DB to {}: {e}",
-                quarantine_path.display()
-            ),
-        };
-    }
-    tracing::warn!(
-        target: "4da::db::recovery",
-        from = %db_path.display(),
-        to = %quarantine_path.display(),
-        "Quarantined corrupt DB"
-    );
+    // 3. Quarantine the corrupt file together with its -wal/-shm: a backup
+    //    restored beside the old WAL is replayed against it by SQLite and
+    //    reads as "database disk image is malformed" (reproduced, audit O3).
+    let quarantine_path = match quarantine_with_sidecars(db_path) {
+        Ok(p) => p,
+        Err(e) => {
+            return CorruptionRecovery::RecoveryFailed {
+                reason: format!("Could not quarantine corrupt DB: {e}"),
+            };
+        }
+    };
 
     // 4. Find the most recent backup. Backups are named "<stem>.db.backup.vN"
     //    with N = schema version at backup time. We pick the file with the
@@ -282,6 +272,69 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
     CorruptionRecovery::RestoredFromBackup {
         restored_from: restore_from,
     }
+}
+
+/// A quarantine name that no earlier quarantine holds:
+/// `<db>.corrupt-<unix>`, then `<db>.corrupt-<unix>-2`, `-3`, ... Every
+/// quarantine is the user's only copy of that data, so none may overwrite
+/// another (the old last-resort path reused one `<db>.corrupt` slot).
+pub(crate) fn unique_quarantine_path(db_path: &Path) -> PathBuf {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let base = db_path.with_extension(format!("db.corrupt-{timestamp}"));
+    let taken = |p: &Path| p.exists() || sidecar(p, "-wal").exists() || sidecar(p, "-shm").exists();
+    if !taken(&base) {
+        return base;
+    }
+    (2u32..=u32::MAX)
+        .map(|n| db_path.with_extension(format!("db.corrupt-{timestamp}-{n}")))
+        .find(|p| !taken(p))
+        .unwrap_or(base)
+}
+
+/// `<path>-wal` / `<path>-shm`, SQLite's sidecar naming.
+fn sidecar(path: &Path, suffix: &str) -> PathBuf {
+    let mut s = path.as_os_str().to_os_string();
+    s.push(suffix);
+    PathBuf::from(s)
+}
+
+/// Move `db_path` and its `-wal`/`-shm` to a fresh quarantine name, so the
+/// quarantined copy keeps its own WAL and the original path is left with no
+/// sidecar a restored or fresh database would inherit. All or nothing: if a
+/// sidecar cannot move, everything already moved goes back and the error is
+/// returned (the files are then exactly as they were).
+pub(crate) fn quarantine_with_sidecars(db_path: &Path) -> std::io::Result<PathBuf> {
+    let target = unique_quarantine_path(db_path);
+    std::fs::rename(db_path, &target)?;
+    let mut moved: Vec<(PathBuf, PathBuf)> = vec![(db_path.to_path_buf(), target.clone())];
+    for suffix in ["-wal", "-shm"] {
+        let from = sidecar(db_path, suffix);
+        if !from.exists() {
+            continue;
+        }
+        let to = sidecar(&target, suffix);
+        if let Err(e) = std::fs::rename(&from, &to) {
+            for (orig, now) in moved.iter().rev() {
+                let _ = std::fs::rename(now, orig);
+            }
+            return Err(std::io::Error::new(
+                e.kind(),
+                format!("could not move {} aside: {e}", from.display()),
+            ));
+        }
+        moved.push((from, to));
+    }
+    tracing::warn!(
+        target: "4da::db::recovery",
+        from = %db_path.display(),
+        to = %target.display(),
+        sidecars = moved.len() - 1,
+        "Quarantined database with its WAL/SHM"
+    );
+    Ok(target)
 }
 
 fn is_lock_contention(e: &rusqlite::Error) -> bool {
@@ -745,6 +798,108 @@ mod recovery_tests {
             }
             other => panic!("expected QuarantinedNoBackup, got {other:?}"),
         }
+    }
+
+    /// Audit O3 (reproduced as "database disk image is malformed"): restoring a
+    /// backup left the corrupt database's -wal/-shm beside it, and SQLite then
+    /// replayed that WAL into the restored file. The sidecars must travel with
+    /// the quarantined copy.
+    #[test]
+    fn restore_moves_the_old_wal_and_shm_aside_with_the_quarantine() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("d.db");
+        let backup_path = dir.path().join("d.db.backup.v3");
+        let backup_conn = Connection::open(&backup_path).unwrap();
+        backup_conn
+            .execute_batch("CREATE TABLE marker (id INTEGER); INSERT INTO marker VALUES (42);")
+            .unwrap();
+        drop(backup_conn);
+
+        // The corrupt database's WAL. (A WAL that holds page 1 would make the
+        // garbage read as a healthy database, so these are opaque bytes.) It is
+        // read-only so the integrity probe's own connection cannot delete it on
+        // close, which is how a real WAL outlived the probe in the audit repro.
+        let wal = b"the corrupt database's write-ahead log".to_vec();
+        let wal_path = dir.path().join("d.db-wal");
+        std::fs::write(&path, b"corrupt").unwrap();
+        std::fs::write(&wal_path, &wal).unwrap();
+        let set_readonly = |p: &std::path::Path, ro: bool| {
+            let mut perm = std::fs::metadata(p).unwrap().permissions();
+            perm.set_readonly(ro);
+            std::fs::set_permissions(p, perm).unwrap();
+        };
+        set_readonly(&wal_path, true);
+
+        let result = recover_corrupt_db_if_needed(&path);
+        assert!(
+            matches!(result, CorruptionRecovery::RestoredFromBackup { .. }),
+            "got {result:?}"
+        );
+        let wal_beside_restored = wal_path.exists();
+        let q_wal: Vec<std::path::PathBuf> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| {
+                let n = p.file_name().unwrap().to_string_lossy().into_owned();
+                n.starts_with("d.db.corrupt-") && n.ends_with("-wal")
+            })
+            .collect();
+        for p in q_wal
+            .iter()
+            .chain(std::iter::once(&wal_path))
+            .filter(|p| p.exists())
+        {
+            set_readonly(p, false);
+        }
+        assert!(
+            !wal_beside_restored,
+            "the restored database must not sit beside the corrupt one's WAL"
+        );
+        assert_eq!(q_wal.len(), 1, "the WAL is quarantined with its database");
+        assert_eq!(std::fs::read(&q_wal[0]).unwrap(), wal, "WAL kept intact");
+
+        let conn = Connection::open(&path).unwrap();
+        let v: i64 = conn
+            .query_row("SELECT id FROM marker", [], |r| r.get(0))
+            .expect("restored database reads cleanly");
+        assert_eq!(v, 42);
+    }
+
+    /// Every sidecar moves with the database, under the quarantine's name.
+    #[test]
+    fn quarantine_moves_wal_and_shm_with_the_database() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("s.db");
+        std::fs::write(&path, b"db").unwrap();
+        std::fs::write(dir.path().join("s.db-wal"), b"wal").unwrap();
+        std::fs::write(dir.path().join("s.db-shm"), b"shm").unwrap();
+        let q = quarantine_with_sidecars(&path).unwrap();
+        assert!(!path.exists() && !dir.path().join("s.db-wal").exists());
+        assert!(!dir.path().join("s.db-shm").exists());
+        assert_eq!(std::fs::read(&q).unwrap(), b"db");
+        assert_eq!(std::fs::read(sidecar(&q, "-wal")).unwrap(), b"wal");
+        assert_eq!(std::fs::read(sidecar(&q, "-shm")).unwrap(), b"shm");
+    }
+
+    /// Two quarantines in the same second never share a name.
+    #[test]
+    fn quarantine_never_overwrites_an_earlier_quarantine() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("q.db");
+        std::fs::write(&path, b"first").unwrap();
+        let first = quarantine_with_sidecars(&path).unwrap();
+        std::fs::write(&path, b"second").unwrap();
+        let second = quarantine_with_sidecars(&path).unwrap();
+        assert_ne!(first, second);
+        assert_eq!(std::fs::read(&first).unwrap(), b"first");
+        assert_eq!(std::fs::read(&second).unwrap(), b"second");
+        assert_eq!(
+            classify_backup(&second.file_name().unwrap().to_string_lossy(), "q.db")
+                .map(|(f, _, _)| f),
+            Some(BackupFamily::Quarantine),
+            "the pruner still recognises (and never deletes) the new names"
+        );
     }
 
     #[test]

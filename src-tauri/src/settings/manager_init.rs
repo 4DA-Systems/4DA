@@ -70,6 +70,7 @@ impl SettingsManager {
                         usage_path,
                         keychain_enabled: hydrate_keychain,
                         secret_posture: PostureMap::new(),
+                        persist_blocked: false,
                     };
                 }
             }
@@ -92,8 +93,11 @@ impl SettingsManager {
         // so additive schema changes parse cleanly; parse_settings_preserving is
         // the field-by-field backstop for the rarer removed/retyped field.
         let mut healed_from_corruption = false;
+        // Set when the file exists but could not be READ: nothing below may
+        // write settings.json or its .bak during this run (see the field).
+        let mut persist_blocked = false;
         let mut settings = if settings_path.exists() {
-            match fs::read_to_string(&settings_path) {
+            match read_settings_text(&settings_path) {
                 Ok(content) => match serde_json::from_str::<Settings>(&content) {
                     Ok(s) => s,
                     Err(strict_err) => {
@@ -113,7 +117,7 @@ impl SettingsManager {
                                 // Not even valid JSON — fall back to the .bak,
                                 // run through the same preserving recovery.
                                 let bak_path = settings_path.with_extension("json.bak");
-                                match fs::read_to_string(&bak_path)
+                                match read_settings_text(&bak_path)
                                     .ok()
                                     .and_then(|c| parse_settings_preserving(&c))
                                 {
@@ -130,9 +134,29 @@ impl SettingsManager {
                         }
                     }
                 },
-                Err(e) => {
-                    warn!(target: "4da::settings", error = %e, "Failed to read settings.json — using defaults");
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    info!(target: "4da::settings", "settings.json vanished before it was read, using defaults");
                     Settings::default()
+                }
+                Err(e) => {
+                    // The user's file is there but unreadable this moment (a
+                    // sharing violation, an I/O error, bytes that are not
+                    // text). Defaults written now would replace it AND its
+                    // backup, so read the backup and write nothing this run.
+                    persist_blocked = true;
+                    match read_settings_text(&settings_path.with_extension("json.bak"))
+                        .ok()
+                        .and_then(|c| parse_settings_preserving(&c))
+                    {
+                        Some(restored) => {
+                            warn!(target: "4da::settings", error = %e, "settings.json could not be read: using its backup, and leaving both files untouched this session");
+                            restored
+                        }
+                        None => {
+                            warn!(target: "4da::settings", error = %e, "settings.json could not be read and has no readable backup: using defaults, and leaving the file untouched this session");
+                            Settings::default()
+                        }
+                    }
                 }
             }
         } else {
@@ -145,7 +169,8 @@ impl SettingsManager {
         // health check stops reporting already-fixed corruption.
         // Nothing is scrubbed here (empty posture): the keychain migration
         // below has not run yet, so this writes back exactly what was loaded.
-        if healed_from_corruption {
+        let can_persist = !persist_blocked;
+        if healed_from_corruption && can_persist {
             if persist_with_posture(&settings_path, &settings, &PostureMap::new()) {
                 info!(target: "4da::settings", "Healed corrupt settings.json on disk from recovery");
             } else {
@@ -177,7 +202,7 @@ impl SettingsManager {
 
         // Auto-detect the system locale ONCE per install (see detect_locale_once);
         // persist the flag so detection never runs on a later launch.
-        if detect_locale_once(&mut settings, detect_system_locale) {
+        if detect_locale_once(&mut settings, detect_system_locale) && can_persist {
             persist_with_posture(&settings_path, &settings, &PostureMap::new());
         }
 
@@ -202,19 +227,29 @@ impl SettingsManager {
             info!(target: "4da::settings", "Migrated legacy tier 'pro' -> 'signal'");
             settings.license.tier = "signal".to_string();
             // Persist the migration so it only logs once (atomic write)
-            persist_with_posture(&settings_path, &settings, &PostureMap::new());
+            if can_persist {
+                persist_with_posture(&settings_path, &settings, &PostureMap::new());
+            }
         }
 
         // Migrate the retired built-in local LLM (see migrate_retired_llm_provider).
         if migrate_retired_llm_provider(&mut settings) {
             info!(target: "4da::settings", "Migrated retired provider 'builtin' -> 'none' (built-in LLM was removed)");
             // Persist the migration so it only logs once (atomic write)
-            persist_with_posture(&settings_path, &settings, &PostureMap::new());
+            if can_persist {
+                persist_with_posture(&settings_path, &settings, &PostureMap::new());
+            }
         }
 
         // --- Keychain-authoritative secrets: one-time migration + hydration ---
-        let mut secret_posture =
-            Self::establish_secret_posture(&mut settings, &settings_path, hydrate_keychain);
+        // The plaintext->keychain migration rewrites settings.json, so it waits
+        // for a start that could read the file.
+        let mut secret_posture = Self::establish_secret_posture(
+            &mut settings,
+            &settings_path,
+            hydrate_keychain,
+            can_persist,
+        );
 
         // --- License self-heal: re-derive tier from the signed key ---
         // Universal backstop for the recurring "Signal dropped to Free" bug.
@@ -233,15 +268,17 @@ impl SettingsManager {
                 tier = %settings.license.tier,
                 "License tier self-healed from signed key at startup"
             );
-            secret_posture = Self::persist_startup(&settings_path, &settings, hydrate_keychain);
-            // Keep all three license stores in agreement — write the backup into
-            // the same data_dir we loaded from (not the global get_db_path).
-            crate::settings::save_license_backup_to(
-                data_dir,
-                &settings.license.license_key,
-                &settings.license.tier,
-                settings.license.activated_at.as_deref().unwrap_or(""),
-            );
+            if can_persist {
+                secret_posture = Self::persist_startup(&settings_path, &settings, hydrate_keychain);
+                // Keep all three license stores in agreement — write the backup into
+                // the same data_dir we loaded from (not the global get_db_path).
+                crate::settings::save_license_backup_to(
+                    data_dir,
+                    &settings.license.license_key,
+                    &settings.license.tier,
+                    settings.license.activated_at.as_deref().unwrap_or(""),
+                );
+            }
         }
 
         // --- Reverse trial: auto-start the 14-day Signal trial on first launch ---
@@ -271,7 +308,10 @@ impl SettingsManager {
                 }
                 settings.license.trial_started_at = Some(stamp);
                 // Persist immediately so the trial window is stable across restarts.
-                secret_posture = Self::persist_startup(&settings_path, &settings, hydrate_keychain);
+                if can_persist {
+                    secret_posture =
+                        Self::persist_startup(&settings_path, &settings, hydrate_keychain);
+                }
             }
         }
 
@@ -284,6 +324,7 @@ impl SettingsManager {
             usage_path,
             keychain_enabled: hydrate_keychain,
             secret_posture,
+            persist_blocked,
         }
     }
 
@@ -293,6 +334,7 @@ impl SettingsManager {
         settings: &mut Settings,
         settings_path: &std::path::Path,
         use_keychain: bool,
+        can_persist: bool,
     ) -> PostureMap {
         if !use_keychain {
             return secret_storage::file_only_posture(settings);
@@ -300,7 +342,9 @@ impl SettingsManager {
         let had_plaintext = secret_storage::SECRET_NAMES
             .iter()
             .any(|n| !secret_storage::secret_value(settings, n).is_empty());
-        let mut posture = if had_plaintext {
+        let mut posture = if had_plaintext && !can_persist {
+            secret_storage::file_only_posture(settings)
+        } else if had_plaintext {
             Self::migrate_plaintext(settings, settings_path)
         } else {
             PostureMap::new()
@@ -397,6 +441,46 @@ impl SettingsManager {
         };
         persist_with_posture(settings_path, settings, &posture);
         posture
+    }
+}
+
+/// Read a settings file as text, accepting the encodings Windows tools write.
+///
+/// PowerShell 5's `Out-File` / `>` write UTF-16LE with a byte-order mark and
+/// its `-Encoding UTF8` writes a UTF-8 BOM. A plain `read_to_string` refused the
+/// first (an error, so the app fell back to defaults) and handed serde the BOM
+/// with the second (a parse failure). Both are the user's own valid settings.
+/// Bytes that are none of these are an `InvalidData` error: unreadable, not
+/// corrupt — the caller must not write over them.
+fn read_settings_text(path: &std::path::Path) -> std::io::Result<String> {
+    decode_settings_bytes(&fs::read(path)?)
+}
+
+fn decode_settings_bytes(bytes: &[u8]) -> std::io::Result<String> {
+    let invalid =
+        |what: &str| std::io::Error::new(std::io::ErrorKind::InvalidData, what.to_string());
+    let utf16 = |body: &[u8], little: bool| -> std::io::Result<String> {
+        if body.len() % 2 != 0 {
+            return Err(invalid("settings.json is UTF-16 with an odd byte count"));
+        }
+        let units = body.chunks_exact(2).map(|p| {
+            if little {
+                u16::from_le_bytes([p[0], p[1]])
+            } else {
+                u16::from_be_bytes([p[0], p[1]])
+            }
+        });
+        char::decode_utf16(units)
+            .collect::<Result<String, _>>()
+            .map_err(|_| invalid("settings.json is not valid UTF-16"))
+    };
+    match bytes {
+        [0xEF, 0xBB, 0xBF, rest @ ..] => String::from_utf8(rest.to_vec())
+            .map_err(|_| invalid("settings.json is not valid UTF-8")),
+        [0xFF, 0xFE, rest @ ..] => utf16(rest, true),
+        [0xFE, 0xFF, rest @ ..] => utf16(rest, false),
+        _ => String::from_utf8(bytes.to_vec())
+            .map_err(|_| invalid("settings.json is not valid UTF-8")),
     }
 }
 
@@ -597,6 +681,79 @@ mod settings_durability_tests {
         assert_eq!(healed.license.tier, "signal");
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    fn signal_json() -> String {
+        serde_json::to_string_pretty(&signal_settings()).unwrap()
+    }
+
+    /// PowerShell 5 writes UTF-16LE with a BOM. That is the user's real file:
+    /// it must load, not be replaced by defaults (audit O3).
+    #[test]
+    fn utf16_settings_file_loads_instead_of_resetting() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in signal_json().encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        std::fs::write(tmp.path().join("settings.json"), &bytes).unwrap();
+
+        let manager = SettingsManager::new_without_keychain(tmp.path());
+        assert_eq!(manager.get().license.tier, "signal");
+        assert_eq!(manager.get().license.license_key, "TESTKEY-DUMMY");
+    }
+
+    #[test]
+    fn utf8_bom_settings_file_loads() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice(signal_json().as_bytes());
+        std::fs::write(tmp.path().join("settings.json"), &bytes).unwrap();
+        let manager = SettingsManager::new_without_keychain(tmp.path());
+        assert_eq!(manager.get().license.tier, "signal");
+    }
+
+    /// An unreadable settings.json (bytes that are no text encoding) is read
+    /// from its backup, and neither file is written during that run — not by
+    /// startup and not by a later save (audit O3: the defaults used to be
+    /// persisted over the file AND the backup).
+    #[test]
+    fn unreadable_settings_uses_backup_and_writes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let main = tmp.path().join("settings.json");
+        let bak = tmp.path().join("settings.json.bak");
+        let unreadable: Vec<u8> = vec![b'{', 0xC3, 0x28, 0xFF, 0x80, b'}'];
+        std::fs::write(&main, &unreadable).unwrap();
+        std::fs::write(&bak, signal_json()).unwrap();
+
+        let mut manager = SettingsManager::new_without_keychain(tmp.path());
+        assert_eq!(
+            manager.get().license.tier,
+            "signal",
+            "loaded from the backup"
+        );
+        assert!(manager.save().is_err(), "save must refuse this session");
+
+        assert_eq!(
+            std::fs::read(&main).unwrap(),
+            unreadable,
+            "settings.json untouched"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&bak).unwrap(),
+            signal_json(),
+            "settings.json.bak untouched"
+        );
+    }
+
+    #[test]
+    fn decode_rejects_bytes_that_are_not_text() {
+        assert!(decode_settings_bytes(&[0xC3, 0x28]).is_err());
+        assert!(
+            decode_settings_bytes(&[0xFF, 0xFE, 0x00]).is_err(),
+            "odd UTF-16"
+        );
+        assert_eq!(decode_settings_bytes(b"{}").unwrap(), "{}");
     }
 }
 
