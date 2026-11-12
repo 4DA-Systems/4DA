@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use std::io::Write;
-use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 
 use super::*;
@@ -55,15 +54,14 @@ pub(crate) fn archive_for(id: &str, package: &str, ecosystem: &str) -> Vec<u8> {
 struct Served {
     /// `(etag, body)` of every ecosystem's `all.zip`; `None` answers 503.
     archive: parking_lot::Mutex<Option<(String, Vec<u8>)>>,
-    /// Status of the batch API (200 answers an empty result set).
-    api_status: AtomicU16,
-    /// `"GET /npm/all.zip"`, in arrival order.
+    /// Every request, `"GET /npm/all.zip"`, in arrival order.
     requests: parking_lot::Mutex<Vec<String>>,
 }
 
-/// A local stand-in for OSV: the batch API at `/v1/querybatch` and the
-/// archive bucket at `/{ecosystem}/all.zip`. The real HTTP code runs against
-/// it; nothing leaves the machine.
+/// A local stand-in for OSV's archive bucket at `/{ecosystem}/all.zip`. Any
+/// other request (an API call) is recorded and refused, so a test can prove a
+/// pass asked for nothing else. The real HTTP code runs against it; nothing
+/// leaves the machine.
 pub(crate) struct FakeOsv {
     pub(crate) url: String,
     served: Arc<Served>,
@@ -96,21 +94,22 @@ impl FakeOsv {
                 None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
             }
         }
-        async fn batch(State(served): State<Arc<Served>>) -> axum::response::Response {
+        async fn anything_else(
+            State(served): State<Arc<Served>>,
+            method: Method,
+            uri: Uri,
+        ) -> axum::response::Response {
             served
                 .requests
                 .lock()
-                .push("POST /v1/querybatch".to_string());
-            let status = StatusCode::from_u16(served.api_status.load(Ordering::SeqCst))
-                .unwrap_or(StatusCode::OK);
-            (status, axum::Json(serde_json::json!({ "results": [] }))).into_response()
+                .push(format!("{method} {}", uri.path()));
+            StatusCode::NOT_FOUND.into_response()
         }
 
         let served = Arc::new(Served::default());
-        served.api_status.store(200, Ordering::SeqCst);
         let app = axum::Router::new()
-            .route("/v1/querybatch", axum::routing::post(batch))
             .route("/{ecosystem}/all.zip", axum::routing::get(archive))
+            .fallback(anything_else)
             .with_state(served.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -132,8 +131,9 @@ impl FakeOsv {
         *self.served.archive.lock() = None;
     }
 
-    pub(crate) fn api_status(&self, status: u16) {
-        self.served.api_status.store(status, Ordering::SeqCst);
+    /// Every request that arrived, as `"METHOD /path"`, in arrival order.
+    pub(crate) fn requests(&self) -> Vec<String> {
+        self.served.requests.lock().clone()
     }
 
     /// How many requests arrived whose line starts with `prefix`.

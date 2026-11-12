@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! One ecosystem's pass against a local stand-in for OSV (the batch API and
-//! the archive bucket), through the code that ships: what is matched, and
-//! what the sync status is allowed to say afterwards.
+//! One ecosystem's pass against a local stand-in for OSV's archive bucket,
+//! through the code that ships: what is matched, what is requested, and what
+//! the sync status is allowed to say afterwards.
 
 use std::path::Path;
 
 use super::*;
 use crate::osv::cache::tests::{archive_for, seed_archive, DeadHost, FakeOsv};
 use crate::osv::readiness::{advisory_sync, AdvisorySyncState};
-use crate::osv::sync::{needs_sync, DEFAULT_SYNC_MAX_AGE_HOURS, RATE_LIMITED};
+use crate::osv::sync::{needs_sync, DEFAULT_SYNC_MAX_AGE_HOURS};
 use crate::osv::types::SyncStatus;
 
 /// When the archive seeded on disk was downloaded, and that time as the
@@ -18,18 +18,8 @@ const DOWNLOADED_AT: &str = "2026-11-09 03:00:00";
 /// A verified sync after that download (its ETag was confirmed).
 const VERIFIED_AT: &str = "2026-11-09 04:00:00";
 
-fn endpoints(api: &str, bucket: &str, dir: &Path) -> SyncEndpoints {
-    SyncEndpoints {
-        batch_url: format!("{api}/v1/querybatch"),
-        mirror: Mirror::at(bucket, dir),
-    }
-}
-
-fn client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("client")
+fn mirror(bucket: &str, dir: &Path) -> Mirror {
+    Mirror::at(bucket, dir)
 }
 
 /// A database whose inventory is one npm package, `lodash`.
@@ -81,18 +71,18 @@ fn empty_result() -> SyncResult {
 /// Run npm's pass for `packages` and record it, as `sync` does.
 async fn pass_for(
     db: &Database,
-    endpoints: &SyncEndpoints,
+    mirror: &Mirror,
     packages: &[&str],
 ) -> (EcosystemOutcome, SyncResult) {
     let packages: Vec<String> = packages.iter().map(|p| (*p).to_string()).collect();
-    let outcome = sync_one_ecosystem(&client(), db, endpoints, "npm", &packages).await;
+    let outcome = sync_one_ecosystem(db, mirror, "npm", &packages).await;
     let mut result = empty_result();
     record_outcome(db, "npm", outcome.clone(), &mut result);
     (outcome, result)
 }
 
-async fn pass(db: &Database, endpoints: &SyncEndpoints) -> (EcosystemOutcome, SyncResult) {
-    pass_for(db, endpoints, &["lodash"]).await
+async fn pass(db: &Database, mirror: &Mirror) -> (EcosystemOutcome, SyncResult) {
+    pass_for(db, mirror, &["lodash"]).await
 }
 
 fn stamped_now(status: &SyncStatus) -> bool {
@@ -119,9 +109,9 @@ fn stamped_now(status: &SyncStatus) -> bool {
 async fn offline_with_a_cached_archive_matches_it_but_is_not_a_fresh_sync() {
     let offline = DeadHost::start().await;
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&offline.url, &offline.url, dir.path());
+    let archive_store = mirror(&offline.url, dir.path());
     seed_archive(
-        &endpoints.mirror,
+        &archive_store,
         "npm",
         "\"v1\"",
         DOWNLOADED,
@@ -130,7 +120,7 @@ async fn offline_with_a_cached_archive_matches_it_but_is_not_a_fresh_sync() {
     let db = db_with_lodash();
     verified_before(&db);
 
-    let (outcome, result) = pass(&db, &endpoints).await;
+    let (outcome, result) = pass(&db, &archive_store).await;
 
     assert!(
         matches!(
@@ -183,9 +173,9 @@ async fn offline_with_a_cached_archive_matches_it_but_is_not_a_fresh_sync() {
 async fn a_first_pass_offline_dates_the_data_by_the_archives_download() {
     let offline = DeadHost::start().await;
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&offline.url, &offline.url, dir.path());
+    let archive_store = mirror(&offline.url, dir.path());
     seed_archive(
-        &endpoints.mirror,
+        &archive_store,
         "npm",
         "\"v1\"",
         DOWNLOADED,
@@ -193,7 +183,7 @@ async fn a_first_pass_offline_dates_the_data_by_the_archives_download() {
     );
     let db = db_with_lodash();
 
-    let (outcome, _) = pass(&db, &endpoints).await;
+    let (outcome, _) = pass(&db, &archive_store).await;
 
     match &outcome {
         EcosystemOutcome::Unverified {
@@ -212,17 +202,17 @@ async fn a_first_pass_offline_dates_the_data_by_the_archives_download() {
     assert_eq!(readiness.synced_at.as_deref(), Some(DOWNLOADED_AT));
 }
 
-/// The API answers and the archive host does not (a proxy that blocks
-/// storage.googleapis.com). The advisory data comes from the archive, so an
-/// ETag check that could not run leaves the pass unverified.
+/// The archive host does not answer (a proxy that blocks
+/// storage.googleapis.com) while the rest of the network works. The advisory
+/// data comes from the archive, so an ETag check that could not run leaves
+/// the pass unverified.
 #[tokio::test]
 async fn an_etag_check_that_could_not_run_leaves_the_pass_unverified() {
-    let osv = FakeOsv::start().await;
     let blocked = DeadHost::start().await;
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &blocked.url, dir.path());
+    let archive_store = mirror(&blocked.url, dir.path());
     seed_archive(
-        &endpoints.mirror,
+        &archive_store,
         "npm",
         "\"v1\"",
         DOWNLOADED,
@@ -231,9 +221,8 @@ async fn an_etag_check_that_could_not_run_leaves_the_pass_unverified() {
     let db = db_with_lodash();
     verified_before(&db);
 
-    let (outcome, result) = pass(&db, &endpoints).await;
+    let (outcome, result) = pass(&db, &archive_store).await;
 
-    assert_eq!(osv.count("POST /v1/querybatch"), 1, "the API was asked");
     match &outcome {
         EcosystemOutcome::Unverified { reason, .. } => {
             assert!(reason.contains("HEAD request failed"), "{reason}");
@@ -253,10 +242,10 @@ async fn an_etag_check_that_could_not_run_leaves_the_pass_unverified() {
 async fn a_first_run_with_no_archive_and_no_network_fails_with_no_time() {
     let offline = DeadHost::start().await;
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&offline.url, &offline.url, dir.path());
+    let archive_store = mirror(&offline.url, dir.path());
     let db = db_with_lodash();
 
-    let (outcome, result) = pass(&db, &endpoints).await;
+    let (outcome, result) = pass(&db, &archive_store).await;
 
     assert!(
         matches!(outcome, EcosystemOutcome::Failed { .. }),
@@ -273,9 +262,38 @@ async fn a_first_run_with_no_archive_and_no_network_fails_with_no_time() {
     assert_eq!(readiness.state, AdvisorySyncState::Failed);
     assert_eq!(readiness.synced_at, None);
     assert!(
-        !endpoints.mirror.zip_path("npm").exists(),
+        !archive_store.zip_path("npm").exists(),
         "a failed download leaves no archive behind"
     );
+}
+
+// --- Nothing about the user's dependencies leaves the machine ---------------
+
+/// P2 (audit 2026-11-11): the pass used to POST every dependency name to
+/// `api.osv.dev/v1/querybatch` before reading the archive, and that call
+/// stored nothing in 56 of 56 logged runs. The archive does all the
+/// matching, so the only requests a pass makes are for the public archive:
+/// the same bytes for every install, carrying no package name.
+#[tokio::test]
+async fn a_pass_requests_only_the_public_archive() {
+    let osv = FakeOsv::start().await;
+    osv.publish("\"v1\"", archive_for("GHSA-current", "lodash", "npm"));
+    let dir = tempfile::tempdir().expect("tempdir");
+    let archive_store = mirror(&osv.url, dir.path());
+    let db = db_with_lodash();
+
+    let (outcome, _) = pass(&db, &archive_store).await;
+
+    assert_eq!(outcome, EcosystemOutcome::Verified { stored: 1 });
+    assert_eq!(lodash_advisories(&db), ["GHSA-current"]);
+    let requests = osv.requests();
+    assert!(!requests.is_empty(), "the archive was fetched");
+    for request in &requests {
+        assert!(
+            request == "HEAD /npm/all.zip" || request == "GET /npm/all.zip",
+            "only the public archive may be requested, got {requests:?}"
+        );
+    }
 }
 
 // --- What still counts as verified -----------------------------------------
@@ -286,12 +304,12 @@ async fn a_confirmed_etag_is_a_verified_sync_without_a_download() {
     let archive = archive_for("GHSA-current", "lodash", "npm");
     osv.publish("\"v1\"", archive.clone());
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &osv.url, dir.path());
-    seed_archive(&endpoints.mirror, "npm", "\"v1\"", DOWNLOADED, &archive);
+    let archive_store = mirror(&osv.url, dir.path());
+    seed_archive(&archive_store, "npm", "\"v1\"", DOWNLOADED, &archive);
     let db = db_with_lodash();
     verified_before(&db);
 
-    let (outcome, result) = pass(&db, &endpoints).await;
+    let (outcome, result) = pass(&db, &archive_store).await;
 
     assert_eq!(outcome, EcosystemOutcome::Verified { stored: 1 });
     assert_eq!(osv.count("HEAD /npm/all.zip"), 1);
@@ -310,9 +328,9 @@ async fn a_newer_archive_is_downloaded_and_the_pass_is_verified() {
     let newer = archive_for("GHSA-newer", "lodash", "npm");
     osv.publish("\"v2\"", newer.clone());
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &osv.url, dir.path());
+    let archive_store = mirror(&osv.url, dir.path());
     seed_archive(
-        &endpoints.mirror,
+        &archive_store,
         "npm",
         "\"v1\"",
         DOWNLOADED,
@@ -321,12 +339,12 @@ async fn a_newer_archive_is_downloaded_and_the_pass_is_verified() {
     let db = db_with_lodash();
     verified_before(&db);
 
-    let (outcome, _) = pass(&db, &endpoints).await;
+    let (outcome, _) = pass(&db, &archive_store).await;
 
     assert_eq!(outcome, EcosystemOutcome::Verified { stored: 1 });
     assert_eq!(osv.count("GET /npm/all.zip"), 1);
     assert_eq!(
-        std::fs::read(endpoints.mirror.zip_path("npm")).expect("read"),
+        std::fs::read(archive_store.zip_path("npm")).expect("read"),
         newer
     );
     assert_eq!(lodash_advisories(&db), ["GHSA-newer"]);
@@ -341,10 +359,10 @@ async fn a_first_run_online_downloads_and_is_verified() {
     let osv = FakeOsv::start().await;
     osv.publish("\"v1\"", archive_for("GHSA-first", "lodash", "npm"));
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &osv.url, dir.path());
+    let archive_store = mirror(&osv.url, dir.path());
     let db = db_with_lodash();
 
-    let (outcome, result) = pass(&db, &endpoints).await;
+    let (outcome, result) = pass(&db, &archive_store).await;
 
     assert_eq!(outcome, EcosystemOutcome::Verified { stored: 1 });
     assert_eq!(result.ecosystems_synced, ["npm"]);
@@ -360,13 +378,13 @@ async fn a_failed_download_keeps_matching_the_old_archive_unverified() {
     let osv = FakeOsv::start().await;
     osv.publish("\"v2\"", b"<html>blocked by policy</html>".to_vec());
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &osv.url, dir.path());
+    let archive_store = mirror(&osv.url, dir.path());
     let older = archive_for("GHSA-older", "lodash", "npm");
-    seed_archive(&endpoints.mirror, "npm", "\"v1\"", DOWNLOADED, &older);
+    seed_archive(&archive_store, "npm", "\"v1\"", DOWNLOADED, &older);
     let db = db_with_lodash();
     verified_before(&db);
 
-    let (outcome, _) = pass(&db, &endpoints).await;
+    let (outcome, _) = pass(&db, &archive_store).await;
 
     match &outcome {
         EcosystemOutcome::Unverified { reason, stored, .. } => {
@@ -376,7 +394,7 @@ async fn a_failed_download_keeps_matching_the_old_archive_unverified() {
         other => panic!("expected unverified, got {other:?}"),
     }
     assert_eq!(
-        std::fs::read(endpoints.mirror.zip_path("npm")).expect("read"),
+        std::fs::read(archive_store.zip_path("npm")).expect("read"),
         older,
         "the good archive is still there"
     );
@@ -384,59 +402,6 @@ async fn a_failed_download_keeps_matching_the_old_archive_unverified() {
     let status = npm_status(&db);
     assert_eq!(status.last_synced_at.as_deref(), Some(VERIFIED_AT));
     assert!(status.error.is_some());
-}
-
-/// The batch API is down and the archive is confirmed current. The API
-/// returns ID stubs that store nothing, so the mirror holds exactly what a
-/// fully successful pass would have stored: verified.
-#[tokio::test]
-async fn an_api_error_with_a_confirmed_archive_is_still_verified() {
-    let osv = FakeOsv::start().await;
-    osv.api_status(503);
-    let archive = archive_for("GHSA-current", "lodash", "npm");
-    osv.publish("\"v1\"", archive.clone());
-    let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &osv.url, dir.path());
-    seed_archive(&endpoints.mirror, "npm", "\"v1\"", DOWNLOADED, &archive);
-    let db = db_with_lodash();
-
-    let (outcome, result) = pass(&db, &endpoints).await;
-
-    assert_eq!(outcome, EcosystemOutcome::Verified { stored: 1 });
-    assert!(result.errors.is_empty());
-    assert_eq!(npm_status(&db).error, None);
-}
-
-/// A rate limit is not routed around through the cache: the pass fails, and
-/// the last verified time stays where it was.
-#[tokio::test]
-async fn a_rate_limited_api_fails_the_pass_and_keeps_the_verified_time() {
-    let osv = FakeOsv::start().await;
-    osv.api_status(429);
-    let archive = archive_for("GHSA-current", "lodash", "npm");
-    osv.publish("\"v1\"", archive.clone());
-    let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &osv.url, dir.path());
-    seed_archive(&endpoints.mirror, "npm", "\"v1\"", DOWNLOADED, &archive);
-    let db = db_with_lodash();
-    verified_before(&db);
-
-    let (outcome, result) = pass(&db, &endpoints).await;
-
-    match &outcome {
-        EcosystemOutcome::Failed { error } => assert_eq!(error, RATE_LIMITED),
-        other => panic!("expected failed, got {other:?}"),
-    }
-    assert_eq!(
-        osv.count("HEAD /npm/all.zip"),
-        0,
-        "the archive is not consulted"
-    );
-    let status = npm_status(&db);
-    assert_eq!(status.last_synced_at.as_deref(), Some(VERIFIED_AT));
-    assert_eq!(status.advisory_count, 1, "the stored count stays");
-    assert_eq!(status.error.as_deref(), Some(RATE_LIMITED));
-    assert_eq!(result.errors.len(), 1);
 }
 
 // --- Retrying an unverified pass is cheap ---------------------------------
@@ -448,7 +413,7 @@ async fn a_rate_limited_api_fails_the_pass_and_keeps_the_verified_time() {
 async fn an_unverified_retry_does_not_reread_an_archive_already_in_the_mirror() {
     let offline = DeadHost::start().await;
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&offline.url, &offline.url, dir.path());
+    let archive_store = mirror(&offline.url, dir.path());
     let both = crate::osv::cache::tests::make_test_zip(&[
         (
             "GHSA-lodash.json",
@@ -459,16 +424,16 @@ async fn an_unverified_retry_does_not_reread_an_archive_already_in_the_mirror() 
             &crate::osv::cache::tests::make_vuln_json("GHSA-express", "express", "npm"),
         ),
     ]);
-    seed_archive(&endpoints.mirror, "npm", "\"v1\"", DOWNLOADED, &both);
+    seed_archive(&archive_store, "npm", "\"v1\"", DOWNLOADED, &both);
     let db = db_with_lodash();
     let stored = |outcome: &EcosystemOutcome| match outcome {
         EcosystemOutcome::Unverified { stored, .. } => *stored,
         other => panic!("expected unverified, got {other:?}"),
     };
 
-    let (first, _) = pass(&db, &endpoints).await;
+    let (first, _) = pass(&db, &archive_store).await;
     assert_eq!(stored(&first), Some(1), "the first pass reads the archive");
-    let (retry, result) = pass(&db, &endpoints).await;
+    let (retry, result) = pass(&db, &archive_store).await;
     assert_eq!(stored(&retry), None, "the retry has nothing new to read");
     assert_eq!(result.advisories_stored, 0);
     assert_eq!(result.errors.len(), 1, "and is still not a sync");
@@ -476,25 +441,25 @@ async fn an_unverified_retry_does_not_reread_an_archive_already_in_the_mirror() 
     assert_eq!(npm_status(&db).advisory_count, 1, "the count stays");
 
     // A package the mirror has not been read for: read again.
-    let (wider, _) = pass_for(&db, &endpoints, &["lodash", "express"]).await;
+    let (wider, _) = pass_for(&db, &archive_store, &["lodash", "express"]).await;
     assert_eq!(stored(&wider), Some(2));
-    let (wider_retry, _) = pass_for(&db, &endpoints, &["express", "lodash"]).await;
+    let (wider_retry, _) = pass_for(&db, &archive_store, &["express", "lodash"]).await;
     assert_eq!(stored(&wider_retry), None, "package order does not matter");
 
     // Rows were deleted (a prune, a withdrawn cleanup): read again.
     forget_ingested_archives(&db);
-    let (after_delete, _) = pass_for(&db, &endpoints, &["lodash", "express"]).await;
+    let (after_delete, _) = pass_for(&db, &archive_store, &["lodash", "express"]).await;
     assert_eq!(stored(&after_delete), Some(2));
 
     // A different archive file on disk: read again.
     seed_archive(
-        &endpoints.mirror,
+        &archive_store,
         "npm",
         "\"v1\"",
         DOWNLOADED,
         &archive_for("GHSA-other", "lodash", "npm"),
     );
-    let (replaced, _) = pass_for(&db, &endpoints, &["lodash", "express"]).await;
+    let (replaced, _) = pass_for(&db, &archive_store, &["lodash", "express"]).await;
     assert_eq!(stored(&replaced), Some(1));
 }
 
@@ -506,12 +471,12 @@ async fn a_verified_pass_always_reads_the_archive() {
     let archive = archive_for("GHSA-current", "lodash", "npm");
     osv.publish("\"v1\"", archive.clone());
     let dir = tempfile::tempdir().expect("tempdir");
-    let endpoints = endpoints(&osv.url, &osv.url, dir.path());
-    seed_archive(&endpoints.mirror, "npm", "\"v1\"", DOWNLOADED, &archive);
+    let archive_store = mirror(&osv.url, dir.path());
+    seed_archive(&archive_store, "npm", "\"v1\"", DOWNLOADED, &archive);
     let db = db_with_lodash();
 
-    let (first, _) = pass(&db, &endpoints).await;
-    let (second, _) = pass(&db, &endpoints).await;
+    let (first, _) = pass(&db, &archive_store).await;
+    let (second, _) = pass(&db, &archive_store).await;
     assert_eq!(first, EcosystemOutcome::Verified { stored: 1 });
     assert_eq!(second, EcosystemOutcome::Verified { stored: 1 });
 }
@@ -524,15 +489,15 @@ async fn going_offline_after_a_verified_pass_does_not_reread_its_archive() {
     let archive = archive_for("GHSA-current", "lodash", "npm");
     osv.publish("\"v1\"", archive.clone());
     let dir = tempfile::tempdir().expect("tempdir");
-    let online = endpoints(&osv.url, &osv.url, dir.path());
-    seed_archive(&online.mirror, "npm", "\"v1\"", DOWNLOADED, &archive);
+    let online = mirror(&osv.url, dir.path());
+    seed_archive(&online, "npm", "\"v1\"", DOWNLOADED, &archive);
     let db = db_with_lodash();
     let (verified, _) = pass(&db, &online).await;
     assert_eq!(verified, EcosystemOutcome::Verified { stored: 1 });
     let verified_at = npm_status(&db).last_synced_at;
 
     let offline = DeadHost::start().await;
-    let offline = endpoints(&offline.url, &offline.url, dir.path());
+    let offline = mirror(&offline.url, dir.path());
     let (outcome, _) = pass(&db, &offline).await;
 
     assert!(

@@ -4,8 +4,7 @@
 //! A pass ends one of three ways, and only the first is a sync:
 //!
 //! - **Verified**: the advisory data was confirmed current against the
-//!   remote. The API returned full records, the archive's ETag matched, or a
-//!   download completed.
+//!   remote: the archive's ETag matched, or a download completed.
 //! - **Unverified**: the remote could not confirm it, and the pass served
 //!   from the archive already on disk. Its advisories stay matched (dated
 //!   data beats none), but the status keeps the last verified time and
@@ -26,8 +25,6 @@ use crate::db::Database;
 use crate::error::Result;
 use crate::osv::cache::{Freshness, Mirror};
 use crate::osv::types::SyncResult;
-
-use super::SyncEndpoints;
 
 /// How one ecosystem's pass ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,54 +52,15 @@ struct ArchivePass {
     unverified: Option<String>,
 }
 
-/// Run one ecosystem's pass: the batch API first, then the archive mirror.
+/// Run one ecosystem's pass over its archive mirror. `packages` are matched
+/// on this machine; none of them is sent anywhere (audit P2).
 pub(super) async fn sync_one_ecosystem(
-    client: &reqwest::Client,
     db: &Database,
-    endpoints: &SyncEndpoints,
+    mirror: &Mirror,
     ecosystem: &str,
     packages: &[String],
 ) -> EcosystemOutcome {
-    let sync_start = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let api = super::sync_ecosystem(
-        client,
-        db,
-        &endpoints.batch_url,
-        ecosystem,
-        packages,
-        &sync_start,
-    )
-    .await;
-    let api_error = match api {
-        Ok(count) if count > 0 => return EcosystemOutcome::Verified { stored: count },
-        // The batch API stored nothing. `/v1/querybatch` returns vulnerability
-        // ID-stubs without the `affected` ranges `store_vulnerability` needs,
-        // so it can never populate the mirror on its own. The ZIP mirror (full
-        // advisory JSON, matched locally) is what actually fills
-        // `osv_advisories`, and so it is the archive's freshness, not the
-        // API's answer, that says whether the data is current.
-        //
-        // The ZIP path itself sends no package names: it downloads the whole
-        // ecosystem archive and matches locally. That is NOT a privacy property
-        // of OSV sync as a whole — `sync_ecosystem` above already POSTed the
-        // user's package names to the batch API (up to 1000 per request), and
-        // it is attempted first on every cycle. Reaching this point means the
-        // dependency set has already been disclosed to api.osv.dev. Only a
-        // ZIP-only configuration would keep it local.
-        Ok(_) => None,
-        Err(e) => {
-            // Rate limit errors should not fall back to cache
-            if matches!(&e, crate::error::FourDaError::Internal(msg) if msg == super::RATE_LIMITED)
-            {
-                return EcosystemOutcome::Failed {
-                    error: super::RATE_LIMITED.to_string(),
-                };
-            }
-            Some(e.to_string())
-        }
-    };
-
-    match populate_from_zip_mirror(db, &endpoints.mirror, ecosystem, packages).await {
+    match populate_from_zip_mirror(db, mirror, ecosystem, packages).await {
         Ok(ArchivePass {
             stored,
             unverified: None,
@@ -111,7 +69,6 @@ pub(super) async fn sync_one_ecosystem(
                 target: "4da::osv",
                 ecosystem,
                 cached_advisories = stored.unwrap_or(0),
-                api_error = api_error.as_deref().unwrap_or("none"),
                 "Populated from the verified ZIP mirror"
             );
             EcosystemOutcome::Verified {
@@ -126,10 +83,10 @@ pub(super) async fn sync_one_ecosystem(
             reason: format!(
                 "could not check for newer advisories ({cause}); matched against the archive already on disk"
             ),
-            data_as_of: endpoints.mirror.archive_downloaded_at(ecosystem),
+            data_as_of: mirror.archive_downloaded_at(ecosystem),
         },
         Err(e) => EcosystemOutcome::Failed {
-            error: api_error.unwrap_or_else(|| e.to_string()),
+            error: e.to_string(),
         },
     }
 }
@@ -139,13 +96,9 @@ pub(super) async fn sync_one_ecosystem(
 /// a newer advisory set (cheap ETag HEAD check) so routine syncs pick up
 /// newly-disclosed CVEs.
 ///
-/// This exists because the OSV `/v1/querybatch` API returns only vulnerability
-/// ID-stubs (`{id, modified}`) — never the `affected` package ranges that
-/// `store_vulnerability` needs — so the batch path cannot fill the mirror on
-/// its own. The per-ecosystem ZIP carries full advisory JSON and is matched
-/// locally, so it is both the path that actually populates `osv_advisories`
-/// and the more privacy-preserving one (nothing about the user's dependency
-/// set leaves the machine).
+/// The per-ecosystem ZIP carries the full advisory JSON and is matched
+/// locally: it is the only path that fills `osv_advisories`, and nothing
+/// about the user's dependency set leaves the machine.
 async fn populate_from_zip_mirror(
     db: &Database,
     mirror: &Mirror,

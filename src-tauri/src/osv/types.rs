@@ -4,35 +4,12 @@
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
-// OSV API Response Types (for JSON deserialization from batch API)
+// OSV advisory records (one JSON file per advisory in the ecosystem archive)
 // ============================================================================
 
-#[derive(Debug, Serialize)]
-pub(crate) struct BatchRequest {
-    pub queries: Vec<BatchQuery>,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct BatchQuery {
-    pub package: PackageRef,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
-}
-
-// `PackageRef` and `Affected` (one `affected[]` entry, its `versions` list
-// included) live in the pure engine crate, which merges and stores them
-// (single-engine C0.2).
-pub(crate) use fourda_depengine::osv::{Affected, PackageRef};
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct BatchResponse {
-    pub results: Option<Vec<QueryResult>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct QueryResult {
-    pub vulns: Option<Vec<Vulnerability>>,
-}
+// `Affected` (one `affected[]` entry, its `versions` list included) lives in
+// the pure engine crate, which merges and stores it (single-engine C0.2).
+pub(crate) use fourda_depengine::osv::Affected;
 
 #[derive(Debug, Deserialize, Clone)]
 pub(crate) struct Vulnerability {
