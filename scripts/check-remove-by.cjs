@@ -18,6 +18,10 @@
  *   hook's regex) and fails if any marker's date is on or before today. "On or before" matches
  *   .husky/pre-commit, which treats `EXPIRY <= TODAY` as expired.
  *
+ *   It also reads the advisory suppression files (SUPPRESSION_FILES: cargo-deny and cargo-audit
+ *   ignore lists). There every ignore entry must carry `REVISIT BY YYYY-MM-DD` on its line: the
+ *   date is enforced like a REMOVE BY, and an entry without one fails the gate.
+ *
  * ADOPTING THIS INCREMENTALLY
  *   This gate is expected to FAIL on a tree that has accumulated expired markers. That is the point.
  *   To adopt it without stopping the world, add already-ticketed markers to
@@ -53,7 +57,46 @@ const SKIP_DIRS = new Set(['node_modules', 'target', 'dist', 'build', '.git', '_
 const ALLOWLIST_PATH = path.join(__dirname, 'remove-by-allowlist.json');
 
 // Mirrors the marker regex in .husky/pre-commit so the two gates agree on what a marker is.
-const MARKER_RE = /REMOVE BY (\d{4})[-/](\d{2})[-/](\d{2})/g;
+// `REVISIT BY` is the same deadline for a suppression (an advisory ignore): on the date the
+// ignore is re-checked, then dropped or re-dated with the reason re-stated.
+const MARKER_RE = /(?:REMOVE|REVISIT) BY (\d{4})[-/](\d{2})[-/](\d{2})/g;
+
+/*
+ * Advisory suppressions (audit 2026-11-11, Q4). Every ignore in these files must carry a
+ * `REVISIT BY <date>` on its own line, and the date is enforced like any other marker. Before
+ * this, 26 ignores had reasons but no dates ("Last reviewed: 2026-04-07"), so a suppression
+ * outlived its reason silently.
+ */
+const SUPPRESSION_FILES = ['src-tauri/deny.toml', 'src-tauri/.cargo/audit.toml', 'relay/.cargo/audit.toml'];
+
+// An ignore entry: `"RUSTSEC-..."` (cargo-audit) or `{ id = "RUSTSEC-..." ... }` (cargo-deny),
+// not a comment line that merely mentions an id.
+const IGNORE_ENTRY_RE = /^\s*(?:\{\s*id\s*=\s*)?"((?:RUSTSEC|GHSA|CVE)-[\w-]+)"/;
+
+/**
+ * Ignore entries in a suppression file's `ignore = [ ... ]` arrays that carry no dated marker on
+ * their line. Pure, for tests. Returns [{ rel, lineNo, id }].
+ */
+function undatedSuppressions(rel, src) {
+  const out = [];
+  const lines = src.split('\n');
+  let inIgnore = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].replace(/\r$/, '');
+    if (!inIgnore) {
+      if (/^\s*ignore\s*=\s*\[/.test(line)) inIgnore = true;
+      else continue;
+    }
+    if (/^\s*\]/.test(line)) {
+      inIgnore = false;
+      continue;
+    }
+    const m = IGNORE_ENTRY_RE.exec(line);
+    MARKER_RE.lastIndex = 0;
+    if (m && !MARKER_RE.test(line)) out.push({ rel, lineNo: i + 1, id: m[1] });
+  }
+  return out;
+}
 
 /// How many days before a deadline the gate starts saying so, out loud.
 ///
@@ -208,17 +251,42 @@ function scanRepo(root = ROOT, today = resolveToday()) {
     rel: path.relative(root, f).replace(/\\/g, '/'),
     src: fs.readFileSync(f, 'utf8'),
   }));
+  const suppressions = SUPPRESSION_FILES.filter((rel) => fs.existsSync(path.join(root, rel))).map((rel) => ({
+    rel,
+    src: fs.readFileSync(path.join(root, rel), 'utf8'),
+  }));
+  const undated = suppressions.flatMap((s) => undatedSuppressions(s.rel, s.src));
 
-  return { today, filesScanned: files.length, ...analyzeSources(sources, today, allow) };
+  return {
+    today,
+    filesScanned: files.length + suppressions.length,
+    undated,
+    ...analyzeSources([...sources, ...suppressions], today, allow),
+  };
 }
 
 /** CLI entry point. Returns the process exit code. */
 function main(argv) {
   const ciMode = argv.includes('--ci');
   const verbose = argv.includes('--verbose');
-  const { today, filesScanned, expired, dueSoon, upcoming } = scanRepo();
+  const { today, filesScanned, expired, dueSoon, upcoming, undated } = scanRepo();
   const blocking = expired.filter((e) => !e.allowlisted);
   const excused = expired.filter((e) => e.allowlisted);
+
+  // An ignore without a date never expires, which is the defect this check exists for.
+  if (undated.length) {
+    console.error(`\n${undated.length} advisory ignore(s) carry no REVISIT BY date:\n`);
+    for (const u of undated) {
+      console.error(`  ${u.rel}:${u.lineNo}  ${u.id}`);
+      if (ciMode) {
+        console.log(
+          `::error file=${u.rel},line=${u.lineNo}::${u.id} is ignored with no expiry. ` +
+            'Add `# REVISIT BY YYYY-MM-DD` to the entry line.'
+        );
+      }
+    }
+    console.error('');
+  }
 
   console.log(
     `remove-by gate: scanned ${filesScanned} files, ` +
@@ -260,7 +328,7 @@ ${dueSoon.length} REMOVE BY deadline(s) land within ${DUE_SOON_DAYS} days — ` 
     }
   }
 
-  if (!blocking.length) return 0;
+  if (!blocking.length) return undated.length ? 1 : 0;
 
   blocking.sort((a, b) => a.date.localeCompare(b.date) || a.rel.localeCompare(b.rel));
 
@@ -278,6 +346,8 @@ ${dueSoon.length} REMOVE BY deadline(s) land within ${DUE_SOON_DAYS} days — ` 
 
   console.error('\nFix each by ONE of:');
   console.error('  - delete the code the marker is attached to (the intended outcome), OR');
+  console.error('  - for an advisory ignore (REVISIT BY): re-check the advisory; drop the ignore if');
+  console.error('    a fix is reachable, else move the date AND re-state the reason, OR');
   console.error('  - move the date AND say why in the same comment, OR');
   console.error('  - if it is already ticketed, add it to scripts/remove-by-allowlist.json');
   console.error('    ({ "file", "date", "ticket", "note" }) — that list is a paydown ledger');
@@ -288,6 +358,8 @@ ${dueSoon.length} REMOVE BY deadline(s) land within ${DUE_SOON_DAYS} days — ` 
 
 module.exports = {
   analyzeSources,
+  undatedSuppressions,
+  SUPPRESSION_FILES,
   resolveToday,
   collectFiles,
   isSkippedFile,

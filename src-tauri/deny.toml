@@ -8,7 +8,11 @@
 # Run: cargo deny check (from src-tauri/)
 # CI:  cargo deny --all-features check
 #
-# Last reviewed: 2026-04-07
+# Every advisory ignore carries its own `REVISIT BY <date>` (vulnerabilities and
+# unsound reports quarterly, unmaintained-only flags six-monthly).
+# scripts/check-remove-by.cjs (Repo guards, every PR) fails once one passes, and
+# fails an ignore added without a date. On the date: re-check the advisory, drop
+# the ignore if a fix is reachable, else move the date and re-state the reason.
 # ============================================================================
 
 # ----------------------------------------------------------------------------
@@ -89,18 +93,18 @@ ignore = [
     # Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
     # Internal ref: Cargo.toml comment on `rsa` dependency
     # -----------------------------------------------------------------------
-    { id = "RUSTSEC-2023-0071", reason = "rsa 0.9.10 via jsonwebtoken 11.1.0, newest release, no fixed line admitted; direct rsa is on 0.10.0; enterprise-only, signature verification not decryption" },
-    { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" },
+    { id = "RUSTSEC-2023-0071", reason = "rsa 0.9.10 via jsonwebtoken 11.1.0, newest release, no fixed line admitted; direct rsa is on 0.10.0; enterprise-only, signature verification not decryption" }, # REVISIT BY 2027-02-12
+    { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" }, # REVISIT BY 2027-02-12
     # zip <9 extract() advisories: full reachability note in .cargo/audit.toml.
     # 4DA's own code, calamine 0.37 and tauri-plugin-updater 2.14.1 are on zip 9.1.
     # Still needed for the one zip <9 copy left: docx-rs 0.4.22 (zip 8.6).
     # REVISIT: drop when docx-rs moves to zip >=9.
-    { id = "RUSTSEC-2026-0367", reason = "zip <9 extract() SUID bits: docx-rs (zip 8.6) never calls extract()" },
-    { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() symlink escape: docx-rs (zip 8.6) never calls extract()" },
-    { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() permissions via symlink: docx-rs (zip 8.6) never calls extract()" },
-    { id = "RUSTSEC-2026-0429", reason = "zip <9 extract() abort on a large symlink entry: docx-rs (zip 8.6) never calls extract()" },
+    { id = "RUSTSEC-2026-0367", reason = "zip <9 extract() SUID bits: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-12
+    { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() symlink escape: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-12
+    { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() permissions via symlink: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-12
+    { id = "RUSTSEC-2026-0429", reason = "zip <9 extract() abort on a large symlink entry: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-12
     # crypto-bigint 0.5.5 (no fix): full note in .cargo/audit.toml. REVISIT when jsonwebtoken moves to p256 0.14.
-    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing: only via optional enterprise jsonwebtoken, used to verify public ES256/ES384 signatures; 0.7 copy bumped to 0.7.10" },
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing: only via optional enterprise jsonwebtoken, used to verify public ES256/ES384 signatures; 0.7 copy bumped to 0.7.10" }, # REVISIT BY 2027-02-12
 
     # RUSTSEC-2026-0194 / RUSTSEC-2026-0195 (quick-xml <0.41 DoS) were ignored
     # here until 2026-08-14. RESOLVED, not suppressed: calamine 0.36, docx-rs
@@ -114,16 +118,16 @@ ignore = [
     # Windows/macOS; 4DA calls none directly (glib::VariantStrIter unused). Fix =
     # Tauri's GTK4 migration (upstream). Extends the existing atk-0.18 ignore.
     # -----------------------------------------------------------------------
-    { id = "RUSTSEC-2024-0411", reason = "gdkwayland-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0412", reason = "gdk: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0414", reason = "gdkx11-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0415", reason = "gtk: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0416", reason = "atk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0417", reason = "gdkx11: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0418", reason = "gdk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0419", reason = "gtk3-macros: gtk-rs GTK3 unmaintained; build-time only, Linux Tauri stack" },
-    { id = "RUSTSEC-2024-0420", reason = "gtk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
-    { id = "RUSTSEC-2024-0429", reason = "glib unsound VariantStrIter; Linux Tauri stack, iterator never used by 4DA" },
+    { id = "RUSTSEC-2024-0411", reason = "gdkwayland-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0412", reason = "gdk: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0414", reason = "gdkx11-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0415", reason = "gtk: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0416", reason = "atk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0417", reason = "gdkx11: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0418", reason = "gdk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0419", reason = "gtk3-macros: gtk-rs GTK3 unmaintained; build-time only, Linux Tauri stack" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0420", reason = "gtk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0429", reason = "glib unsound VariantStrIter; Linux Tauri stack, iterator never used by 4DA" }, # REVISIT BY 2027-02-12
 
     # -----------------------------------------------------------------------
     # unic-* Unicode crates unmaintained — BUILD-TIME transitive only
@@ -131,25 +135,25 @@ ignore = [
     # shipped runtime; pure Unicode table lookups; no vulnerability, only a
     # maintenance flag. No maintained drop-in yet.
     # -----------------------------------------------------------------------
-    { id = "RUSTSEC-2025-0075", reason = "unic-char-range unmaintained; build-time transitive via tauri-build, no runtime surface" },
-    { id = "RUSTSEC-2025-0080", reason = "unic-common unmaintained; build-time transitive via tauri-build, no runtime surface" },
-    { id = "RUSTSEC-2025-0081", reason = "unic-char-property unmaintained; build-time transitive via tauri-build, no runtime surface" },
-    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version unmaintained; build-time transitive via tauri-build, no runtime surface" },
-    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident unmaintained; build-time transitive via tauri-build, no runtime surface" },
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range unmaintained; build-time transitive via tauri-build, no runtime surface" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2025-0080", reason = "unic-common unmaintained; build-time transitive via tauri-build, no runtime surface" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property unmaintained; build-time transitive via tauri-build, no runtime surface" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version unmaintained; build-time transitive via tauri-build, no runtime surface" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident unmaintained; build-time transitive via tauri-build, no runtime surface" }, # REVISIT BY 2027-05-12
 
     # -----------------------------------------------------------------------
     # proc-macro build-time unmaintained — compile-time expansion only, zero
     # runtime/attack surface in the shipped app.
     # -----------------------------------------------------------------------
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error unmaintained; compile-time proc-macro only, no runtime surface" },
-    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained; compile-time proc-macro only, no runtime surface" },
-    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 unmaintained; compile-time proc-macro only, no runtime surface" },
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error unmaintained; compile-time proc-macro only, no runtime surface" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained; compile-time proc-macro only, no runtime surface" }, # REVISIT BY 2027-05-12
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 unmaintained; compile-time proc-macro only, no runtime surface" }, # REVISIT BY 2027-05-12
 
     # -----------------------------------------------------------------------
     # ttf-parser unmaintained — transitive font parser; only surface is local
     # font/glyph handling (render/OCR), no network input; maintenance flag only.
     # -----------------------------------------------------------------------
-    { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained; local font/glyph parsing only, no network input" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained; local font/glyph parsing only, no network input" }, # REVISIT BY 2027-05-12
 ]
 
 # ============================================================================

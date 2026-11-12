@@ -425,14 +425,65 @@ export function parseColdStart(logText, source = 'log') {
 }
 
 // --- G7 / G8 / G9 -----------------------------------------------------------
-export function evaluateG7() {
-  return gate(
-    'G7',
-    'G7 agent eval',
-    'pass',
-    'measured 2026-10-12: 0/138 vulnerable-version picks on the @4da/mcp-server 6.2.0 release build (control 57.2%, 6.1.0 29.7%, p=3.6e-31); 138/138 completed',
-    ['.claude/plans/PENDING-DECISION.md (6.2.0 publish decision, G7 line)'],
-  );
+/**
+ * G7's bar, as pre-registered in the MCP repo (bench/g7/PREREGISTRATION.txt):
+ * the treatment arm's vulnerable-selection rate over well-posed tasks is below
+ * the control arm's, and two-sided Fisher p < 0.05.
+ */
+export const G7_BAR = { fisherTwoSided: 0.05 };
+
+/**
+ * The @4da/mcp-server version a G7 summary measured: an explicit
+ * `server_version`/`version` field when the scorer writes one, else the label
+ * in the file name. The published runs are labelled `final-<digits>` with a
+ * one-digit major and minor (`final-627` = 6.2.7, `final-6210` = 6.2.10).
+ */
+export function g7Version(file, summary) {
+  const explicit = summary?.server_version ?? summary?.version;
+  if (typeof explicit === 'string' && /^\d+\.\d+\.\d+/.test(explicit)) return explicit;
+  const m = /summary-final-(\d)(\d)(\d+)\.json$/.exec(file || '');
+  return m ? `${m[1]}.${m[2]}.${m[3]}` : null;
+}
+
+const semverParts = (v) => v.split(/[.+-]/).slice(0, 3).map(Number);
+const semverCmp = (a, b) => {
+  const [x, y] = [semverParts(a), semverParts(b)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+};
+
+/**
+ * G7 agent eval, read from the results the MCP repo publishes
+ * (bench/g7/results/summary-final-*.json).
+ * results: [{file, version, summary}] or {error}; published: {version} or {error}
+ * (the npm `latest` of @4da/mcp-server).
+ * pass: the published version was measured and its primary endpoint meets the bar.
+ * fail: the published version was never measured (a newer release ships unmeasured),
+ *       or its measurement misses the bar.
+ */
+export function evaluateG7({ results, published } = {}) {
+  const name = 'G7 agent eval';
+  const evidence = ['4da-mcp-server bench/g7/results/summary-final-*.json', 'npm: @4da/mcp-server latest'];
+  if (!Array.isArray(results))
+    return gate('G7', name, 'pending', `G7 results not read (${results?.error || 'MCP repo not found'})`, evidence);
+  const measured = results.filter((r) => r.version).sort((a, b) => semverCmp(a.version, b.version));
+  if (!measured.length) return gate('G7', name, 'pending', 'no G7 result names the version it measured', evidence);
+  const latest = measured.at(-1).version;
+  if (!published?.version)
+    return gate('G7', name, 'pending', `published @4da/mcp-server version not read (${published?.error || 'npm unavailable'}); latest measured ${latest}`, evidence);
+  const pub = published.version;
+  const r = measured.find((x) => x.version === pub);
+  if (!r)
+    return gate('G7', name, 'fail', `@4da/mcp-server ${pub} is published but G7 never measured it (measured: ${measured.map((x) => x.version).join(', ')}); run bench/g7 on ${pub}`, evidence);
+  const p = r.summary?.primary_vulnerable_wellposed;
+  const c = p?.control;
+  const t = p?.treatment;
+  const fisher = p?.fisher?.two;
+  if (!c || !t || !Number.isFinite(fisher) || !Number.isFinite(c.rate) || !Number.isFinite(t.rate))
+    return gate('G7', name, 'pending', `${r.file}: primary endpoint unreadable`, evidence);
+  const text = `measured on ${pub} (the published version): vulnerable picks on well-posed tasks ${t.k}/${t.n} with the server vs ${c.k}/${c.n} without, Fisher two-sided p=${fisher.toPrecision(2)} (bar: lower rate, p < ${G7_BAR.fisherTwoSided})`;
+  const meets = t.rate < c.rate && fisher < G7_BAR.fisherTwoSided && r.summary.g7_pass !== false;
+  return gate('G7', name, meets ? 'pass' : 'fail', meets ? text : `${text}: misses the bar`, [...evidence, r.file]);
 }
 
 export function evaluateG8({ signingConfigured }) {
@@ -446,27 +497,50 @@ export function evaluateG8({ signingConfigured }) {
 }
 
 export const G9_DAYS = 7;
+/** A passed window speaks for the build for this long after it ends; then it is re-run. */
+export const G9_VALID_DAYS = 14;
+
+/** Whether two git object names refer to the same commit (either may be abbreviated). */
+const sameCommit = (a, b) => {
+  const [x, y] = [String(a || '').toLowerCase(), String(b || '').toLowerCase()];
+  return x.length >= 7 && y.length >= 7 && (x.startsWith(y) || y.startsWith(x));
+};
 
 /**
  * Doctrine rule 10: seven consecutive days of founder use on the build, with zero
  * "this isn't right" issues filed (GitHub label `dogfood-defect`).
  * dogfood: scripts/launch-gates-dogfood.json ({label, windows: [{started, activated_at, build}]});
  * the last window is current. issues: [{number, title, state, createdAt}] carrying the
- * label, or {error}. now: epoch ms.
- * pass: 7 x 24 h since activation and no issue filed inside the window.
- * fail: an issue filed inside the window (a fixed build starts a new window).
+ * label, or {error}. build: the build under test now, {sha, behind?} (behind = commits from
+ * the window's build to it) or {error}. now: epoch ms.
+ * pass: the window is on the current build, ran 7 x 24 h with no issue filed inside it,
+ *       and ended less than G9_VALID_DAYS ago.
+ * fail: an issue filed inside the window (a fixed build starts a new window); the window is
+ *       on another build than the current one; or it expired.
  */
-export function evaluateG9({ dogfood, issues, now = Date.now() }) {
+export function evaluateG9({ dogfood, issues, build, now = Date.now() }) {
   const name = 'G9 7-day dogfood';
   const w = dogfood?.windows?.at(-1);
   const label = dogfood?.label || 'dogfood-defect';
-  const evidence = ['scripts/launch-gates-dogfood.json', `GitHub issues labelled ${label}`];
+  const evidence = ['scripts/launch-gates-dogfood.json', `GitHub issues labelled ${label}`, 'git HEAD of the app checkout'];
   if (!w) return gate('G9', name, 'pending', 'no dogfood window recorded (scripts/launch-gates-dogfood.json)', evidence);
   const start = Date.parse(w.activated_at || `${w.started}T00:00:00Z`);
   if (!Number.isFinite(start)) return gate('G9', name, 'pending', `dogfood window start unreadable (${w.activated_at || w.started})`, evidence);
   const end = start + G9_DAYS * 86400000;
   const days = Math.max(0, Math.floor((now - start) / 86400000));
   const head = `window ${w.started} on build ${w.build || '?'}${w.branch ? ` (${w.branch})` : ''}: day ${Math.min(days, G9_DAYS)}/${G9_DAYS}, ends ${new Date(end).toISOString().slice(0, 16)}Z`;
+  // A window on another build says nothing about the one that would ship. Read
+  // first: the 322edca52 window "passed" 112 commits later because nothing
+  // compared it with the build in use.
+  if (!build?.sha)
+    return gate('G9', name, 'pending', `${head}; the current build is not known (${build?.error || 'git unavailable'}), so the window cannot be matched to it`, evidence);
+  if (!sameCommit(w.build, build.sha)) {
+    const behind = Number.isFinite(build.behind) ? `, ${build.behind} commits behind` : '';
+    return gate('G9', name, 'fail', `${head}; the window's build is not the current build ${String(build.sha).slice(0, 9)}${behind}: start a new window on it`, evidence);
+  }
+  const expires = end + G9_VALID_DAYS * 86400000;
+  if (now >= expires)
+    return gate('G9', name, 'fail', `${head}; expired ${new Date(expires).toISOString().slice(0, 10)} (a window stands for ${G9_VALID_DAYS} days after it ends): start a new window`, evidence);
   if (!Array.isArray(issues))
     return gate('G9', name, 'pending', `${head}; ${label} issues not read (${issues?.error || 'gh unavailable'})`, evidence);
   const filed = issues.filter((i) => {

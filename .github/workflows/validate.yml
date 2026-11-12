@@ -79,6 +79,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       contract: ${{ steps.filter.outputs.contract }}
       relay: ${{ steps.filter.outputs.relay }}
+      enginee2e: ${{ steps.filter.outputs.enginee2e }}
       workflows: ${{ steps.filter.outputs.workflows }}
       uncovered: ${{ steps.uncovered.outputs.uncovered }}
     steps:
@@ -182,6 +183,10 @@ jobs:
               # regenerated in the same PR as any migration that changes the
               # schema; app_schema_contract_tests fails until it is.
               - 'src-tauri/contract/**'
+            enginee2e:
+              # The engine end-to-end gate's harness (its config, goldens and the
+              # engine itself are under src-tauri/, which the rust filter claims).
+              - 'scripts/ci/engine-e2e*'
             relay:
               # relay/ carried its own .github/workflows/ci.yml, nested where
               # GitHub never looks — only the repository root is read — so the
@@ -1444,6 +1449,92 @@ jobs:
           cargo test --lib --features calibrated-sim scoring::
 
   # ─────────────────────────────────────────────────────────────────────
+  # Engine end-to-end gate (audit 2026-11-11, Q1). Until this job nothing in
+  # CI ran the product: the engine cycle (headless.rs) had no test, the live-app
+  # suite was ignored, and release.yml never executes what it builds.
+  #
+  # Builds the real `fourda-engine` (debug, plus the test-only `e2e-osv-mirror`
+  # feature, src-tauri/src/e2e_gate.rs) and runs it three times over eight
+  # conformance cases (pnpm, yarn berry, bun, npm, Cargo, uv, poetry, Go)
+  # against a frozen OSV mirror served from 127.0.0.1, with every proxy pointed
+  # at a closed port: fresh profile, then one lockfile changed, then the mirror
+  # gone. Asserts on the resulting database: inventory per case == the corpus
+  # truth, every truth finding's advisory stored, the coverage record and the
+  # plan snapshot == goldens, every ecosystem verified online and "could not
+  # check" offline with its verified time kept, plus wall-time and peak-memory
+  # budgets. Config, goldens and how to update them: src-tauri/tests/e2e-engine/.
+  #
+  # Runs on PRs that touch Rust or the harness (in parallel with the Rust legs)
+  # and on every queue entry, dispatch and schedule. It reads the default Rust
+  # leg's cache (the dependencies are the same build; only the fourda crate
+  # recompiles for the extra feature) and never writes one.
+  # ─────────────────────────────────────────────────────────────────────
+  engine-e2e:
+    name: Engine end-to-end
+    needs: changes
+    # See the `!cancelled()` note on the frontend job.
+    if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.enginee2e == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Install Linux system dependencies (tauri / webkit, Xvfb)
+        working-directory: .
+        # The engine builds a windowless Tauri app, which still initialises GTK, so it
+        # needs a display: Xvfb provides one.
+        run: APT_NO_RECOMMENDS=1 bash scripts/ci/apt-install.sh libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev xvfb xauth
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+          # Read the `Rust (default)` leg's entry, never write one (see rust-calibration).
+          shared-key: default-rust
+          save-if: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
+        with:
+          node-version: '22'
+
+      - name: Fetch OCR bundle resources (build dependency)
+        working-directory: .
+        run: node scripts/fetch-ocr-models.cjs
+
+      - name: Build fourda-engine (debug, e2e-osv-mirror)
+        run: cargo build --locked --bin fourda-engine --features e2e-osv-mirror
+
+      - name: Engine end-to-end (3 runs, frozen mirror, network blocked)
+        working-directory: .
+        env:
+          WORK: /home/runner/fourda-engine-e2e
+        run: |
+          set -o pipefail
+          xvfb-run -a node scripts/ci/engine-e2e.mjs --engine src-tauri/target/debug/fourda-engine --work "$WORK"
+
+      - name: Upload engine logs and database
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: engine-e2e
+          path: |
+            /home/runner/fourda-engine-e2e/*.log
+            /home/runner/fourda-engine-e2e/report.json
+            /home/runner/fourda-engine-e2e/actual-*.json
+            /home/runner/fourda-engine-e2e/data/logs/
+            /home/runner/fourda-engine-e2e/data/4da.db*
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────
   # Rust tests on WINDOWS, in the merge queue.
   #
   # Windows is the main install target, yet until this job every Rust leg of
@@ -1684,7 +1775,7 @@ jobs:
     # workflow_dispatch/schedule (skipped == pass below).
     # `rust-windows` runs on every non-PR event (merge queue included);
     # `rust-macos` only on schedule/dispatch, so it skips (== pass) elsewhere.
-    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, depengine, rust, rust-calibration, rust-windows, rust-macos]
+    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, depengine, rust, rust-calibration, engine-e2e, rust-windows, rust-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

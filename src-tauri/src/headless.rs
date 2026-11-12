@@ -383,8 +383,15 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
 
     // Step 1 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
     info!(target: "4da::headless", "Cycle step 1/3: fetching sources...");
-    match crate::source_fetching::fill_cache_background(handle).await {
-        Ok(summary) => {
+    let fetched = if crate::e2e_gate::skip_feed_fetch() {
+        info!(target: "4da::headless", "Feed fetch skipped (engine end-to-end gate build)");
+        None
+    } else {
+        Some(crate::source_fetching::fill_cache_background(handle).await)
+    };
+    match fetched {
+        None => {}
+        Some(Ok(summary)) => {
             receipt.sources_succeeded = summary.succeeded;
             receipt.sources_failed = summary.failed;
             receipt.sources_skipped = summary.skipped_disabled;
@@ -398,7 +405,7 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
                 "Fetch complete"
             );
         }
-        Err(e) => {
+        Some(Err(e)) => {
             warn!(target: "4da::headless", error = %e, "Fetch failed — scoring existing cache anyway");
         }
     }
