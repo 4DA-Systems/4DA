@@ -37,7 +37,7 @@ futures = "0.3"
 # HTTP client. Roots: the OS trust store (`rustls-tls-native-roots`, so a
 # corporate TLS-inspection CA works) plus the bundled Mozilla set (`rustls-tls`);
 # `http_client::outbound_builder` turns both on for every outbound client.
-reqwest ={ version = "0.12", default-features = false, features = ["json", "stream", "blocking", "rustls-tls", "rustls-tls-native-roots", "charset", "http2", "macos-system-configuration"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "blocking", "rustls-tls", "rustls-tls-native-roots", "charset", "http2", "macos-system-configuration"] }
 
 # Signal Terminal HTTP server
 axum = { version = "0.8", features = ["tokio"] }
