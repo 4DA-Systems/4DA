@@ -62,7 +62,20 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
             })
             .unwrap_or((0, 0, 0));
 
+    // What the header's freshness line states (audit 2026-11-11): the last
+    // cycle that actually fetched, and where the advisory check stands —
+    // the same readiness Preemption and Signal read. An unreadable database
+    // reads as "never", never as fresh.
+    let last_cycle_at = crate::open_db_connection()
+        .ok()
+        .and_then(|conn| crate::engine_runs::last_successful_cycle_at(&conn));
+    let advisory_sync = crate::get_database()
+        .ok()
+        .map(|db| crate::osv::readiness::advisory_sync(db));
+
     Ok(serde_json::json!({
+        "last_cycle_at": last_cycle_at,
+        "advisory_sync": advisory_sync,
         "enabled": state.is_enabled(),
         "interval_secs": state.get_interval(),
         "interval_mins": state.get_interval() / 60,

@@ -4,7 +4,6 @@
   "app.skipToContent": "Перейти к основному содержимому",
   "app.viewChanged": "Переход к {{view}}",
   "header.settings": "Настройки",
-  "header.live": "В реальном времени",
   "header.signalsLearned": "{{count}} изучено",
   "header.toReview": "на проверку",
   "header.inCorpus": "в корпусе",

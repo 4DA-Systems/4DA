@@ -4,7 +4,6 @@
   "app.skipToContent": "Ir al contenido principal",
   "app.viewChanged": "Navegado a {{view}}",
   "header.settings": "Ajustes",
-  "header.live": "En vivo",
   "header.signalsLearned": "{{count}} aprendidos",
   "header.toReview": "por revisar",
   "header.inCorpus": "en el corpus",

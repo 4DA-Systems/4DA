@@ -4,7 +4,6 @@
   "app.skipToContent": "跳转到主要内容",
   "app.viewChanged": "已导航至{{view}}",
   "header.settings": "设置",
-  "header.live": "实时",
   "header.signalsLearned": "已学习 {{count}} 个",
   "header.toReview": "待查看",
   "header.inCorpus": "在语料库",

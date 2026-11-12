@@ -4,7 +4,6 @@
   "app.skipToContent": "メインコンテンツへスキップ",
   "app.viewChanged": "{{view}}に移動しました",
   "header.settings": "設定",
-  "header.live": "ライブ",
   "header.signalsLearned": "{{count}} 件学習済み",
   "header.toReview": "要確認",
   "header.inCorpus": "コーパス内",

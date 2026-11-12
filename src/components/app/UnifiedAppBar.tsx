@@ -13,6 +13,7 @@ import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
 import { ThemeToggle } from '../ThemeToggle';
 import { CommandSearch } from '../search/CommandSearch';
+import { HeaderFreshness, freshnessView, type FreshnessInput } from './HeaderFreshness';
 
 // ============================================================================
 // Types
@@ -20,7 +21,12 @@ import { CommandSearch } from '../search/CommandSearch';
 
 interface UnifiedAppBarProps {
   state: { loading: boolean; analysisComplete: boolean };
-  monitoring: { enabled: boolean } | null;
+  /** Freshness the backend states: last successful cycle, advisory check. */
+  monitoring: {
+    enabled: boolean;
+    last_cycle_at?: string | null;
+    advisory_sync?: FreshnessInput['advisorySync'];
+  } | null;
   settingsFormProvider: string;
   isPro: boolean;
   tier: string;
@@ -68,21 +74,19 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
   const isLoading = state.loading;
   const isComplete = state.analysisComplete && !isLoading;
 
-  // Status dot color
-  const statusDotColor = isComplete
-    ? 'bg-green-500'
-    : isLoading
-      ? 'bg-orange-400 animate-pulse'
-      : 'bg-gray-500';
+  const freshness = {
+    lastCycleAt: monitoring?.last_cycle_at ?? null,
+    advisorySync: monitoring?.advisory_sync ?? null,
+  };
+  const stale = freshnessView(freshness).amber;
 
-  // Compact status text. Keyed on completion alone: the summary badge counts
-  // reading rows and is absent with every interest off, which is a finished
-  // analysis too, not "Ready to analyze".
-  const statusText = isLoading
-    ? t('action.analyzing')
-    : isComplete
-      ? t('action.analysisComplete')
-      : t('action.ready');
+  // Status dot: working, or the age of what the app last fetched. Never a
+  // green that stays green for days (audit 2026-11-11).
+  const statusDotColor = isLoading
+    ? 'bg-orange-400 animate-pulse'
+    : stale
+      ? 'bg-amber-400'
+      : 'bg-green-500';
 
   return (
     <div className="mb-3">
@@ -105,13 +109,13 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />
-            <span className="text-xs text-text-secondary whitespace-nowrap" role="status" aria-live="polite">
-              {statusText}
-            </span>
-            {monitoring?.enabled && (
-              <span className="text-[10px] text-green-400 font-medium uppercase tracking-wider">
-                {t('header.live')}
+            {/* The age ticks every minute: announced only when work starts. */}
+            {isLoading ? (
+              <span className="text-xs text-text-secondary whitespace-nowrap" role="status" aria-live="polite">
+                {t('action.analyzing')}
               </span>
+            ) : (
+              <HeaderFreshness {...freshness} />
             )}
           </div>
         </div>

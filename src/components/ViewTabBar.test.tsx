@@ -52,23 +52,31 @@ describe('ViewTabBar', () => {
     expect(setActiveViewMock).toHaveBeenCalledWith('preemption');
   });
 
-  it('shows badge indicator when results have items', () => {
-    setMockState({
-      activeView: 'briefing',
-      appState: { relevanceResults: [{ id: 1 }] },
-    });
+  // Audit 2026-11-11: the dot meant "the list is not empty", so it was
+  // permanent. It now means relevant items arrived since Signal was opened.
+  it('shows no dot just because the Signal list has items', () => {
+    setMockState({ activeView: 'briefing', appState: { relevanceResults: [{ id: 1 }] }, lastBackgroundResultsAt: null });
     render(<ViewTabBar />);
-    const badge = screen.getByLabelText('New activity');
-    expect(badge).toBeInTheDocument();
+    expect(screen.queryByLabelText(/New activity|nav.newActivity/)).not.toBeInTheDocument();
   });
 
-  it('does not show badge on active view', () => {
-    setMockState({
-      activeView: 'results',
-      appState: { relevanceResults: [{ id: 1 }] },
-    });
+  it('shows the dot when relevant items arrive after the last look', () => {
+    // Arrives after the bar mounted (the app start counts as a look).
+    setMockState({ activeView: 'briefing', lastBackgroundResultsAt: new Date(Date.now() + 1000) });
     render(<ViewTabBar />);
-    expect(screen.queryByLabelText('New activity')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('nav.newActivity')).toBeInTheDocument();
+  });
+
+  it('shows no dot for items that arrived before the last look', () => {
+    setMockState({ activeView: 'briefing', lastBackgroundResultsAt: new Date(Date.now() - 60_000) });
+    render(<ViewTabBar />);
+    expect(screen.queryByLabelText(/New activity|nav.newActivity/)).not.toBeInTheDocument();
+  });
+
+  it('shows no dot on Signal itself', () => {
+    setMockState({ activeView: 'results', lastBackgroundResultsAt: new Date(Date.now() + 1000) });
+    render(<ViewTabBar />);
+    expect(screen.queryByLabelText(/New activity|nav.newActivity/)).not.toBeInTheDocument();
   });
 
   it('renders nav element with accessible label', () => {

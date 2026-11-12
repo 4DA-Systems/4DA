@@ -4,7 +4,6 @@
   "app.skipToContent": "Zum Hauptinhalt springen",
   "app.viewChanged": "Navigiert zu {{view}}",
   "header.settings": "Einstellungen",
-  "header.live": "Echtzeit",
   "header.signalsLearned": "{{count}} gelernt",
   "header.toReview": "zu prüfen",
   "header.inCorpus": "im Korpus",

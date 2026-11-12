@@ -103,6 +103,8 @@ export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
   // leaving the confident-negative panels either falsely "all clear" or stuck
   // silent after the system is genuinely warm.
   void useAppStore.getState().loadSourceHealth();
+  // The header states the age of the last cycle: re-read it now.
+  void useAppStore.getState().loadMonitoringStatus();
 
   // Auto-enable monitoring after first successful analysis
   const { monitoring } = useAppStore.getState();
@@ -209,6 +211,7 @@ export function createBackgroundResultsHandler(
     const newItems = event.payload;
     if (newItems.length === 0) return;
     clearStaleAnalysisFailureToasts();
+    void useAppStore.getState().loadMonitoringStatus();
     // Reading rows only, like the analysis-complete toast above.
     const relevantNew = newItems.filter((r) => isReadingRow(r) && isSurfacedSignal(r)).length;
     useAppStore.getState().setAppStateFull((s) => {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useMemo, memo, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, memo, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
@@ -21,21 +21,29 @@ const BADGE_COLORS: Partial<Record<ActiveView, string>> = {
 
 export const ViewTabBar = memo(function ViewTabBar() {
   const { t } = useTranslation();
-  const { activeView, resultsCount, windows } = useAppStore(
+  const { activeView, newSignalAt, windows } = useAppStore(
     useShallow((s) => ({
       activeView: s.activeView,
-      resultsCount: s.appState.relevanceResults.length,
+      newSignalAt: s.lastBackgroundResultsAt,
       windows: s.decisionWindows,
     })),
   );
   const setActiveView = useAppStore(s => s.setActiveView);
 
+  // The Signal dot means "relevant items arrived since you last looked".
+  // It used to mean "the list is not empty", so it never went away
+  // (audit 2026-11-11). Opening Signal (or app start) marks it seen.
+  const [signalSeenAt, setSignalSeenAt] = useState(() => Date.now());
+  useEffect(() => {
+    if (activeView === 'results') setSignalSeenAt(Date.now());
+  }, [activeView, newSignalAt]);
+
   const badges = useMemo(() => {
     const b: Partial<Record<ActiveView, boolean>> = {};
-    if (resultsCount > 0) b.results = true;
+    if (newSignalAt && newSignalAt.getTime() > signalSeenAt) b.results = true;
     if ((windows ?? []).some(w => w.status === 'open')) b.briefing = true;
     return b;
-  }, [resultsCount, windows]);
+  }, [newSignalAt, signalSeenAt, windows]);
 
   const activate = (id: ActiveView) => {
     trackEvent(`view_open:${id}`, id);
@@ -96,7 +104,7 @@ export const ViewTabBar = memo(function ViewTabBar() {
             {showBadge && (
               <span
                 className={`absolute top-1 end-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-text-primary/60'}`}
-                aria-label="New activity"
+                aria-label={t('nav.newActivity')}
               />
             )}
           </button>

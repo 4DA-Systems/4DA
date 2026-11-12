@@ -1018,7 +1018,6 @@
   "guided.save": "라이브러리에 항목 저장",
   "guided.score": "높은 점수를 받은 이유를 확인하려면 탭하세요",
   "guided.settings": "소스 및 AI 구성",
-  "header.live": "라이브",
   "header.settings": "설정",
   "header.signalsLearned": "{{count}}개 학습됨",
   "header.toReview": "검토 필요",
