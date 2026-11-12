@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DiscoveryFolderPicker } from './DiscoveryFolderPicker';
+import { readableError } from '../../utils/error-messages';
 import { ScanOutcomePanel } from './ScanOutcomePanel';
 import type { ScanOutcome } from './scan-outcome';
 import { useDiscoveryFolders } from './use-discovery-folders';
@@ -41,7 +42,7 @@ export function OnboardingChoiceGate({
     setOutcome(null);
     void onScanProjects(discovery.selected)
       .then(setOutcome)
-      .catch((e: unknown) => setOutcome({ kind: 'error', message: String(e) }))
+      .catch((e: unknown) => setOutcome({ kind: 'error', message: readableError(e) }))
       .finally(() => setScanning(false));
   };
 
