@@ -342,6 +342,8 @@ pub(crate) mod restart_snapshot;
 pub(crate) mod runtime_paths;
 pub(crate) mod scheduler_gate;
 mod scheduler_state;
+// Audit O2 — job budgets, panic containment and restart for the GUI scheduler
+mod scheduler_supervisor;
 mod scoring;
 pub(crate) mod scoring_config;
 mod search_synthesis;

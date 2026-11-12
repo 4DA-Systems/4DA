@@ -367,6 +367,50 @@ const CHAIN_NOTIFY_INTERVAL: u64 = 3600; // 1 hour
 /// This constant is the safe ceiling used in startup logging.
 const COLD_BOOT_GRACE_SECS_DEFAULT: u64 = 90;
 
+/// A suns tick is running on the blocking pool (possibly past its budget).
+static SUNS_TICK_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+/// Which of the health check, the anomaly check and the jobs that piggy-back
+/// on them run on one scheduler tick.
+///
+/// The piggy-backed jobs (active-topic embedding and DB maintenance on the
+/// health check; decision windows and the refutation scan on the anomaly
+/// check) used to test `now - last_x < 2` against `last_x` read BEFORE the
+/// parent stamped its run. In the only state where the parent runs
+/// (`now - last_x >= interval`) that is never true, so three of them never
+/// ran (audit O2). They now follow their parent's own verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PiggybackPlan {
+    health: bool,
+    topic_embedding: bool,
+    db_maintenance: bool,
+    anomaly: bool,
+    decision_windows: bool,
+    refutation_scan: bool,
+}
+
+impl PiggybackPlan {
+    fn for_tick(
+        now: u64,
+        last_health: u64,
+        health_interval: u64,
+        last_anomaly: u64,
+        anomaly_interval: u64,
+        anomaly_allowed: bool,
+    ) -> Self {
+        let health = now.saturating_sub(last_health) >= health_interval;
+        let anomaly = now.saturating_sub(last_anomaly) >= anomaly_interval && anomaly_allowed;
+        Self {
+            health,
+            topic_embedding: health,
+            db_maintenance: health,
+            anomaly,
+            decision_windows: anomaly,
+            refutation_scan: anomaly,
+        }
+    }
+}
+
 /// Helper: update an atomic AND persist the new timestamp to the
 /// `scheduler_state` table. Best-effort persistence — failures are logged
 /// but never crash the scheduler.
@@ -405,6 +449,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
         return;
     }
 
+    // The engine watchdog and the loop's heartbeat check run on their own
+    // task: inside the loop they watched, a stalled loop silenced them too.
+    crate::scheduler_supervisor::spawn_watchdog();
+
     tauri::async_runtime::spawn(async move {
         if !crate::startup_frontend::wait_until_frontend_ready(Duration::from_mins(1)).await {
             warn!(
@@ -429,9 +477,29 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             state.last_check.store(seed_now, Ordering::Relaxed);
         }
 
-        let mut interval = tokio::time::interval(Duration::from_mins(1)); // Check every minute
+        // Supervised (audit O2): the loop runs contained and is restarted if
+        // it ever unwinds; each job inside it has its own budget.
         let scheduler_started_at = std::time::Instant::now();
+        crate::scheduler_supervisor::supervise("scheduler-loop", Duration::from_secs(30), || {
+            scheduler_loop(app.clone(), Arc::clone(&state), scheduler_started_at)
+        })
+        .await;
+    });
+}
 
+/// The scheduler's tick loop. Never returns; [`start_scheduler`] restarts it
+/// if it unwinds. Every job runs under `scheduler_supervisor::run_job` /
+/// `run_blocking_job`: a time budget and panic containment, so one hung or
+/// panicking job costs that job's run, not the whole scheduler.
+async fn scheduler_loop<R: Runtime>(
+    app: AppHandle<R>,
+    state: Arc<MonitoringState>,
+    scheduler_started_at: std::time::Instant,
+) {
+    use crate::scheduler_supervisor::{run_blocking_job, run_job, JOB_BUDGET, LONG_JOB_BUDGET};
+
+    let mut interval = tokio::time::interval(Duration::from_mins(1)); // Check every minute
+    {
         loop {
             // Stamp BEFORE awaiting the timer so `elapsed_since_last` below
             // measures only the awaited gap. The old placement (a loop-spanning
@@ -441,6 +509,8 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // re-degrade SourceFetching on a machine that never slept.
             let last_wake_time = std::time::Instant::now();
             interval.tick().await;
+            // The independent watchdog reads this to name a stalled loop.
+            crate::scheduler_supervisor::mark_tick();
 
             // ================================================================
             // Sovereign Cold Boot — adaptive grace period
@@ -505,16 +575,33 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             crate::osv::readiness::refresh::on_scheduler_tick();
 
             // Health check - every 5 minutes (Critical — always runs)
-            let last_health = state.last_health_check.load(Ordering::Relaxed);
-            if now - last_health >= crate::scheduler_gate::effective_interval(HEALTH_CHECK_INTERVAL)
-            {
+            //
+            // Which of the health check, the anomaly check and the jobs that
+            // piggy-back on them run this tick: decided once, before either
+            // parent stamps its time (see `PiggybackPlan`).
+            let plan = PiggybackPlan::for_tick(
+                now,
+                state.last_health_check.load(Ordering::Relaxed),
+                crate::scheduler_gate::effective_interval(HEALTH_CHECK_INTERVAL),
+                state.last_anomaly_check.load(Ordering::Relaxed),
+                crate::scheduler_gate::effective_interval(ANOMALY_CHECK_INTERVAL),
+                gate_policy.allows_job(crate::scheduler_gate::JobPriority::Normal),
+            );
+            if plan.health {
                 mark_job_complete(
                     &state.last_health_check,
                     now,
                     crate::scheduler_state::jobs::HEALTH_CHECK,
                 );
                 let job_started = std::time::Instant::now();
-                match crate::run_background_health_check().await {
+                match run_job(
+                    crate::scheduler_state::jobs::HEALTH_CHECK,
+                    JOB_BUDGET,
+                    crate::run_background_health_check(),
+                )
+                .await
+                .unwrap_or_else(|f| Err(f.to_string().into()))
+                {
                     Ok(result) => {
                         info!(target: "4da::monitor", result = %result, "Health check completed");
                         record_job_outcome(
@@ -537,7 +624,8 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Active Work Topic Embedding — every 5 min (piggyback on health check)
             // Embeds recent file-content topics that lack embeddings, so the scoring
             // pipeline gets semantic (not just keyword) work signals.
-            if now - last_health < 2 {
+            if plan.topic_embedding {
+                let _ = run_blocking_job("active_topic_embedding", JOB_BUDGET, move || {
                 if let Ok(ace) = crate::get_ace_engine() {
                     if let Some(emb_service) = ace.embedding_service() {
                         let topics_to_embed: Vec<String> = {
@@ -586,12 +674,14 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     }
                 }
+                })
+                .await;
             }
 
             // Database maintenance — hourly WAL checkpoint + PRAGMA optimize
             // Prevents WAL bloat (139MB+ observed) and keeps query planner current
-            let last_health_for_db = state.last_health_check.load(Ordering::Relaxed);
-            if now - last_health_for_db < 2 && now > DB_MAINTENANCE_INTERVAL {
+            if plan.db_maintenance && now > DB_MAINTENANCE_INTERVAL {
+                let _ = run_blocking_job(crate::scheduler_state::jobs::DB_MAINTENANCE, LONG_JOB_BUDGET, move || {
                 // Piggyback on health check tick (runs every 5 min, but we only maintain hourly).
                 // Sovereign Cold Boot — function-local statics LAST_MAINTENANCE and
                 // LAST_VACUUM are hydrated from the persisted scheduler_state table on
@@ -691,25 +781,35 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     }
                 }
+                })
+                .await;
             }
 
             // Anomaly detection - every hour + anomaly bridge (Fix 5)
-            let last_anomaly = state.last_anomaly_check.load(Ordering::Relaxed);
-            if now - last_anomaly
-                >= crate::scheduler_gate::effective_interval(ANOMALY_CHECK_INTERVAL)
-                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Normal)
-            {
+            if plan.anomaly {
                 mark_job_complete(
                     &state.last_anomaly_check,
                     now,
                     crate::scheduler_state::jobs::ANOMALY_DETECTION,
                 );
                 let job_started = std::time::Instant::now();
-                match crate::run_background_anomaly_detection_with_results().await {
+                let detected = run_job(
+                    crate::scheduler_state::jobs::ANOMALY_DETECTION,
+                    JOB_BUDGET,
+                    async {
+                        let found = crate::run_background_anomaly_detection_with_results().await;
+                        if let Ok(anomalies) = &found {
+                            // Fix 5: Process anomalies (notifications, auto-remediation, auto-briefing)
+                            crate::monitoring_jobs::process_anomalies(&app, anomalies).await;
+                        }
+                        found
+                    },
+                )
+                .await
+                .unwrap_or_else(|f| Err(f.to_string().into()));
+                match detected {
                     Ok(anomalies) => {
                         info!(target: "4da::monitor", found = anomalies.len(), "Anomaly detection completed");
-                        // Fix 5: Process anomalies (notifications, auto-remediation, auto-briefing)
-                        crate::monitoring_jobs::process_anomalies(&app, &anomalies).await;
                         record_job_outcome(
                             crate::scheduler_state::jobs::ANOMALY_DETECTION,
                             job_started,
@@ -741,7 +841,14 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     crate::scheduler_state::jobs::BACKFILL,
                 );
                 let job_started = std::time::Instant::now();
-                match crate::analysis_backfill::backfill_unscored_cycle(250).await {
+                match run_job(
+                    crate::scheduler_state::jobs::BACKFILL,
+                    JOB_BUDGET,
+                    crate::analysis_backfill::backfill_unscored_cycle(250),
+                )
+                .await
+                .unwrap_or_else(|f| Err(f.to_string().into()))
+                {
                     Ok(progress) => {
                         if progress.scored_this_cycle > 0 {
                             info!(
@@ -785,30 +892,40 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 );
                 let job_started = std::time::Instant::now();
                 if let Ok(db) = crate::get_database() {
-                    let threshold = crate::get_relevance_threshold();
-                    // The dep-scoped recall check needs the scoring context (a
-                    // 5-minute cache, normally warm from the last analysis).
-                    let ctx = crate::scoring::build_scoring_context(db).await.ok();
-                    let db = std::sync::Arc::clone(db);
-                    // Blocking pool + pooled readers: inline on this worker with the
-                    // writer held, the job stalled the app at launch (2026-10-23).
-                    let snapshot_error = crate::ipc_blocking::off_ui_thread_infallible(
-                        "calibration_monitor",
-                        move || {
-                            crate::scoring::calibration_monitor::run_scheduled_checks(
-                                &db,
-                                threshold,
-                                ctx.as_ref(),
+                    let checked = run_job(
+                        crate::scheduler_state::jobs::CALIBRATION_MONITOR,
+                        JOB_BUDGET,
+                        async {
+                            let threshold = crate::get_relevance_threshold();
+                            // The dep-scoped recall check needs the scoring context (a
+                            // 5-minute cache, normally warm from the last analysis).
+                            let ctx = crate::scoring::build_scoring_context(db).await.ok();
+                            let db = std::sync::Arc::clone(db);
+                            // Blocking pool + pooled readers: inline on this worker with the
+                            // writer held, the job stalled the app at launch (2026-10-23).
+                            crate::ipc_blocking::off_ui_thread_infallible(
+                                "calibration_monitor",
+                                move || {
+                                    crate::scoring::calibration_monitor::run_scheduled_checks(
+                                        &db,
+                                        threshold,
+                                        ctx.as_ref(),
+                                    )
+                                },
                             )
+                            .await
+                            .unwrap_or_else(Some)
                         },
                     )
-                    .await
-                    .unwrap_or_else(Some);
-                    record_job_outcome(
-                        crate::scheduler_state::jobs::CALIBRATION_MONITOR,
-                        job_started,
-                        snapshot_error,
-                    );
+                    .await;
+                    // An overrun or panic already recorded its own outcome.
+                    if let Ok(snapshot_error) = checked {
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::CALIBRATION_MONITOR,
+                            job_started,
+                            snapshot_error,
+                        );
+                    }
                 }
             }
 
@@ -835,44 +952,54 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     // Shared with the engine cycle (headless.rs): the pin epoch,
                     // the re-queue with verdict withdrawal, and the in-step
                     // convergence all live in `scoring::reexamination`.
-                    let _ = crate::scoring::reexamination::reexamine_if_pins_changed(db).await;
+                    let _ = run_job(
+                        "reexamination",
+                        JOB_BUDGET,
+                        crate::scoring::reexamination::reexamine_if_pins_changed(db),
+                    )
+                    .await;
                 }
             }
 
             // Decision window detection — runs with anomaly check (hourly).
             // Expire stale windows, detect new ones from recent content, compute advantage.
-            if now - last_anomaly < 2 {
-                // Only run when anomaly check just fired (within the same tick)
-                if let Ok(conn) = crate::open_db_connection() {
-                    let expired = crate::decision_advantage::expire_stale_windows(&conn);
-                    let detected = crate::decision_advantage::detect_decision_windows(&conn);
-                    let validated = crate::decision_advantage::validate_open_windows(&conn);
-                    if expired > 0 || !detected.is_empty() || validated > 0 {
-                        info!(
-                            target: "4da::monitor",
-                            expired, detected = detected.len(), validated,
-                            "Decision windows updated"
-                        );
-                        if let Err(e) = app.emit("decision-windows-updated", &detected) {
-                            tracing::warn!("Failed to emit 'decision-windows-updated': {e}");
+            if plan.decision_windows {
+                let app = app.clone();
+                let _ = run_blocking_job("decision_windows", JOB_BUDGET, move || {
+                    if let Ok(conn) = crate::open_db_connection() {
+                        let expired = crate::decision_advantage::expire_stale_windows(&conn);
+                        let detected = crate::decision_advantage::detect_decision_windows(&conn);
+                        let validated = crate::decision_advantage::validate_open_windows(&conn);
+                        if expired > 0 || !detected.is_empty() || validated > 0 {
+                            info!(
+                                target: "4da::monitor",
+                                expired, detected = detected.len(), validated,
+                                "Decision windows updated"
+                            );
+                            if let Err(e) = app.emit("decision-windows-updated", &detected) {
+                                tracing::warn!("Failed to emit 'decision-windows-updated': {e}");
+                            }
+                        }
+                        // Compute compound advantage score (weekly period)
+                        let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
+
+                        // Topic hotness rebuild — recompute scores + archive cold topics
+                        let updated = crate::topic_hotness::rebuild_hotness(&conn);
+                        if updated > 0 {
+                            info!(target: "4da::monitor", updated, "Topic hotness rebuilt");
                         }
                     }
-                    // Compute compound advantage score (weekly period)
-                    let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
-
-                    // Topic hotness rebuild — recompute scores + archive cold topics
-                    let updated = crate::topic_hotness::rebuild_hotness(&conn);
-                    if updated > 0 {
-                        info!(target: "4da::monitor", updated, "Topic hotness rebuilt");
-                    }
-                }
+                })
+                .await;
             }
 
             // Commitment Contract refutation scan — hourly (Intelligence Reconciliation Phase 13)
             // Piggybacks on the hourly tick; checks the last 24h of source items
             // against active refutation conditions. Fires Refutation EvidenceItems
             // when a match is found. Non-fatal on all error paths.
-            if now - last_anomaly < 2 {
+            if plan.refutation_scan {
+                let app = app.clone();
+                let _ = run_blocking_job("refutation_scan", JOB_BUDGET, move || {
                 if let Ok(conn) = crate::open_db_connection() {
                     match crate::commitment_contracts::scan_for_refutations(&conn, 24) {
                         Ok(triggered) if !triggered.is_empty() => {
@@ -891,6 +1018,8 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         _ => {}
                     }
                 }
+                })
+                .await;
             }
 
             // CVE scan — Developer Immune System (Critical — security always runs)
@@ -905,7 +1034,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 );
                 let cve_app = app.clone();
                 tokio::spawn(async move {
-                    crate::monitoring_jobs::run_cve_scan(&cve_app).await;
+                    let _ = run_job(
+                        crate::scheduler_state::jobs::CVE_SCAN,
+                        LONG_JOB_BUDGET,
+                        crate::monitoring_jobs::run_cve_scan(&cve_app),
+                    )
+                    .await;
                 });
             }
 
@@ -923,11 +1057,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 let job_started = std::time::Instant::now();
                 // Blocking pool: a full health pass is ~19 s of synchronous SQL
                 // (`scheduler_state.last_duration_ms`, 2026-10-23).
-                let health_result = crate::ipc_blocking::off_ui_thread_infallible(
-                    "dep_health",
+                let health_result = run_blocking_job(
+                    crate::scheduler_state::jobs::DEP_HEALTH,
+                    JOB_BUDGET,
                     crate::run_dependency_health_check,
                 )
                 .await
+                .map_err(|f| f.to_string())
                 .and_then(|r| r.map_err(|e| e.to_string()));
                 match health_result {
                     Ok(health) => {
@@ -982,12 +1118,22 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::CHAIN_NOTIFY,
                 );
-                crate::monitoring_jobs::maybe_notify_escalating_chains(&app);
+                let app = app.clone();
+                let _ = run_blocking_job(
+                    crate::scheduler_state::jobs::CHAIN_NOTIFY,
+                    JOB_BUDGET,
+                    move || {
+                        crate::monitoring_jobs::maybe_notify_escalating_chains(&app);
+                    },
+                )
+                .await;
             }
 
             // Mini-autophagy: trigger early cycle when sufficient feedback accumulated
             // but no autophagy has run yet. Shortens time-to-first-calibration from days to hours.
             {
+                let app = app.clone();
+                let _ = run_blocking_job("mini_autophagy", JOB_BUDGET, move || {
                 if let Ok(db_conn) = crate::open_db_connection() {
                     let feedback_count: i64 = db_conn
                         .query_row("SELECT COUNT(*) FROM feedback", [], |r| r.get(0))
@@ -1022,6 +1168,8 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     }
                 }
+                })
+                .await;
             }
 
             // Behavior decay - daily (Low priority — can wait on battery)
@@ -1036,7 +1184,14 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     crate::scheduler_state::jobs::BEHAVIOR_DECAY,
                 );
                 let job_started = std::time::Instant::now();
-                match crate::run_background_behavior_decay().await {
+                match run_job(
+                    crate::scheduler_state::jobs::BEHAVIOR_DECAY,
+                    JOB_BUDGET,
+                    crate::run_background_behavior_decay(),
+                )
+                .await
+                .unwrap_or_else(|f| Err(f.to_string().into()))
+                {
                     Ok(result) => {
                         info!(target: "4da::monitor", result = %result, "Behavior decay completed");
                         record_job_outcome(
@@ -1055,6 +1210,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                 }
 
+                // Translation check, autophagy, retention and the deep clean:
+                // synchronous, so on the blocking pool under the long budget.
+                let app = app.clone();
+                let _ = run_blocking_job("daily_maintenance", LONG_JOB_BUDGET, move || {
                 // Translation sync check - daily
                 // Flags untranslated strings for the user's language as a sun alert.
                 // Does NOT auto-translate -- just informs the user.
@@ -1255,6 +1414,8 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     }
                 }
+                })
+                .await;
             }
 
             // Weekly accuracy + timeline recording (Low priority)
@@ -1269,6 +1430,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     crate::scheduler_state::jobs::ACCURACY_RECORD,
                 );
                 let job_started = std::time::Instant::now();
+                let _ = run_blocking_job(crate::scheduler_state::jobs::ACCURACY_RECORD, JOB_BUDGET, move || {
                 // Aggregate outcome: 'ok' only when every sub-step succeeded;
                 // otherwise the FIRST failure names itself (later ones are in logs).
                 let mut job_error: Option<String> = None;
@@ -1304,13 +1466,26 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     job_started,
                     job_error,
                 );
+                })
+                .await;
             }
 
             // Digest scheduler (Fix 2) -- check on every tick
-            crate::monitoring_jobs::maybe_generate_digest(&app).await;
+            let _ = run_job(
+                "digest",
+                JOB_BUDGET,
+                crate::monitoring_jobs::maybe_generate_digest(&app),
+            )
+            .await;
 
             // Smart batching (Improvement E) -- save mini-digest when threshold reached
-            crate::monitoring_jobs::maybe_save_mini_digest(&state);
+            {
+                let state = Arc::clone(&state);
+                let _ = run_blocking_job("mini_digest", JOB_BUDGET, move || {
+                    crate::monitoring_jobs::maybe_save_mini_digest(&state);
+                })
+                .await;
+            }
 
             // Morning briefing notification — fires once per day at the configured time.
             //
@@ -1374,7 +1549,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
+            // The summary step can take minutes on a local model: long budget.
             if !skip_briefing {
+                // Boxed: the briefing future is large (clippy::large_futures).
+                let _ = run_job("morning_briefing", LONG_JOB_BUDGET, Box::pin(async {
                 if let Some(mut briefing) =
                     crate::monitoring_notifications::check_morning_briefing(&state)
                 {
@@ -1465,20 +1643,33 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     }
                 }
+                }))
+                .await;
             } // !skip_briefing
 
             // Suns: tick all enabled suns — on the blocking pool. A tick is fully
             // synchronous: PowerShell subprocesses (hardware/uptime) and full
             // scans of the corpus (tech_moat_scanner 40 s, edge_detector 13 s on
             // the operator's launch of 2026-10-23, `sun_runs.duration_ms`), which
-            // inline held this runtime worker for about a minute.
-            {
-                let results = crate::ipc_blocking::off_ui_thread_infallible("suns_tick", || {
+            // inline held this runtime worker for about a minute. A tick still
+            // running from an earlier overrun holds the registry: skip, rather
+            // than queue a blocked pool thread every minute.
+            if !SUNS_TICK_IN_FLIGHT.swap(true, Ordering::SeqCst) {
+                let results = run_blocking_job("suns_tick", JOB_BUDGET, || {
+                    // Cleared on return AND on unwind, so a panicking sun
+                    // cannot latch the flag.
+                    struct Clear;
+                    impl Drop for Clear {
+                        fn drop(&mut self) {
+                            SUNS_TICK_IN_FLIGHT.store(false, Ordering::SeqCst);
+                        }
+                    }
+                    let _clear = Clear;
                     crate::suns_commands::get_sun_registry().tick()
                 })
                 .await
-                .unwrap_or_else(|e| {
-                    warn!(target: "4da::suns", error = %e, "Sun tick failed");
+                .unwrap_or_else(|f| {
+                    warn!(target: "4da::suns", failure = %f, "Sun tick did not finish");
                     Vec::new()
                 });
                 for (sun_id, result) in &results {
@@ -1530,7 +1721,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 state.is_checking.store(false, Ordering::SeqCst);
             }
         }
-    });
+    }
 }
 
 // ============================================================================
@@ -1546,6 +1737,31 @@ mod tests {
         let state = MonitoringState::default();
         assert!(!state.is_enabled());
         assert_eq!(state.get_interval(), 1800);
+    }
+
+    /// Audit O2: when a parent job runs, its piggy-backed jobs run on the
+    /// same tick; when it does not, they do not.
+    #[test]
+    fn piggybacked_jobs_run_on_the_tick_their_parent_runs() {
+        let now = 1_000_000;
+        let due = PiggybackPlan::for_tick(now, now - 300, 300, now - 3_600, 3_600, true);
+        assert!(due.health && due.topic_embedding && due.db_maintenance);
+        assert!(due.anomaly && due.decision_windows && due.refutation_scan);
+
+        let idle = PiggybackPlan::for_tick(now, now - 10, 300, now - 10, 3_600, true);
+        assert_eq!(
+            idle,
+            PiggybackPlan {
+                health: false,
+                topic_embedding: false,
+                db_maintenance: false,
+                anomaly: false,
+                decision_windows: false,
+                refutation_scan: false,
+            }
+        );
+        let gated = PiggybackPlan::for_tick(now, 0, 300, 0, 3_600, false);
+        assert!(!gated.anomaly && !gated.decision_windows && !gated.refutation_scan);
     }
 
     #[test]

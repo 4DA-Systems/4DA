@@ -111,27 +111,105 @@ pub fn execute() -> SunResult {
     }
 }
 
-/// Run a shell command and capture stdout.
+/// Longest a system command may run. A `Get-CimInstance` can hang on a sick
+/// WMI service; with no limit it held the sun registry, and before the
+/// scheduler was supervised, the whole scheduler (audit O2).
+const COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Run a shell command and capture stdout, killed after [`COMMAND_TIMEOUT`].
 pub(super) fn run_cmd(cmd: &str) -> Result<String> {
+    run_cmd_with_timeout(cmd, COMMAND_TIMEOUT)
+}
+
+fn run_cmd_with_timeout(cmd: &str, timeout: std::time::Duration) -> Result<String> {
+    use std::io::Read;
+    use std::process::Stdio;
+
     debug!(target: "4da::suns", cmd, "Running system command");
 
     #[cfg(target_os = "windows")]
-    let output = {
+    let mut command = {
         use std::os::windows::process::CommandExt;
-        std::process::Command::new("cmd")
-            .args(["/C", cmd])
-            .creation_flags(0x08000000) // CREATE_NO_WINDOW
-            .output()
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", cmd]).creation_flags(0x08000000); // CREATE_NO_WINDOW
+        c
     };
-
     #[cfg(not(target_os = "windows"))]
-    let output = std::process::Command::new("sh").args(["-c", cmd]).output();
+    let mut command = {
+        let mut c = std::process::Command::new("sh");
+        c.args(["-c", cmd]);
+        c
+    };
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
 
-    match output {
-        Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
-        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).to_string().into()),
-        Err(e) => Err(e.to_string().into()),
+    // Drain both pipes on their own threads so a chatty command can never
+    // block on a full pipe while we wait for it.
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut p) = pipe {
+                let _ = p.read_to_end(&mut buf);
+            }
+            buf
+        })
+    };
+    let stdout = drain(
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let stderr = drain(
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+
+    let deadline = std::time::Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break status,
+            None if std::time::Instant::now() >= deadline => {
+                kill_tree(&mut child);
+                // The reader threads finish when the last holder of the pipes
+                // exits; they are not waited for.
+                return Err(
+                    format!("`{cmd}` did not finish within {} s", timeout.as_secs()).into(),
+                );
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    };
+    let out = stdout.join().unwrap_or_default();
+    let err = stderr.join().unwrap_or_default();
+    if status.success() {
+        Ok(String::from_utf8_lossy(&out).to_string())
+    } else {
+        Err(String::from_utf8_lossy(&err).to_string().into())
     }
+}
+
+/// Kill a timed-out command and what it started (`cmd /C powershell ...`
+/// leaves PowerShell running when only `cmd` dies).
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .creation_flags(0x08000000)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn check_disk_space() -> Option<String> {
@@ -223,4 +301,33 @@ fn check_disk_space() -> Option<String> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A command that never returns used to block `run_cmd` (and with it
+    /// the sun registry) forever (audit O2).
+    #[test]
+    fn a_hung_command_is_killed_at_the_timeout() {
+        #[cfg(target_os = "windows")]
+        let slow = "ping -n 30 127.0.0.1";
+        #[cfg(not(target_os = "windows"))]
+        let slow = "sleep 30";
+        let started = std::time::Instant::now();
+        let r = run_cmd_with_timeout(slow, std::time::Duration::from_millis(500));
+        assert!(r.is_err(), "a hung command is an error");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "returned at the timeout, took {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn a_quick_command_returns_its_output() {
+        let out = run_cmd_with_timeout("echo fourda", std::time::Duration::from_secs(20)).unwrap();
+        assert!(out.contains("fourda"), "{out}");
+    }
 }
