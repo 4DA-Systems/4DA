@@ -162,7 +162,7 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
                 tauri::async_runtime::block_on(async {
                     crate::task_guard::contain(
                         "headless-once-cycle",
-                        run_one_cycle(&handle, "headless_once", force),
+                        Box::pin(run_one_cycle(&handle, "headless_once", force)),
                     )
                     .await
                     .unwrap_or(1)
@@ -789,7 +789,7 @@ async fn run_daemon_loop(handle: &AppHandle, force: bool) {
             // cycle is logged and skipped; the loop sleeps and retries.
             if crate::task_guard::contain(
                 "headless-daemon-cycle",
-                run_one_cycle(handle, "headless_daemon", force),
+                Box::pin(run_one_cycle(handle, "headless_daemon", force)),
             )
             .await
             .is_none()
