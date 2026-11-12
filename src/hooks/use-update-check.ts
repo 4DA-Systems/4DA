@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { check, type DownloadEvent, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { osFamily } from '../lib/platform';
+import { readableError } from '../utils/error-messages';
 import { registerUpdateCheck, setUpdateStatus } from './update-status';
 
 export const FIRST_CHECK_DELAY_MS = 5_000;
@@ -35,17 +36,6 @@ export interface UpdateProgress {
   downloaded: number;
   /** Bytes in the payload, when the server says. */
   total: number | null;
-}
-
-/** What went wrong, as text a person can read (plugin errors arrive as strings). */
-export function errorText(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  try {
-    return JSON.stringify(err) ?? String(err);
-  } catch {
-    return String(err);
-  }
 }
 
 export interface InstallFailure {
@@ -90,7 +80,7 @@ export function useUpdateCheck() {
           canAutoUpdate: osFamily() !== 'linux',
         });
       } catch (err) {
-        setUpdateStatus({ checking: false, lastCheckedAt: Date.now(), lastError: errorText(err) });
+        setUpdateStatus({ checking: false, lastCheckedAt: Date.now(), lastError: readableError(err) });
       } finally {
         inFlightRef.current = null;
       }
@@ -158,13 +148,13 @@ export function useUpdateCheck() {
       try {
         await handle.downloadAndInstall(onEvent);
       } catch (err) {
-        setInstallError({ stage: 'install', message: errorText(err) });
+        setInstallError({ stage: 'install', message: readableError(err) });
         return;
       }
       try {
         await relaunch();
       } catch (err) {
-        setInstallError({ stage: 'restart', message: errorText(err) });
+        setInstallError({ stage: 'restart', message: readableError(err) });
       }
     } finally {
       installingRef.current = false;
