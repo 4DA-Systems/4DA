@@ -8,7 +8,7 @@ import { getSourceNarration } from '../utils/first-run-messages';
 import { isProfileEmpty } from '../utils/profile-empty';
 import { isSurfacedSignal } from '../utils/score';
 import { ErrorState } from './first-run/ErrorState';
-import { CelebrationState } from './first-run/CelebrationState';
+import { CelebrationState, type FirstRunExit } from './first-run/CelebrationState';
 import { LoadingState } from './first-run/LoadingState';
 import { buildStackInsights } from './first-run/utils';
 import type { Phase, ScanSummary, StackInsight } from './first-run/utils';
@@ -29,7 +29,7 @@ interface CelebrationSnapshot {
 }
 
 interface FirstRunTransitionProps {
-  onComplete: (view: 'briefing' | 'results') => void;
+  onComplete: (view: FirstRunExit) => void;
 }
 
 export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
@@ -250,7 +250,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   ]);
 
   // Dismiss handler — fade out then call onComplete
-  const handleDismiss = useCallback((view: 'briefing' | 'results') => {
+  const handleDismiss = useCallback((view: FirstRunExit) => {
     setPhase('fading');
     setTimeout(() => onComplete(view), 300);
   }, [onComplete]);
