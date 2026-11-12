@@ -255,11 +255,13 @@ impl Source for PypiSource {
         );
 
         let mut items = Vec::new();
+        // Never a private package, and nothing while registry lookups are off.
+        let lookable = crate::registry_privacy::lookable("pypi", &self.packages);
         // A rotating window: the fixed first `max_items` names left every
         // package past them permanently unwatched.
         let window = crate::source_fetching::rotating_window(
             "sources.pypi.rotation_cursor",
-            &self.packages,
+            &lookable,
             self.config.max_items,
         );
 
@@ -296,12 +298,13 @@ impl Source for PypiSource {
         // time, 500 ms apart, inside the 90 s adapter timeout meant a stack of more than ~150
         // Python packages timed out and surfaced nothing at all, every cycle.
         let window: Vec<String>;
+        let lookable = crate::registry_privacy::lookable("pypi", &self.packages);
         let packages: Vec<&String> = if crate::source_fetching::strict_manifest_mode() {
-            self.packages.iter().take(self.config.max_items).collect()
+            lookable.iter().take(self.config.max_items).collect()
         } else {
             window = crate::source_fetching::rotating_window(
                 "sources.pypi.rotation_cursor",
-                &self.packages,
+                &lookable,
                 self.config.max_items,
             );
             window.iter().collect()

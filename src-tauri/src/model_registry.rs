@@ -450,7 +450,7 @@ pub async fn refresh_registry() -> Result<()> {
 
     info!(target: "4da::registry", "Refreshing model registry from LiteLLM");
 
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .timeout(std::time::Duration::from_secs(30))
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()

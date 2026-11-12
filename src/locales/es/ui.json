@@ -1152,6 +1152,8 @@
   "results.releaseChanges.fromGithub": "De las versiones del proyecto en GitHub",
   "settings.privacy.githubReleaseNotes.title": "Notas de versión de GitHub",
   "settings.privacy.githubReleaseNotes.subtitle": "Busca notas de versión en GitHub para los paquetes cuya entrada en el registro enlaza un repositorio de GitHub. GitHub ve de qué repositorios dependes.",
+  "settings.privacy.registryLookups.title": "Consultas a registros",
+  "settings.privacy.registryLookups.subtitle": "Pregunta a npm, crates.io, PyPI y al proxy de módulos de Go por versiones nuevas, retiradas y obsoletas de tus dependencias, lo que les envía los nombres de tus dependencias. Desactivado, no se les envía nada: los avisos se siguen comparando con el archivo OSV descargado y las versiones aparecen como no comprobadas. Los paquetes privados (GOPRIVATE, ámbitos e índices de registros privados, fuentes git y de ruta) nunca se envían en ningún caso.",
   "results.aiSummary": "Resumen de IA",
   "results.generateAiSummary": "Generar resumen de IA",
   "results.contextMatches": "{{count}} coincidencias contextuales",
@@ -2704,6 +2706,11 @@
   "preemption.notCovered.unreadableTitle_one": "No se pudo leer 1 lockfile",
   "preemption.notCovered.unreadableTitle_other": "No se pudieron leer {{count}} lockfiles",
   "preemption.notCovered.unreadableBody": "4DA no pudo leer estos archivos en su último análisis, así que no da por comprobado lo que fijan. Corrige el archivo o vuelve a analizar.",
+  "preemption.releaseChecks.offTitle": "Las comprobaciones de versiones están desactivadas",
+  "preemption.releaseChecks.offBody": "Las consultas a registros están desactivadas en Ajustes → Privacidad, así que 4DA no pregunta a npm, crates.io, PyPI ni al proxy de módulos de Go por tus dependencias. Los avisos se siguen comparando con el archivo descargado. Las versiones nuevas, retiradas y obsoletas no se comprueban, y las versiones de corrección salen solo de los avisos.",
+  "preemption.releaseChecks.privateTitle_one": "1 paquete privado nunca se consulta",
+  "preemption.releaseChecks.privateTitle_other": "{{count}} paquetes privados nunca se consultan",
+  "preemption.releaseChecks.privateBody": "Tu configuración de Go, npm, Cargo o Python los marca como privados (GOPRIVATE, un ámbito o índice de registro privado, una fuente git o de ruta), así que 4DA nunca envía sus nombres a un registro público. Sus versiones no se comprueban.",
   "settings.context.excludedInStack": "excluido en Your Stack",
   "settings.context.excludedInStackHint": "Your Stack excluye esta carpeta: sus proyectos no se revisan en busca de dependencias ni avisos. Cámbialo en Inteligencia > Your Stack."
 }

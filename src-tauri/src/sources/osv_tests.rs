@@ -69,10 +69,7 @@ fn the_desktop_osv_source_contacts_no_host() {
         .lines()
         .filter(|l| !l.trim_start().starts_with("//"))
         .collect::<Vec<_>>()
-        .join(
-            "
-",
-        );
+        .join("\n");
     assert!(
         !code.contains("https://api.osv.dev"),
         "osv.rs must not call the OSV API"

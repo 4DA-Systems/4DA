@@ -1147,6 +1147,8 @@
   "results.releaseChanges.fromGithub": "プロジェクトの GitHub リリースより",
   "settings.privacy.githubReleaseNotes.title": "GitHub のリリースノート",
   "settings.privacy.githubReleaseNotes.subtitle": "レジストリのエントリが GitHub リポジトリにリンクしているパッケージについて、GitHub でリリースノートを検索します。GitHub は、あなたが依存しているリポジトリを知ることになります。",
+  "settings.privacy.registryLookups.title": "レジストリ照会",
+  "settings.privacy.registryLookups.subtitle": "依存関係の新しいリリース、取り下げられたリリース、非推奨のリリースを npm、crates.io、PyPI、Go モジュールプロキシに問い合わせます。その際、依存関係の名前が送信されます。オフにすると何も送信されません。セキュリティ勧告はダウンロード済みの OSV アーカイブと引き続き照合され、リリースは未確認として表示されます。プライベートパッケージ（GOPRIVATE、プライベートなレジストリのスコープやインデックス、git やパスのソース）はどちらの場合も送信されません。",
   "results.aiSummary": "AIサマリー",
   "results.generateAiSummary": "AIサマリーを生成",
   "results.contextMatches": "{{count}} 件のコンテキスト一致",
@@ -2660,6 +2662,11 @@
   "preemption.notCovered.unreadableTitle_one": "1 件のロックファイルを読み取れませんでした",
   "preemption.notCovered.unreadableTitle_other": "{{count}} 件のロックファイルを読み取れませんでした",
   "preemption.notCovered.unreadableBody": "4DA は前回のスキャンでこれらのファイルを読み取れなかったため、固定されている内容を確認済みとは見なしません。ファイルを修正するか、もう一度スキャンしてください。",
+  "preemption.releaseChecks.offTitle": "リリース確認はオフです",
+  "preemption.releaseChecks.offBody": "設定 → プライバシー でレジストリ照会がオフになっているため、4DA は依存関係について npm、crates.io、PyPI、Go モジュールプロキシに問い合わせません。セキュリティ勧告はダウンロード済みのアーカイブと引き続き照合されます。新しいリリース、取り下げられたリリース、非推奨のリリースは確認されず、修正バージョンは勧告の情報のみに基づきます。",
+  "preemption.releaseChecks.privateTitle_one": "1 件のプライベートパッケージは照会されません",
+  "preemption.releaseChecks.privateTitle_other": "{{count}} 件のプライベートパッケージは照会されません",
+  "preemption.releaseChecks.privateBody": "Go、npm、Cargo、Python の設定でプライベートとされているため（GOPRIVATE、プライベートなレジストリのスコープやインデックス、git やパスのソース）、4DA はその名前を公開レジストリに送信しません。リリースは確認されません。",
   "settings.context.excludedInStack": "Your Stack で除外",
   "settings.context.excludedInStackHint": "Your Stack がこのフォルダーを除外しています。そのプロジェクトは依存関係やアドバイザリの確認対象外です。インテリジェンス > Your Stack で変更できます。"
 }

@@ -1516,6 +1516,8 @@
   "results.releaseChanges.fromGithub": "من إصدارات المشروع على GitHub",
   "settings.privacy.githubReleaseNotes.title": "ملاحظات الإصدار من GitHub",
   "settings.privacy.githubReleaseNotes.subtitle": "يبحث عن ملاحظات الإصدار على GitHub للحزم التي يرتبط إدخالها في السجل بمستودع على GitHub. يرى GitHub المستودعات التي تعتمد عليها.",
+  "settings.privacy.registryLookups.title": "الاستعلام من السجلات",
+  "settings.privacy.registryLookups.subtitle": "يسأل npm وcrates.io وPyPI ووكيل وحدات Go عن الإصدارات الجديدة والمسحوبة والمهملة لتبعياتك، وهذا يرسل إليها أسماء تبعياتك. عند الإيقاف لا يُرسل إليها شيء: تظل التنبيهات الأمنية تُطابق مع أرشيف OSV الذي تم تنزيله، وتظهر الإصدارات على أنها غير مفحوصة. لا تُرسل الحزم الخاصة (GOPRIVATE، ونطاقات السجلات والفهارس الخاصة، ومصادر git والمسارات) في أي حال.",
   "results.cached": "{{relevant}}/{{total}} عنصر ذو صلة (مخزن مؤقتاً)",
   "results.clearSourceFilters": "مسح فلاتر المصادر",
   "results.clickAnalyze": "انقر تحليل لاكتشاف المحتوى ذي الصلة",
@@ -2649,6 +2651,11 @@
   "preemption.notCovered.unreadableTitle_one": "تعذّرت قراءة ملف قفل واحد",
   "preemption.notCovered.unreadableTitle_other": "تعذّرت قراءة {{count}} ملفات قفل",
   "preemption.notCovered.unreadableBody": "تعذّر على 4DA قراءة هذه الملفات في آخر فحص، لذا لا يعدّ ما تثبّته مفحوصًا. أصلح الملف أو أعد الفحص.",
+  "preemption.releaseChecks.offTitle": "فحص الإصدارات متوقف",
+  "preemption.releaseChecks.offBody": "الاستعلام من السجلات متوقف في الإعدادات ← الخصوصية، لذا لا يسأل 4DA أيًّا من npm أو crates.io أو PyPI أو وكيل وحدات Go عن تبعياتك. تظل التنبيهات الأمنية تُطابق مع الأرشيف الذي تم تنزيله. لا تُفحص الإصدارات الجديدة والمسحوبة والمهملة، وتأتي إصدارات الإصلاح من التنبيهات وحدها.",
+  "preemption.releaseChecks.privateTitle_one": "حزمة خاصة واحدة لا يُستعلم عنها أبدًا",
+  "preemption.releaseChecks.privateTitle_other": "{{count}} حزم خاصة لا يُستعلم عنها أبدًا",
+  "preemption.releaseChecks.privateBody": "تحدد إعدادات Go أو npm أو Cargo أو Python لديك أنها خاصة (GOPRIVATE، أو نطاق أو فهرس سجل خاص، أو مصدر git أو مسار)، لذا لا يرسل 4DA أسماءها أبدًا إلى سجل عام. لا تُفحص إصداراتها.",
   "settings.context.excludedInStack": "مستبعد في Your Stack",
   "settings.context.excludedInStackHint": "يستبعد Your Stack هذا المجلد: لا تُفحص مشاريعه بحثًا عن التبعيات أو التنبيهات الأمنية. غيّر ذلك من الذكاء > Your Stack."
 }

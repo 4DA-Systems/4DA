@@ -260,7 +260,7 @@ async fn deliver_webhook(
     signature: &str,
     event_type: &str,
 ) -> Result<u16> {
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .timeout(std::time::Duration::from_secs(10))
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()

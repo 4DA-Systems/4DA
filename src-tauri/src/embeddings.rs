@@ -23,7 +23,7 @@ use embeddings_providers::{embed_texts_ollama, embed_texts_openai, retry_with_ba
 
 /// Shared HTTP client for embedding API calls (reused across requests)
 static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
-    reqwest::Client::builder()
+    crate::http_client::outbound_builder()
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(90))
         .user_agent("Mozilla/5.0 (compatible; desktop-app)")
@@ -31,7 +31,7 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to build HTTP client: {e}, using default");
-            reqwest::Client::new()
+            crate::http_client::default_client()
         })
 });
 

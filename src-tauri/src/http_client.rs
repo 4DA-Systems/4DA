@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Shared HTTP clients for outbound requests.
 //!
+//! Every outbound client in the app, pooled or purpose-built, starts from
+//! [`outbound_builder`] (or [`outbound_blocking_builder`]): the OS trust
+//! store on top of the bundled roots, and `network.proxy_url` when set
+//! (audit P5). A test fails on a raw `reqwest::Client::builder()` elsewhere.
+//!
 //! Three pooled clients with distinct timeout profiles:
 //! - `HTTP_CLIENT` — general-purpose, 30s timeout, 10s connect
 //! - `PROBE_CLIENT` — health checks & API validation, 15s timeout, 5s connect
@@ -95,7 +100,7 @@ pub(crate) fn local_aware_redirect_policy() -> Policy {
 /// `validate_not_internal` and the request. Never point it at localhost —
 /// local endpoints (Ollama) use `PROBE_CLIENT` or their own clients.
 pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
+    outbound_builder()
         .user_agent("Mozilla/5.0 (compatible; desktop-app)")
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
@@ -106,14 +111,14 @@ pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to build HTTP client: {e}, using default");
-            reqwest::Client::new()
+            default_client()
         })
 });
 
 /// Shared client for quick health checks, status probes, and API validation.
 /// Tight timeouts prevent blocking on unresponsive services.
 pub(crate) static PROBE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
+    outbound_builder()
         .user_agent("Mozilla/5.0 (compatible; desktop-app)")
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(15))
@@ -121,51 +126,131 @@ pub(crate) static PROBE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to build probe client: {e}, using default");
-            reqwest::Client::new()
+            default_client()
         })
 });
 
-/// Create a reqwest client builder with optional proxy from settings.
-/// Call this when you need a client that respects the user's proxy config.
-#[allow(dead_code)]
-pub(crate) fn client_builder_with_proxy() -> reqwest::ClientBuilder {
-    let mut builder = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (compatible; desktop-app)")
-        .redirect(ssrf_guarded_redirect_policy());
+// ============================================================================
+// Every outbound client: the OS trust store and the configured proxy (P5)
+// ============================================================================
 
-    // Try to read proxy from settings
-    let manager = crate::get_settings_manager();
-    if let Some(guard) = manager.try_lock() {
-        if let Some(ref proxy_url) = guard.get().network.proxy_url {
-            if !proxy_url.trim().is_empty() {
-                match reqwest::Proxy::all(proxy_url) {
-                    Ok(proxy) => {
-                        tracing::info!(target: "4da::http", proxy = %proxy_url, "Proxy configured");
-                        builder = builder.proxy(proxy);
-                    }
-                    Err(e) => {
-                        tracing::warn!(target: "4da::http", error = %e, proxy = %proxy_url, "Invalid proxy URL — ignoring");
-                    }
-                }
-            }
+/// `network.proxy_url` as last loaded or saved (`settings::manager`).
+static CONFIGURED_PROXY: parking_lot::RwLock<Option<String>> = parking_lot::RwLock::new(None);
+/// Whether settings were loaded in this process ([`publish_proxy`] ran).
+static PROXY_PUBLISHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Mirror `network.proxy_url` for lock-free reads. Called whenever settings
+/// are loaded or saved. Clients already built keep the proxy they were built
+/// with; the shared pooled clients are built once, so a change takes effect
+/// on the next start.
+pub(crate) fn publish_proxy(url: Option<&str>) {
+    let url = url
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(str::to_string);
+    *CONFIGURED_PROXY.write() = url;
+    PROXY_PUBLISHED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// The configured proxy URL, if any. Before settings have been published,
+/// reads them once without initializing them (never blocks on the lock).
+pub(crate) fn configured_proxy() -> Option<String> {
+    if PROXY_PUBLISHED.load(std::sync::atomic::Ordering::SeqCst) {
+        return CONFIGURED_PROXY.read().clone();
+    }
+    crate::state::try_get_settings_manager()
+        .and_then(|m| m.try_lock())
+        .and_then(|guard| guard.get().network.proxy_url.clone())
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty())
+}
+
+/// Destinations that never go through the configured proxy: this machine
+/// and the private network ranges (a LAN Ollama, a local llama-server).
+const LOCAL_NO_PROXY: &str =
+    "localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16";
+
+/// Where requests go when `network.proxy_url` cannot be used: a closed
+/// loopback port, so they fail instead of silently leaving without the
+/// proxy the user asked for (a Tor user's `socks5://` URL in a build without
+/// SOCKS support must not fall back to a direct connection).
+const REFUSE_PROXY: &str = "http://127.0.0.1:1";
+
+/// `url` when this build can use it as a proxy, else [`REFUSE_PROXY`].
+pub(crate) fn usable_proxy_url(url: &str) -> &str {
+    match reqwest::Proxy::all(url) {
+        Ok(_) => url,
+        Err(e) => {
+            tracing::error!(
+                target: "4da::http",
+                error = %e,
+                "network.proxy_url is not a proxy this build can use; outbound requests are refused until it is fixed"
+            );
+            REFUSE_PROXY
         }
     }
+}
 
-    builder
+/// The proxy for `url`, bypassed for [`LOCAL_NO_PROXY`] and the hosts in
+/// `NO_PROXY` / `no_proxy`. An unusable URL refuses ([`usable_proxy_url`]).
+pub(crate) fn proxy_for(url: &str) -> reqwest::Proxy {
+    let env_no_proxy = std::env::var("NO_PROXY")
+        .or_else(|_| std::env::var("no_proxy"))
+        .unwrap_or_default();
+    let no_proxy = reqwest::NoProxy::from_string(&format!("{LOCAL_NO_PROXY},{env_no_proxy}"));
+    match reqwest::Proxy::all(usable_proxy_url(url)) {
+        Ok(proxy) => proxy.no_proxy(no_proxy),
+        // REFUSE_PROXY is a constant that parses; never fall back to direct.
+        Err(_) => reqwest::Proxy::custom(|_| Some(REFUSE_PROXY)),
+    }
+}
+
+/// The builder every outbound async client starts from: certificates from
+/// the operating system's trust store (so a corporate TLS-inspection root
+/// works) on top of the bundled Mozilla roots, and `network.proxy_url` when
+/// set. The system proxy (`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`,
+/// `NO_PROXY`, and on Windows the Internet Options proxy) applies as before.
+pub(crate) fn outbound_builder() -> reqwest::ClientBuilder {
+    builder_with(configured_proxy().as_deref())
+}
+
+/// [`outbound_builder`] with the proxy supplied (the test seam).
+pub(crate) fn builder_with(proxy: Option<&str>) -> reqwest::ClientBuilder {
+    let builder = reqwest::Client::builder().tls_built_in_native_certs(true);
+    match proxy {
+        Some(url) => builder.proxy(proxy_for(url)),
+        None => builder,
+    }
+}
+
+/// The fallback when a configured client fails to build: still the trust
+/// store and the proxy, only without the caller's timeouts and policies.
+pub(crate) fn default_client() -> reqwest::Client {
+    outbound_builder().build().unwrap_or_default()
+}
+
+/// [`outbound_builder`] for the blocking client (model downloads).
+pub(crate) fn outbound_blocking_builder() -> reqwest::blocking::ClientBuilder {
+    let builder = reqwest::blocking::Client::builder().tls_built_in_native_certs(true);
+    match configured_proxy() {
+        Some(url) => builder.proxy(proxy_for(&url)),
+        None => builder,
+    }
 }
 
 /// Shared client for team relay operations (sync, create, join).
-/// Uses team-specific user-agent for relay identification.
-#[allow(dead_code)]
+/// Uses team-specific user-agent for relay identification. Only the
+/// `team-sync` build calls it (`team_sync_commands/lifecycle.rs`).
+#[cfg_attr(not(feature = "team-sync"), allow(dead_code))]
 pub(crate) static TEAM_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
+    outbound_builder()
         .user_agent("4DA-TeamSync/1.0")
         .timeout(Duration::from_secs(15))
         .redirect(ssrf_guarded_redirect_policy())
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to build team client: {e}, using default");
-            reqwest::Client::new()
+            default_client()
         })
 });
 
@@ -390,6 +475,169 @@ mod redirect_policy_tests {
         assert!(
             format!("{err:?}").contains("too many redirects"),
             "expected the hop-limit message, got: {err:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod outbound_tests {
+    use super::*;
+    use std::path::Path;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    /// A loopback server that answers every request with `body` and records
+    /// each request line (an HTTP proxy receives the absolute URL there).
+    async fn recording_server(
+        body: &'static str,
+    ) -> (u16, std::sync::Arc<parking_lot::Mutex<Vec<String>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let seen = std::sync::Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        tokio::spawn(async move {
+            while let Ok((mut sock, _)) = listener.accept().await {
+                let log = log.clone();
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 4096];
+                    let Ok(n) = sock.read(&mut buf).await else {
+                        return;
+                    };
+                    let request = String::from_utf8_lossy(&buf[..n]);
+                    log.lock()
+                        .push(request.lines().next().unwrap_or("").to_string());
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = sock.write_all(response.as_bytes()).await;
+                    let _ = sock.shutdown().await;
+                });
+            }
+        });
+        (port, seen)
+    }
+
+    /// P5: `network.proxy_url` was read by a function nothing called, so a
+    /// configured proxy was ignored. The builder every client starts from
+    /// now routes through it.
+    #[tokio::test]
+    async fn the_configured_proxy_carries_outbound_requests() {
+        let (port, seen) = recording_server("via-proxy").await;
+        let client = builder_with(Some(&format!("http://127.0.0.1:{port}")))
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("client");
+
+        let body = client
+            .get("http://registry.example.invalid/react")
+            .send()
+            .await
+            .expect("through the proxy")
+            .text()
+            .await
+            .expect("body");
+
+        assert_eq!(body, "via-proxy");
+        assert_eq!(
+            seen.lock().as_slice(),
+            ["GET http://registry.example.invalid/react HTTP/1.1"]
+        );
+    }
+
+    /// This machine and the private ranges never go through the proxy (a
+    /// local Ollama keeps working behind a corporate proxy).
+    #[tokio::test]
+    async fn local_addresses_bypass_the_configured_proxy() {
+        let (proxy_port, proxied) = recording_server("via-proxy").await;
+        let (port, _) = recording_server("direct").await;
+        let client = builder_with(Some(&format!("http://127.0.0.1:{proxy_port}")))
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("client");
+
+        let body = client
+            .get(format!("http://127.0.0.1:{port}/api/version"))
+            .send()
+            .await
+            .expect("direct")
+            .text()
+            .await
+            .expect("body");
+
+        assert_eq!(body, "direct");
+        assert!(
+            proxied.lock().is_empty(),
+            "the proxy saw {:?}",
+            proxied.lock()
+        );
+    }
+
+    /// A proxy URL this build cannot use refuses requests instead of
+    /// letting them leave without the proxy the user asked for.
+    #[test]
+    fn an_unusable_proxy_url_refuses_rather_than_going_direct() {
+        assert_eq!(
+            usable_proxy_url("http://proxy.corp.example:8080"),
+            "http://proxy.corp.example:8080"
+        );
+        assert_eq!(usable_proxy_url("::not a proxy url"), REFUSE_PROXY);
+        assert!(builder_with(Some("::not a proxy url")).build().is_ok());
+    }
+
+    /// P5: every client used to be built with `reqwest::Client::builder()`
+    /// at its call site (bundled roots only, no configured proxy). Production
+    /// code now builds them from `outbound_builder` / `outbound_blocking_builder`
+    /// only; a new raw builder fails here.
+    #[test]
+    fn every_production_client_starts_from_outbound_builder() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let raw = [
+            "reqwest::Client::builder()",
+            "reqwest::Client::new()",
+            "reqwest::blocking::Client::builder()",
+            "reqwest::blocking::Client::new()",
+        ];
+        let test_mod =
+            regex::Regex::new(r"#\[cfg\(test\)\]\s*\n\s*(pub(\(crate\)|\(super\))? )?mod ")
+                .expect("regex");
+        let mut offenders = Vec::new();
+        let mut stack = vec![src.clone()];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read src").flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let rel = path
+                    .strip_prefix(&src)
+                    .expect("under src")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if !rel.ends_with(".rs") || rel.ends_with("_tests.rs") || rel == "http_client.rs" {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).expect("read");
+                let code = match test_mod.find(&text) {
+                    Some(m) => &text[..m.start()],
+                    None => text.as_str(),
+                };
+                for (i, line) in code.lines().enumerate() {
+                    let trimmed = line.trim_start();
+                    if trimmed.starts_with("//") {
+                        continue;
+                    }
+                    if raw.iter().any(|r| line.contains(r)) {
+                        offenders.push(format!("{rel}:{}", i + 1));
+                    }
+                }
+            }
+        }
+        offenders.sort();
+        assert!(
+            offenders.is_empty(),
+            "build outbound clients from http_client::outbound_builder: {offenders:?}"
         );
     }
 }

@@ -20,15 +20,20 @@ import { setActivityTrackingEnabled } from '../../hooks/use-telemetry';
  *     relevance learning.
  *   • GitHub release notes — opt-in, default OFF. GitHub learns which
  *     repositories you depend on (NETWORK.md §2m).
+ *   • Registry lookups — on by default (the release checks need them). Off,
+ *     no dependency name is sent to npm, crates.io, PyPI or the Go proxy;
+ *     advisory matching still runs from the downloaded archive, and
+ *     releases read as not checked (NETWORK.md §1b, §2c).
  *
- * Design principle: every option here defaults to the most privacy-preserving
- * state. Sharing is always an explicit, per-incident user action.
+ * Design principle: every opt-in here defaults to the most privacy-preserving
+ * state; the one default-on lookup can be turned off.
  */
 export function PrivacySection() {
   const { t } = useTranslation();
   const [activityOptedIn, setActivityOptedIn] = useState<boolean | null>(null);
   const [titlesOnly, setTitlesOnly] = useState(false);
   const [githubNotes, setGithubNotes] = useState(false);
+  const [registryLookups, setRegistryLookups] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -48,6 +53,7 @@ export function PrivacySection() {
           setActivityOptedIn(Boolean(privacy.activity_tracking_opt_in));
           setTitlesOnly(privacy.llm_content_level === 'titles_only');
           setGithubNotes(privacy.github_release_notes === true);
+          setRegistryLookups(privacy.registry_lookups !== false);
         }
       } catch {
         if (!cancelled) {
@@ -91,6 +97,18 @@ export function PrivacySection() {
     try {
       await cmd('set_privacy_config', { githubReleaseNotes: next });
       setGithubNotes(next);
+    } catch {
+      // Toggle stays where it was.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRegistryLookupsToggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await cmd('set_privacy_config', { registryLookups: next });
+      setRegistryLookups(next);
     } catch {
       // Toggle stays where it was.
     } finally {
@@ -314,6 +332,25 @@ export function PrivacySection() {
                 'Looks up release notes on GitHub for packages whose registry entry links a GitHub repo. GitHub sees which repositories you depend on.',
               )}
             </p>
+          </div>
+        </label>
+      </div>
+
+      <div className="border-t border-border/40 pt-3">
+        <label htmlFor="privacy-registry-lookups" aria-label={t('settings.privacy.registryLookups.title')} className="flex items-start gap-3 cursor-pointer">
+          <input
+            id="privacy-registry-lookups"
+            type="checkbox"
+            checked={registryLookups}
+            disabled={saving}
+            onChange={(e) => {
+              void handleRegistryLookupsToggle(e.target.checked);
+            }}
+            className="mt-0.5 w-4 h-4 rounded border-border bg-bg-secondary text-accent-gold focus:ring-accent-gold/50"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-text-primary">{t('settings.privacy.registryLookups.title')}</div>
+            <p className="text-xs text-text-muted mt-0.5">{t('settings.privacy.registryLookups.subtitle')}</p>
           </div>
         </label>
       </div>

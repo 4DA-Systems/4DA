@@ -1551,6 +1551,8 @@
   "results.releaseChanges.fromGithub": "Projenin GitHub sürümlerinden",
   "settings.privacy.githubReleaseNotes.title": "GitHub'dan sürüm notları",
   "settings.privacy.githubReleaseNotes.subtitle": "Kayıt girdisi bir GitHub deposuna bağlanan paketler için GitHub'da sürüm notlarını arar. GitHub hangi depolara bağımlı olduğunuzu görür.",
+  "settings.privacy.registryLookups.title": "Kayıt defteri sorguları",
+  "settings.privacy.registryLookups.subtitle": "Bağımlılıklarınızın yeni, geri çekilmiş ve kullanımdan kaldırılmış sürümlerini npm, crates.io, PyPI ve Go modül proxy’sine sorar; bu, onlara bağımlılık adlarınızı gönderir. Kapalıyken onlara hiçbir şey gönderilmez: güvenlik bildirimleri indirilen OSV arşiviyle eşleştirilmeye devam eder ve sürümler kontrol edilmedi olarak gösterilir. Özel paketler (GOPRIVATE, özel kayıt defteri kapsamları ve dizinleri, git ve yol kaynakları) hiçbir durumda gönderilmez.",
   "results.cached": "{{relevant}}/{{total}} öğe ilgili (önbelleklenmiş)",
   "results.clearSourceFilters": "Kaynak Filtrelerini Temizle",
   "results.clickAnalyze": "İlgili içeriği keşfetmek için Analiz Et'e tıklayın",
@@ -2658,6 +2660,11 @@
   "preemption.notCovered.unreadableTitle_one": "1 kilit dosyası okunamadı",
   "preemption.notCovered.unreadableTitle_other": "{{count}} kilit dosyası okunamadı",
   "preemption.notCovered.unreadableBody": "4DA son taramada bu dosyaları okuyamadı, bu yüzden sabitledikleri sürümleri kontrol edilmiş saymaz. Dosyayı düzeltin veya yeniden tarayın.",
+  "preemption.releaseChecks.offTitle": "Sürüm kontrolleri kapalı",
+  "preemption.releaseChecks.offBody": "Kayıt defteri sorguları Ayarlar → Gizlilik bölümünde kapalı, bu yüzden 4DA bağımlılıklarınızı npm, crates.io, PyPI veya Go modül proxy’sine sormaz. Güvenlik bildirimleri indirilen arşivle eşleştirilmeye devam eder. Yeni, geri çekilmiş ve kullanımdan kaldırılmış sürümler kontrol edilmez ve düzeltme sürümleri yalnızca bildirimlerden gelir.",
+  "preemption.releaseChecks.privateTitle_one": "1 özel paket hiç sorgulanmaz",
+  "preemption.releaseChecks.privateTitle_other": "{{count}} özel paket hiç sorgulanmaz",
+  "preemption.releaseChecks.privateBody": "Go, npm, Cargo veya Python ayarlarınız onları özel olarak işaretliyor (GOPRIVATE, özel bir kayıt defteri kapsamı veya dizini, bir git veya yol kaynağı), bu yüzden 4DA adlarını asla herkese açık bir kayıt defterine göndermez. Sürümleri kontrol edilmez.",
   "settings.context.excludedInStack": "Your Stack'te hariç tutuldu",
   "settings.context.excludedInStackHint": "Your Stack bu klasörü hariç tutuyor: projeleri bağımlılıklar veya güvenlik uyarıları için denetlenmiyor. Zeka > Your Stack altında değiştirin."
 }

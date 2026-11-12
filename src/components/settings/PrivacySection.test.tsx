@@ -5,6 +5,7 @@ import { PrivacySection } from './PrivacySection';
 
 let level = 'full';
 let githubNotes = false;
+let registryLookups: boolean | undefined = true;
 const cmdMock = vi.fn((name: string, _args?: unknown): Promise<unknown> => {
   if (name === 'get_privacy_config') {
     return Promise.resolve({
@@ -13,6 +14,7 @@ const cmdMock = vi.fn((name: string, _args?: unknown): Promise<unknown> => {
       cloud_llm_disclosure_accepted: false,
       activity_tracking_opt_in: false,
       github_release_notes: githubNotes,
+      registry_lookups: registryLookups,
     });
   }
   return Promise.resolve(undefined);
@@ -25,6 +27,7 @@ beforeEach(() => {
   cmdMock.mockClear();
   level = 'full';
   githubNotes = false;
+  registryLookups = true;
 });
 
 // The test i18n setup renders keys, not the inline English defaults. The label
@@ -115,5 +118,55 @@ describe('PrivacySection — GitHub release notes (NETWORK.md §2m, opt-in)', ()
     fireEvent.click(box);
     await waitFor(() => expect(box).not.toBeDisabled());
     expect(box).not.toBeChecked();
+  });
+});
+
+const registryLookupsBox = async (): Promise<HTMLInputElement> => {
+  await screen.findByLabelText('settings.privacy.registryLookups.title');
+  const box = document.getElementById('privacy-registry-lookups');
+  if (!(box instanceof HTMLInputElement)) throw new Error('registry-lookups checkbox not rendered');
+  return box;
+};
+
+describe('PrivacySection — registry lookups (NETWORK.md §1b/§2c, audit P1)', () => {
+  it('is on by default, and on when an older backend does not send it', async () => {
+    render(<PrivacySection />);
+    expect(await registryLookupsBox()).toBeChecked();
+    expect(screen.getByText('settings.privacy.registryLookups.subtitle')).toBeTruthy();
+  });
+
+  it('defaults on when the field is absent', async () => {
+    registryLookups = undefined;
+    render(<PrivacySection />);
+    expect(await registryLookupsBox()).toBeChecked();
+  });
+
+  it('reflects lookups turned off', async () => {
+    registryLookups = false;
+    render(<PrivacySection />);
+    expect(await registryLookupsBox()).not.toBeChecked();
+  });
+
+  it('persists turning lookups off and back on', async () => {
+    render(<PrivacySection />);
+    fireEvent.click(await registryLookupsBox());
+    await waitFor(() =>
+      expect(cmdMock).toHaveBeenCalledWith('set_privacy_config', { registryLookups: false }),
+    );
+    await waitFor(async () => expect(await registryLookupsBox()).not.toBeChecked());
+
+    fireEvent.click(await registryLookupsBox());
+    await waitFor(() =>
+      expect(cmdMock).toHaveBeenCalledWith('set_privacy_config', { registryLookups: true }),
+    );
+  });
+
+  it('stays on when saving fails', async () => {
+    render(<PrivacySection />);
+    const box = await registryLookupsBox();
+    cmdMock.mockImplementationOnce(() => Promise.reject(new Error('boom')));
+    fireEvent.click(box);
+    await waitFor(() => expect(box).not.toBeDisabled());
+    expect(box).toBeChecked();
   });
 });

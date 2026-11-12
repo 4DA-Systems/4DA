@@ -15,6 +15,7 @@ import {
   PreemptionAdvisoryNotice, PreemptionFreshnessRow, needsAdvisoryLine, useRefreshWhenVisible,
 } from './PreemptionAdvisoryNotice';
 import { PreemptionNotCoveredNote } from './PreemptionNotCoveredNote';
+import { PreemptionReleaseChecksNote } from './PreemptionReleaseChecksNote';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import { ReportAge } from '../ReportAge';
 import { ScanProjectsPrompt } from '../blindspots/BlindSpotsFirstDay';
@@ -220,6 +221,9 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
 
       {/* Files whose versions 4DA does not read: never covered by an all-clear. */}
       {feed && <PreemptionNotCoveredNote notCovered={feed.advisory_sync?.not_covered} />}
+
+      {/* Release lookups not made (Settings → Privacy, private names): stated, never read as checked. */}
+      {feed && <PreemptionReleaseChecksNote sync={feed.advisory_sync} />}
 
       {feed && totalAlerts === 0 && !noDependenciesKnown && negative.kind === 'assert' && (
         <div className="flex flex-col items-center justify-center py-20 text-center">

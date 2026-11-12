@@ -32,7 +32,7 @@ pub(crate) async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<ser
         }
     }
 
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_mins(2)) // generous for cold model load
         .redirect(crate::http_client::local_aware_redirect_policy())
@@ -399,7 +399,7 @@ pub(super) async fn pull_ollama_model_impl(
 
     info!(target: "4da::ollama", model = %model, "Starting model pull");
 
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .timeout(std::time::Duration::from_mins(10)) // 10 min timeout for large models
         .redirect(crate::http_client::local_aware_redirect_policy())
         .build()

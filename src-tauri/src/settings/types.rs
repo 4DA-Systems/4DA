@@ -617,10 +617,22 @@ pub struct PrivacyConfig {
     /// so it is off by default and listed in NETWORK.md §2m.
     #[serde(default)]
     pub github_release_notes: bool,
+    /// Release checks against the public registries (npm, crates.io, PyPI,
+    /// the Go module proxy), which send them dependency names. On by
+    /// default; off, no registry is contacted and releases read as not
+    /// checked, while advisory matching keeps running from the downloaded
+    /// archive (`registry_privacy`, NETWORK.md §1b/§2c). Private names are
+    /// never sent either way.
+    #[serde(default = "default_registry_lookups")]
+    pub registry_lookups: bool,
 }
 
 fn default_llm_content_level() -> String {
     "full".to_string()
+}
+
+fn default_registry_lookups() -> bool {
+    true
 }
 
 impl Default for PrivacyConfig {
@@ -630,6 +642,7 @@ impl Default for PrivacyConfig {
             cloud_llm_disclosure_accepted: false,
             activity_tracking_opt_in: false,
             github_release_notes: false,
+            registry_lookups: default_registry_lookups(),
         }
     }
 }

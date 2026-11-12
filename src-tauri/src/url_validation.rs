@@ -349,6 +349,11 @@ fn system_proxy_settings() -> Vec<(String, String)> {
     if let Some(server) = windows_proxy_server() {
         settings.push(("ProxyServer".to_string(), server));
     }
+    // `network.proxy_url` from settings.json, which every outbound client
+    // uses (`http_client::outbound_builder`).
+    if let Some(url) = crate::http_client::configured_proxy() {
+        settings.push(("ALL_PROXY".to_string(), url));
+    }
     settings
 }
 

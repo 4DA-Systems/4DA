@@ -172,7 +172,7 @@ pub(crate) fn memory_budget_mb() -> Option<u64> {
 }
 
 async fn fetch_installed(base_url: &str) -> Option<Vec<Installed>> {
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .timeout(Duration::from_secs(3))
         .build()
         .ok()?;
@@ -335,7 +335,10 @@ async fn warm(model: String, base_url: String) {
 }
 
 async fn load_model(base_url: &str, model: &str) -> bool {
-    let Ok(client) = reqwest::Client::builder().timeout(LOAD_TIMEOUT).build() else {
+    let Ok(client) = crate::http_client::outbound_builder()
+        .timeout(LOAD_TIMEOUT)
+        .build()
+    else {
         return false;
     };
     let mut body = serde_json::json!({
@@ -392,7 +395,7 @@ pub(crate) async fn release_after_cycle() {
 
 /// Ask Ollama to unload `model` now (after a cycle, or to hand a busy GPU back).
 async fn unload(model: &str, base_url: &str) {
-    let Ok(client) = reqwest::Client::builder()
+    let Ok(client) = crate::http_client::outbound_builder()
         .timeout(Duration::from_secs(10))
         .build()
     else {
@@ -527,7 +530,7 @@ async fn redetect_if_stale() {
 
 /// The judge's current VRAM footprint per Ollama's `/api/ps` (0 when not loaded).
 async fn resident_vram_mb(base_url: &str, model: &str) -> u64 {
-    let Ok(client) = reqwest::Client::builder()
+    let Ok(client) = crate::http_client::outbound_builder()
         .timeout(Duration::from_secs(3))
         .build()
     else {

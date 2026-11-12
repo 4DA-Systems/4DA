@@ -1514,6 +1514,8 @@
   "results.releaseChanges.fromGithub": "프로젝트의 GitHub 릴리스에서",
   "settings.privacy.githubReleaseNotes.title": "GitHub 릴리스 노트",
   "settings.privacy.githubReleaseNotes.subtitle": "레지스트리 항목이 GitHub 저장소에 연결된 패키지의 릴리스 노트를 GitHub에서 찾습니다. GitHub는 사용자가 어떤 저장소에 의존하는지 알게 됩니다.",
+  "settings.privacy.registryLookups.title": "레지스트리 조회",
+  "settings.privacy.registryLookups.subtitle": "의존성의 새 릴리스, 철회된 릴리스, 지원 중단된 릴리스를 npm, crates.io, PyPI, Go 모듈 프록시에 확인하며, 이때 의존성 이름이 전송됩니다. 끄면 아무것도 전송되지 않습니다. 보안 권고는 다운로드한 OSV 아카이브와 계속 비교되고, 릴리스는 확인되지 않음으로 표시됩니다. 비공개 패키지(GOPRIVATE, 비공개 레지스트리 범위 및 인덱스, git 및 경로 소스)는 어느 경우에도 전송되지 않습니다.",
   "results.cached": "{{relevant}}/{{total}}개 항목 관련 (캐시)",
   "results.clearSourceFilters": "소스 필터 초기화",
   "results.clickAnalyze": "분석을 클릭하여 관련 콘텐츠 발견",
@@ -2654,6 +2656,11 @@
   "preemption.notCovered.unreadableTitle_one": "잠금 파일 1개를 읽을 수 없습니다",
   "preemption.notCovered.unreadableTitle_other": "잠금 파일 {{count}}개를 읽을 수 없습니다",
   "preemption.notCovered.unreadableBody": "4DA가 마지막 스캔에서 이 파일들을 읽지 못했으므로 여기에 고정된 버전을 확인된 것으로 보지 않습니다. 파일을 수정하거나 다시 스캔하세요.",
+  "preemption.releaseChecks.offTitle": "릴리스 확인이 꺼져 있습니다",
+  "preemption.releaseChecks.offBody": "설정 → 개인정보 보호에서 레지스트리 조회가 꺼져 있어 4DA는 의존성에 대해 npm, crates.io, PyPI, Go 모듈 프록시에 묻지 않습니다. 보안 권고는 다운로드한 아카이브와 계속 비교됩니다. 새 릴리스, 철회된 릴리스, 지원 중단된 릴리스는 확인되지 않으며, 수정 버전은 권고 정보만으로 정해집니다.",
+  "preemption.releaseChecks.privateTitle_one": "비공개 패키지 1개는 조회되지 않습니다",
+  "preemption.releaseChecks.privateTitle_other": "비공개 패키지 {{count}}개는 조회되지 않습니다",
+  "preemption.releaseChecks.privateBody": "Go, npm, Cargo 또는 Python 설정에서 비공개로 지정되어 있어(GOPRIVATE, 비공개 레지스트리 범위나 인덱스, git 또는 경로 소스) 4DA는 그 이름을 공개 레지스트리에 보내지 않습니다. 해당 릴리스는 확인되지 않습니다.",
   "settings.context.excludedInStack": "Your Stack에서 제외됨",
   "settings.context.excludedInStackHint": "Your Stack에서 이 폴더를 제외했습니다. 이 폴더의 프로젝트는 의존성이나 보안 권고를 검사하지 않습니다. 인텔리전스 > Your Stack에서 변경하세요."
 }

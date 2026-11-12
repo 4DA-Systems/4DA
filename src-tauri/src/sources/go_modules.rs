@@ -89,9 +89,20 @@ impl GoModulesSource {
     /// rotating window of `max_items` per cycle so a long module list is covered
     /// in turn. Returns an empty vec when no Go module is declared.
     async fn fetch_targeted(&self) -> SourceResult<Vec<SourceItem>> {
-        let modules = crate::source_fetching::load_ace_packages_for_ecosystem("go");
-        if modules.is_empty() {
+        let declared = crate::source_fetching::load_ace_packages_for_ecosystem("go");
+        if declared.is_empty() {
             info!("No Go modules declared in any manifest — skipping Go fetch");
+            return Ok(Vec::new());
+        }
+        // GOPRIVATE / GONOPROXY / GONOSUMDB modules and local replacements
+        // never reach the public proxy, and nothing does while registry
+        // lookups are off (`registry_privacy`).
+        let modules = crate::registry_privacy::lookable("go", &declared);
+        if modules.is_empty() {
+            info!(
+                declared = declared.len(),
+                "No Go module may be looked up on the public proxy — skipping Go fetch"
+            );
             return Ok(Vec::new());
         }
         let window = crate::source_fetching::rotating_window(

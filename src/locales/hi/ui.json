@@ -1573,6 +1573,8 @@
   "results.releaseChanges.fromGithub": "प्रोजेक्ट की GitHub रिलीज़ से",
   "settings.privacy.githubReleaseNotes.title": "GitHub से रिलीज़ नोट्स",
   "settings.privacy.githubReleaseNotes.subtitle": "उन पैकेजों के लिए GitHub पर रिलीज़ नोट्स खोजता है जिनकी रजिस्ट्री प्रविष्टि किसी GitHub रिपॉज़िटरी से जुड़ी है। GitHub देखता है कि आप किन रिपॉज़िटरी पर निर्भर हैं।",
+  "settings.privacy.registryLookups.title": "रजिस्ट्री लुकअप",
+  "settings.privacy.registryLookups.subtitle": "आपकी डिपेंडेंसी के नए, वापस लिए गए और अप्रचलित रिलीज़ के बारे में npm, crates.io, PyPI और Go मॉड्यूल प्रॉक्सी से पूछता है, जिससे उन्हें आपकी डिपेंडेंसी के नाम भेजे जाते हैं। बंद होने पर उन्हें कुछ नहीं भेजा जाता: सुरक्षा सलाहें डाउनलोड किए गए OSV आर्काइव से मिलाई जाती रहती हैं, और रिलीज़ जाँचे नहीं गए के रूप में दिखते हैं। निजी पैकेज (GOPRIVATE, निजी रजिस्ट्री स्कोप और इंडेक्स, git और पाथ स्रोत) किसी भी स्थिति में नहीं भेजे जाते।",
   "results.cached": "{{relevant}}/{{total}} आइटम प्रासंगिक (कैश्ड)",
   "results.clearSourceFilters": "स्रोत फ़िल्टर साफ़ करें",
   "results.clickAnalyze": "प्रासंगिक सामग्री खोजने के लिए विश्लेषण पर क्लिक करें",
@@ -2700,6 +2702,11 @@
   "preemption.notCovered.unreadableTitle_one": "1 लॉकफ़ाइल पढ़ी नहीं जा सकी",
   "preemption.notCovered.unreadableTitle_other": "{{count}} लॉकफ़ाइलें पढ़ी नहीं जा सकीं",
   "preemption.notCovered.unreadableBody": "4DA पिछले स्कैन में इन फ़ाइलों को नहीं पढ़ सका, इसलिए इनमें तय किए गए संस्करणों को जाँचा हुआ नहीं मानता। फ़ाइल ठीक करें या फिर से स्कैन करें।",
+  "preemption.releaseChecks.offTitle": "रिलीज़ जाँच बंद है",
+  "preemption.releaseChecks.offBody": "सेटिंग्स → गोपनीयता में रजिस्ट्री लुकअप बंद है, इसलिए 4DA आपकी डिपेंडेंसी के बारे में npm, crates.io, PyPI या Go मॉड्यूल प्रॉक्सी से नहीं पूछता। सुरक्षा सलाहें डाउनलोड किए गए आर्काइव से मिलाई जाती रहती हैं। नए, वापस लिए गए और अप्रचलित रिलीज़ नहीं जाँचे जाते, और फ़िक्स संस्करण केवल सलाहों से आते हैं।",
+  "preemption.releaseChecks.privateTitle_one": "1 निजी पैकेज कभी लुकअप नहीं किया जाता",
+  "preemption.releaseChecks.privateTitle_other": "{{count}} निजी पैकेज कभी लुकअप नहीं किए जाते",
+  "preemption.releaseChecks.privateBody": "आपकी Go, npm, Cargo या Python सेटिंग्स उन्हें निजी बताती हैं (GOPRIVATE, निजी रजिस्ट्री स्कोप या इंडेक्स, git या पाथ स्रोत), इसलिए 4DA उनके नाम कभी किसी सार्वजनिक रजिस्ट्री को नहीं भेजता। उनके रिलीज़ नहीं जाँचे जाते।",
   "settings.context.excludedInStack": "Your Stack में बाहर रखा गया",
   "settings.context.excludedInStackHint": "Your Stack इस फ़ोल्डर को बाहर रखता है: इसके प्रोजेक्ट्स की निर्भरताओं या सुरक्षा सलाहों के लिए जाँच नहीं होती। बुद्धिमत्ता > Your Stack में बदलें।"
 }

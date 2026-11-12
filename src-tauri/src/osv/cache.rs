@@ -298,7 +298,7 @@ impl Mirror {
 
 /// Build a reqwest client with the 4DA user-agent.
 fn build_client(timeout_secs: u64) -> Result<reqwest::Client> {
-    reqwest::Client::builder()
+    crate::http_client::outbound_builder()
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())

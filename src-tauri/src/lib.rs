@@ -336,6 +336,7 @@ pub mod provenance;
 pub mod query;
 mod quit_command;
 mod reconciler;
+pub(crate) mod registry_privacy;
 pub(crate) mod release_changelog;
 pub(crate) mod restart_snapshot;
 pub(crate) mod runtime_paths;

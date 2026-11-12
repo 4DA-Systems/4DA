@@ -92,7 +92,7 @@ fn ensure_ort_runtime(
     let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-aarch64-1.24.2.tgz";
 
     let archive_path = ort_dir.join("ort_download.tmp");
-    let client = reqwest::blocking::Client::builder()
+    let client = crate::http_client::outbound_blocking_builder()
         .timeout(std::time::Duration::from_mins(10))
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()

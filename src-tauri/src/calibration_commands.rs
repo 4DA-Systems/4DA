@@ -305,7 +305,7 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
 pub(crate) async fn check_rig_requirements() -> RigRequirements {
     let ollama_url = "http://localhost:11434".to_string();
 
-    let ollama_check = reqwest::Client::builder()
+    let ollama_check = crate::http_client::outbound_builder()
         .timeout(std::time::Duration::from_secs(3))
         .redirect(crate::http_client::local_aware_redirect_policy())
         .build()

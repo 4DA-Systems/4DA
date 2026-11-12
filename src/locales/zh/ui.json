@@ -1147,6 +1147,8 @@
   "results.releaseChanges.fromGithub": "来自项目的 GitHub 发布",
   "settings.privacy.githubReleaseNotes.title": "来自 GitHub 的发布说明",
   "settings.privacy.githubReleaseNotes.subtitle": "为注册表条目链接到 GitHub 仓库的软件包在 GitHub 上查找发布说明。GitHub 会看到你依赖哪些仓库。",
+  "settings.privacy.registryLookups.title": "注册表查询",
+  "settings.privacy.registryLookups.subtitle": "向 npm、crates.io、PyPI 和 Go 模块代理查询依赖项的新版本、撤回版本和已弃用版本，这会把依赖项名称发送给它们。关闭后不会向它们发送任何内容：安全公告仍与已下载的 OSV 归档比对，版本显示为未检查。私有包（GOPRIVATE、私有注册表作用域和索引、git 与路径来源）在任何情况下都不会发送。",
   "results.aiSummary": "AI 摘要",
   "results.generateAiSummary": "生成 AI 摘要",
   "results.contextMatches": "{{count}} 个上下文匹配",
@@ -2638,6 +2640,11 @@
   "preemption.notCovered.unreadableTitle_one": "1 个锁文件无法读取",
   "preemption.notCovered.unreadableTitle_other": "{{count}} 个锁文件无法读取",
   "preemption.notCovered.unreadableBody": "4DA 在上次扫描时无法读取这些文件，因此不会把其中锁定的内容视为已检查。请修复文件或重新扫描。",
+  "preemption.releaseChecks.offTitle": "版本检查已关闭",
+  "preemption.releaseChecks.offBody": "已在 设置 → 隐私 中关闭注册表查询，因此 4DA 不会向 npm、crates.io、PyPI 或 Go 模块代理查询你的依赖项。安全公告仍与已下载的归档比对。新版本、撤回版本和已弃用版本不会被检查，修复版本仅来自安全公告。",
+  "preemption.releaseChecks.privateTitle_one": "1 个私有包从不查询",
+  "preemption.releaseChecks.privateTitle_other": "{{count}} 个私有包从不查询",
+  "preemption.releaseChecks.privateBody": "你的 Go、npm、Cargo 或 Python 设置将它们标记为私有（GOPRIVATE、私有注册表作用域或索引、git 或路径来源），因此 4DA 从不把它们的名称发送到公共注册表。它们的版本不会被检查。",
   "settings.context.excludedInStack": "已在 Your Stack 中排除",
   "settings.context.excludedInStackHint": "Your Stack 已排除此文件夹：其中的项目不会检查依赖项或安全公告。可在 智能 > Your Stack 中更改。"
 }

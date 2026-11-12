@@ -1145,6 +1145,8 @@
   "results.releaseChanges.fromGithub": "Из выпусков проекта на GitHub",
   "settings.privacy.githubReleaseNotes.title": "Заметки о выпуске с GitHub",
   "settings.privacy.githubReleaseNotes.subtitle": "Ищет заметки о выпуске на GitHub для пакетов, запись которых в реестре ссылается на репозиторий GitHub. GitHub видит, от каких репозиториев вы зависите.",
+  "settings.privacy.registryLookups.title": "Запросы к реестрам",
+  "settings.privacy.registryLookups.subtitle": "Запрашивает у npm, crates.io, PyPI и прокси модулей Go новые, отозванные и устаревшие релизы ваших зависимостей, отправляя им имена зависимостей. Если выключено, им ничего не отправляется: бюллетени по-прежнему сверяются с загруженным архивом OSV, а релизы отмечаются как непроверенные. Приватные пакеты (GOPRIVATE, приватные области и индексы реестров, источники git и путей) не отправляются никогда.",
   "results.aiSummary": "ИИ-сводка",
   "results.generateAiSummary": "Сгенерировать ИИ-сводку",
   "results.contextMatches": "{{count}} совпадений по контексту",
@@ -2653,6 +2655,11 @@
   "preemption.notCovered.unreadableTitle_one": "Не удалось прочитать 1 lock-файл",
   "preemption.notCovered.unreadableTitle_other": "Не удалось прочитать lock-файлов: {{count}}",
   "preemption.notCovered.unreadableBody": "4DA не смог прочитать эти файлы при последнем сканировании, поэтому не считает проверенным то, что в них зафиксировано. Исправьте файл или запустите сканирование снова.",
+  "preemption.releaseChecks.offTitle": "Проверка релизов выключена",
+  "preemption.releaseChecks.offBody": "Запросы к реестрам выключены в Настройки → Конфиденциальность, поэтому 4DA не спрашивает npm, crates.io, PyPI и прокси модулей Go о ваших зависимостях. Бюллетени по-прежнему сверяются с загруженным архивом. Новые, отозванные и устаревшие релизы не проверяются, а версии с исправлениями берутся только из бюллетеней.",
+  "preemption.releaseChecks.privateTitle_one": "1 приватный пакет никогда не запрашивается",
+  "preemption.releaseChecks.privateTitle_other": "Приватных пакетов, которые никогда не запрашиваются: {{count}}",
+  "preemption.releaseChecks.privateBody": "Ваши настройки Go, npm, Cargo или Python помечают их как приватные (GOPRIVATE, приватная область или индекс реестра, источник git или путь), поэтому 4DA никогда не отправляет их имена в публичный реестр. Их релизы не проверяются.",
   "settings.context.excludedInStack": "исключено в Your Stack",
   "settings.context.excludedInStackHint": "Your Stack исключает эту папку: её проекты не проверяются на зависимости и бюллетени безопасности. Изменить: Интеллект > Your Stack."
 }

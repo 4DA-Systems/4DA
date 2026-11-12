@@ -134,6 +134,8 @@ fn state(s: AdvisorySyncState) -> AdvisorySync {
         in_flight: false,
         skipped_temp: 0,
         not_covered: None,
+        registry_lookups_off: None,
+        private_not_looked_up: None,
     }
 }
 
@@ -437,4 +439,49 @@ fn a_failed_check_with_no_verified_data_claims_no_age() {
     );
     assert_eq!(r.state, AdvisorySyncState::Failed);
     assert_eq!(r.synced_at, None);
+}
+
+/// P1: release lookups that were not made are stated on the readiness
+/// record, never left to read as checked.
+#[test]
+fn release_lookups_not_made_are_stated_on_the_record() {
+    use crate::registry_privacy::LookupStatus;
+    let ready = || state(AdvisorySyncState::Ready);
+
+    let on = with_lookup_status(ready(), LookupStatus::default());
+    assert_eq!(on.registry_lookups_off, None);
+    assert_eq!(on.private_not_looked_up, None);
+    let json = serde_json::to_value(&on).expect("json");
+    assert!(json.get("registry_lookups_off").is_none());
+    assert!(json.get("private_not_looked_up").is_none());
+
+    let off = with_lookup_status(
+        ready(),
+        LookupStatus {
+            off: true,
+            private_withheld: 3,
+        },
+    );
+    assert_eq!(off.registry_lookups_off, Some(true));
+    assert_eq!(
+        off.private_not_looked_up, None,
+        "with lookups off every name is unchecked; the private count adds nothing"
+    );
+    assert_eq!(
+        off.state,
+        AdvisorySyncState::Ready,
+        "advisories still matched"
+    );
+
+    let private = with_lookup_status(
+        ready(),
+        LookupStatus {
+            off: false,
+            private_withheld: 2,
+        },
+    );
+    assert_eq!(private.registry_lookups_off, None);
+    assert_eq!(private.private_not_looked_up, Some(2));
+    let json = serde_json::to_value(&private).expect("json");
+    assert_eq!(json["private_not_looked_up"], 2);
 }
