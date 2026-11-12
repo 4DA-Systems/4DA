@@ -578,14 +578,35 @@ jobs:
         # --keychain is passed explicitly so this does NOT disturb tauri-action's
         # own keychain/search-list used to sign the .app + notarize.
         # Platform-conditional ONLY - see the preflight gate for credentials.
+        #
+        # Intel macOS (x86_64-apple-darwin) bundles NO ONNX Runtime: none is
+        # published for it at the version the app needs, so local embeddings
+        # are declared unavailable there (Ollama works; R10, Wave 1 decision).
+        # FOURDA_ORT_TARGET makes download-ort.cjs act for the BUILD target, not
+        # this Apple-silicon runner's CPU (which is how v1.0.3's Intel app
+        # shipped an ARM64 dylib); for darwin-x64 it places nothing, so there
+        # is nothing to sign and this step says so and stops.
         if: runner.os == 'macOS'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          FOURDA_ORT_TARGET: ${{ matrix.target }}
         shell: bash
         run: |
           set -euo pipefail
+          DYLIB="src-tauri/models/ort/libonnxruntime.dylib"
+          # Place the ORT dylib for this target (bundle:resources no longer
+          # fetches the embedding model: AD-054 decision 7).
+          pnpm run bundle:resources
+          if [ ! -f "$DYLIB" ]; then
+            if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+              echo "::notice title=No ONNX Runtime on Intel macOS::${{ matrix.target }} bundles no ONNX Runtime by design; local embeddings are declared unavailable on Intel Macs. Nothing to pre-sign."
+              exit 0
+            fi
+            echo "::error::$DYLIB is missing for ${{ matrix.target }} - bundle:resources should have placed it. Release blocked."
+            exit 1
+          fi
           KEYCHAIN="$RUNNER_TEMP/ort-sign.keychain-db"
           KPW="$(openssl rand -hex 20)"
           security create-keychain -p "$KPW" "$KEYCHAIN"
@@ -603,10 +624,6 @@ jobs:
           # keychain"). Prepend ours, keeping the existing entries. tauri-action
           # re-configures the search list afterwards for its own .app signing.
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
-          # Place the ORT dylib now so we can sign it (bundle:resources no longer
-          # fetches the embedding model: AD-054 decision 7).
-          pnpm run bundle:resources
-          DYLIB="src-tauri/models/ort/libonnxruntime.dylib"
           codesign --force --options runtime --timestamp \
             --keychain "$KEYCHAIN" --sign "$APPLE_SIGNING_IDENTITY" "$DYLIB"
           codesign --verify --strict --verbose=2 "$DYLIB"

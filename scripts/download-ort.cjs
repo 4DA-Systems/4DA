@@ -24,7 +24,8 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const ORT_VERSION = '1.24.2';
-const DEST_DIR = path.resolve(__dirname, '..', 'src-tauri', 'models', 'ort');
+// FOURDA_ORT_DEST_DIR points it at another tree (tests).
+const DEST_DIR = process.env.FOURDA_ORT_DEST_DIR || path.resolve(__dirname, '..', 'src-tauri', 'models', 'ort');
 
 // A \r-redrawn progress bar is meaningful on a terminal and is pure noise
 // anywhere else — on a pipe every redraw becomes its own log line (~500 of them
@@ -58,11 +59,20 @@ function closeIdleConnections() {
 // ARM64 library instead (the release built that leg on an Apple-silicon runner
 // and this script picked the runner's CPU). Asking for darwin-x64 now fails with
 // the reason rather than shipping a library the app cannot load.
-const DARWIN_X64_UNAVAILABLE =
+//
+// Decision (Wave 1, 2026-11-12): the Intel macOS build ships with local
+// embeddings declared unavailable, and Ollama serves embeddings there. So
+// darwin-x64 is an explicit, documented skip: this script bundles NOTHING for
+// it (and removes any library a build for another target left behind), and
+// the app reports "Local embeddings are not available on Intel Macs"
+// (src-tauri/src/embeddings_providers/ort_runtime.rs, INTEL_MAC_UNAVAILABLE).
+// release.yml's dylib pre-sign step skips when no dylib is present. The
+// `models` resource still resolves: this script always creates models/ort/.
+const DARWIN_X64_SKIP =
   `ONNX Runtime ${ORT_VERSION} publishes no Intel macOS build (the last one was 1.23.2, ` +
-  `and this app's ort crate needs ONNX Runtime API 24, i.e. >= 1.24). Decide before an Intel ` +
-  `macOS release: build ONNX Runtime from source for x86_64-apple-darwin, drop the Intel ` +
-  `macOS build, or ship it with local embeddings declared unavailable.`;
+  `and this app's ort crate needs ONNX Runtime API 24, i.e. >= 1.24), so the Intel macOS ` +
+  `build bundles no ONNX Runtime: local embeddings are declared unavailable there and ` +
+  `Ollama serves embeddings instead.`;
 
 const PLATFORMS = {
   'win32-x64': {
@@ -87,7 +97,7 @@ const PLATFORMS = {
     arch: 'arm64',
   },
   'darwin-x64': {
-    unavailable: DARWIN_X64_UNAVAILABLE,
+    bundleNothing: DARWIN_X64_SKIP,
     lib: 'libonnxruntime.dylib',
     archive: 'tgz',
     arch: 'x64',
@@ -286,6 +296,16 @@ async function downloadForPlatform(platformKey) {
   }
 
   const destPath = path.join(DEST_DIR, spec.lib);
+  if (spec.bundleNothing) {
+    // Nothing ships for this platform, so ANY library here came from a build
+    // for another target (v1.0.3's Intel app shipped exactly that).
+    if (fs.existsSync(destPath)) {
+      console.log(`  ${platformKey}: removing ${spec.lib} (built for ${libArch(destPath) ?? 'an unknown CPU'}); nothing is bundled for ${platformKey}`);
+      fs.unlinkSync(destPath);
+    }
+    console.log(`  ${platformKey}: no ONNX Runtime bundled. ${spec.bundleNothing}`);
+    return;
+  }
   if (fs.existsSync(destPath)) {
     const size = fs.statSync(destPath).size;
     const found = libArch(destPath);
@@ -296,10 +316,6 @@ async function downloadForPlatform(platformKey) {
     // A library for another CPU (left by a build for another target) is never bundled.
     console.log(`  ${platformKey}: removing ${spec.lib} built for ${found ?? 'an unknown CPU'}; ${platformKey} needs ${spec.arch}`);
     fs.unlinkSync(destPath);
-  }
-
-  if (spec.unavailable) {
-    throw new Error(`${platformKey}: ${spec.unavailable}`);
   }
 
   console.log(`  ${platformKey}: downloading ORT ${ORT_VERSION}...`);
@@ -362,8 +378,8 @@ async function main() {
 
   if (all) {
     for (const [key, spec] of Object.entries(PLATFORMS)) {
-      if (spec.unavailable) {
-        console.warn(`  ${key}: skipped. ${spec.unavailable}`);
+      if (spec.bundleNothing) {
+        console.warn(`  ${key}: skipped. ${spec.bundleNothing}`);
         continue;
       }
       await downloadForPlatform(key);
