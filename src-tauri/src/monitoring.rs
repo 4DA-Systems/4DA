@@ -367,26 +367,22 @@ const CHAIN_NOTIFY_INTERVAL: u64 = 3600; // 1 hour
 /// This constant is the safe ceiling used in startup logging.
 const COLD_BOOT_GRACE_SECS_DEFAULT: u64 = 90;
 
-/// A suns tick is running on the blocking pool (possibly past its budget).
-static SUNS_TICK_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
-
 /// Which of the health check, the anomaly check and the jobs that piggy-back
 /// on them run on one scheduler tick.
 ///
-/// The piggy-backed jobs (active-topic embedding and DB maintenance on the
-/// health check; decision windows and the refutation scan on the anomaly
-/// check) used to test `now - last_x < 2` against `last_x` read BEFORE the
-/// parent stamped its run. In the only state where the parent runs
-/// (`now - last_x >= interval`) that is never true, so three of them never
-/// ran (audit O2). They now follow their parent's own verdict.
+/// Active-topic embedding piggy-backs on the health check. It used to test
+/// `now - last_health < 2` against `last_health` read BEFORE the health check
+/// stamped its run; in the only state where the health check runs that is
+/// never true, so the embedding never ran (audit O2). It now follows the
+/// health check's own verdict. Its output (`active_topics.embedding`) is read
+/// by scoring (`ace::load_topic_embeddings`). DB maintenance re-read the stamp
+/// and always worked; it is listed for completeness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct PiggybackPlan {
     health: bool,
     topic_embedding: bool,
     db_maintenance: bool,
     anomaly: bool,
-    decision_windows: bool,
-    refutation_scan: bool,
 }
 
 impl PiggybackPlan {
@@ -405,8 +401,6 @@ impl PiggybackPlan {
             topic_embedding: health,
             db_maintenance: health,
             anomaly,
-            decision_windows: anomaly,
-            refutation_scan: anomaly,
         }
     }
 }
@@ -510,7 +504,7 @@ async fn scheduler_loop<R: Runtime>(
             let last_wake_time = std::time::Instant::now();
             interval.tick().await;
             // The independent watchdog reads this to name a stalled loop.
-            crate::scheduler_supervisor::mark_tick();
+            crate::scheduler_supervisor::mark_progress();
 
             // ================================================================
             // Sovereign Cold Boot — adaptive grace period
@@ -579,11 +573,12 @@ async fn scheduler_loop<R: Runtime>(
             // Which of the health check, the anomaly check and the jobs that
             // piggy-back on them run this tick: decided once, before either
             // parent stamps its time (see `PiggybackPlan`).
+            let last_anomaly = state.last_anomaly_check.load(Ordering::Relaxed);
             let plan = PiggybackPlan::for_tick(
                 now,
                 state.last_health_check.load(Ordering::Relaxed),
                 crate::scheduler_gate::effective_interval(HEALTH_CHECK_INTERVAL),
-                state.last_anomaly_check.load(Ordering::Relaxed),
+                last_anomaly,
                 crate::scheduler_gate::effective_interval(ANOMALY_CHECK_INTERVAL),
                 gate_policy.allows_job(crate::scheduler_gate::JobPriority::Normal),
             );
@@ -961,45 +956,47 @@ async fn scheduler_loop<R: Runtime>(
                 }
             }
 
+            // The two jobs below (decision windows + topic hotness, and the
+            // commitment-contract refutation scan) have never run: this test
+            // reads `last_anomaly` before the anomaly job stamps it, so it is
+            // never under 2 seconds when that job is due. Nothing in the app
+            // reads their output (no listener for `decision-windows-updated`
+            // or `commitment-contract-triggered`), so scheduling them is left
+            // as an operator decision rather than switched on here (#1132).
             // Decision window detection — runs with anomaly check (hourly).
             // Expire stale windows, detect new ones from recent content, compute advantage.
-            if plan.decision_windows {
-                let app = app.clone();
-                let _ = run_blocking_job("decision_windows", JOB_BUDGET, move || {
-                    if let Ok(conn) = crate::open_db_connection() {
-                        let expired = crate::decision_advantage::expire_stale_windows(&conn);
-                        let detected = crate::decision_advantage::detect_decision_windows(&conn);
-                        let validated = crate::decision_advantage::validate_open_windows(&conn);
-                        if expired > 0 || !detected.is_empty() || validated > 0 {
-                            info!(
-                                target: "4da::monitor",
-                                expired, detected = detected.len(), validated,
-                                "Decision windows updated"
-                            );
-                            if let Err(e) = app.emit("decision-windows-updated", &detected) {
-                                tracing::warn!("Failed to emit 'decision-windows-updated': {e}");
-                            }
-                        }
-                        // Compute compound advantage score (weekly period)
-                        let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
-
-                        // Topic hotness rebuild — recompute scores + archive cold topics
-                        let updated = crate::topic_hotness::rebuild_hotness(&conn);
-                        if updated > 0 {
-                            info!(target: "4da::monitor", updated, "Topic hotness rebuilt");
+            if now - last_anomaly < 2 {
+                // Only run when anomaly check just fired (within the same tick)
+                if let Ok(conn) = crate::open_db_connection() {
+                    let expired = crate::decision_advantage::expire_stale_windows(&conn);
+                    let detected = crate::decision_advantage::detect_decision_windows(&conn);
+                    let validated = crate::decision_advantage::validate_open_windows(&conn);
+                    if expired > 0 || !detected.is_empty() || validated > 0 {
+                        info!(
+                            target: "4da::monitor",
+                            expired, detected = detected.len(), validated,
+                            "Decision windows updated"
+                        );
+                        if let Err(e) = app.emit("decision-windows-updated", &detected) {
+                            tracing::warn!("Failed to emit 'decision-windows-updated': {e}");
                         }
                     }
-                })
-                .await;
+                    // Compute compound advantage score (weekly period)
+                    let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
+
+                    // Topic hotness rebuild — recompute scores + archive cold topics
+                    let updated = crate::topic_hotness::rebuild_hotness(&conn);
+                    if updated > 0 {
+                        info!(target: "4da::monitor", updated, "Topic hotness rebuilt");
+                    }
+                }
             }
 
             // Commitment Contract refutation scan — hourly (Intelligence Reconciliation Phase 13)
             // Piggybacks on the hourly tick; checks the last 24h of source items
             // against active refutation conditions. Fires Refutation EvidenceItems
             // when a match is found. Non-fatal on all error paths.
-            if plan.refutation_scan {
-                let app = app.clone();
-                let _ = run_blocking_job("refutation_scan", JOB_BUDGET, move || {
+            if now - last_anomaly < 2 {
                 if let Ok(conn) = crate::open_db_connection() {
                     match crate::commitment_contracts::scan_for_refutations(&conn, 24) {
                         Ok(triggered) if !triggered.is_empty() => {
@@ -1018,8 +1015,6 @@ async fn scheduler_loop<R: Runtime>(
                         _ => {}
                     }
                 }
-                })
-                .await;
             }
 
             // CVE scan — Developer Immune System (Critical — security always runs)
@@ -1651,25 +1646,16 @@ async fn scheduler_loop<R: Runtime>(
             // synchronous: PowerShell subprocesses (hardware/uptime) and full
             // scans of the corpus (tech_moat_scanner 40 s, edge_detector 13 s on
             // the operator's launch of 2026-10-23, `sun_runs.duration_ms`), which
-            // inline held this runtime worker for about a minute. A tick still
-            // running from an earlier overrun holds the registry: skip, rather
-            // than queue a blocked pool thread every minute.
-            if !SUNS_TICK_IN_FLIGHT.swap(true, Ordering::SeqCst) {
+            // inline held this runtime worker for about a minute. While a tick
+            // that overran is still running, `run_blocking_job` skips the next
+            // one rather than queue a blocked pool thread every minute.
+            {
                 let results = run_blocking_job("suns_tick", JOB_BUDGET, || {
-                    // Cleared on return AND on unwind, so a panicking sun
-                    // cannot latch the flag.
-                    struct Clear;
-                    impl Drop for Clear {
-                        fn drop(&mut self) {
-                            SUNS_TICK_IN_FLIGHT.store(false, Ordering::SeqCst);
-                        }
-                    }
-                    let _clear = Clear;
                     crate::suns_commands::get_sun_registry().tick()
                 })
                 .await
                 .unwrap_or_else(|f| {
-                    warn!(target: "4da::suns", failure = %f, "Sun tick did not finish");
+                    warn!(target: "4da::suns", failure = %f, "Sun tick did not run to the end");
                     Vec::new()
                 });
                 for (sun_id, result) in &results {
@@ -1746,7 +1732,7 @@ mod tests {
         let now = 1_000_000;
         let due = PiggybackPlan::for_tick(now, now - 300, 300, now - 3_600, 3_600, true);
         assert!(due.health && due.topic_embedding && due.db_maintenance);
-        assert!(due.anomaly && due.decision_windows && due.refutation_scan);
+        assert!(due.anomaly);
 
         let idle = PiggybackPlan::for_tick(now, now - 10, 300, now - 10, 3_600, true);
         assert_eq!(
@@ -1756,12 +1742,10 @@ mod tests {
                 topic_embedding: false,
                 db_maintenance: false,
                 anomaly: false,
-                decision_windows: false,
-                refutation_scan: false,
             }
         );
         let gated = PiggybackPlan::for_tick(now, 0, 300, 0, 3_600, false);
-        assert!(!gated.anomaly && !gated.decision_windows && !gated.refutation_scan);
+        assert!(!gated.anomaly && gated.health);
     }
 
     #[test]

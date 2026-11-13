@@ -205,10 +205,15 @@ mod tests {
     #[test]
     fn an_early_plan_is_attributed_to_its_run_afterwards() {
         let db = crate::test_utils::test_db();
-        super::super::refresh_plan_snapshot(&db, None).expect("plan");
+        let (_, generated_at) = super::super::refresh_plan_snapshot_at(&db, None).expect("plan");
+        let generated_at = generated_at.expect("written");
         let before = db.get_kv("upgrade_plan_snapshot").unwrap().unwrap();
         assert!(before.contains(r#""engine_run_id":null"#), "{before}");
-        crate::evidence::stamp_plan_engine_run(&db, 7);
+        assert!(crate::evidence::stamp_plan_engine_run(
+            &db,
+            7,
+            &generated_at
+        ));
         let after = db.get_kv("upgrade_plan_snapshot").unwrap().unwrap();
         assert!(after.contains(r#""engine_run_id":7"#), "{after}");
         let strip = |s: &str| {
@@ -217,6 +222,25 @@ mod tests {
             v
         };
         assert_eq!(strip(&before), strip(&after), "only the run id changes");
+    }
+
+    /// A plan the app wrote while the engine cycle ran is not the engine's:
+    /// it must not be credited to the engine run.
+    #[test]
+    fn a_plan_replaced_during_the_cycle_is_not_attributed() {
+        let db = crate::test_utils::test_db();
+        let (_, engine_plan) = super::super::refresh_plan_snapshot_at(&db, None).expect("plan");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let app_plan =
+            crate::evidence::persist_upgrade_plan(&db, &[], &[], 0, None).expect("written");
+        assert_ne!(engine_plan.as_deref(), Some(app_plan.as_str()));
+        assert!(!crate::evidence::stamp_plan_engine_run(
+            &db,
+            9,
+            &engine_plan.unwrap()
+        ));
+        let stored = db.get_kv("upgrade_plan_snapshot").unwrap().unwrap();
+        assert!(stored.contains(r#""engine_run_id":null"#), "{stored}");
     }
 
     /// The engine's pass prunes old items and keeps a Saved one (#1119).

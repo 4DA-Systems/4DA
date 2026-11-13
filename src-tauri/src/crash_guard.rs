@@ -32,7 +32,11 @@ pub(crate) fn install() {
             // task, `task_guard::contain`, a worker thread) and the app runs
             // on: wiping the keys then left a live app with blank secrets
             // that the next save() wrote to disk (audit O3).
-            if panic_ends_process(std::thread::current().name()) {
+            if panic_ends_process(
+                std::thread::current().name(),
+                crate::task_guard::panic_is_contained(),
+                is_non_unwinding(info),
+            ) {
                 zeroize_sensitive_memory();
             }
             // Then run the default panic handler (which may create a crash dump)
@@ -50,14 +54,39 @@ pub(crate) fn secrets_zeroized() -> bool {
     SECRETS_ZEROIZED.load(Ordering::SeqCst)
 }
 
-/// Whether a panic on the thread named `thread_name` takes the process down.
+/// Whether this panic aborts the process whatever thread it is on. The
+/// standard library raises these with fixed messages: a panic in a `Drop`
+/// while the thread is already unwinding ("panic in a destructor during
+/// cleanup") and a panic that reaches a function that cannot unwind.
+fn is_non_unwinding(info: &std::panic::PanicHookInfo<'_>) -> bool {
+    let payload = info.payload();
+    let msg = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("");
+    is_non_unwinding_message(msg)
+}
+
+fn is_non_unwinding_message(msg: &str) -> bool {
+    msg.starts_with("panic in a destructor during cleanup")
+        || msg.starts_with("panic in a function that cannot unwind")
+}
+
+/// Whether this panic takes the process down.
 ///
-/// With `panic = "abort"` every panic does. With unwinding (this crate's
-/// profiles) only the main thread's does: an unwind out of `main` exits the
-/// process, while one on any other thread ends that thread or task and the
-/// runtime carries on.
-fn panic_ends_process(thread_name: Option<&str>) -> bool {
-    cfg!(panic = "abort") || thread_name == Some("main")
+/// - `panic = "abort"`: every panic does.
+/// - A panic in a destructor while unwinding, or one that reaches a function
+///   that cannot unwind, aborts, on any thread.
+/// - Otherwise only the main thread's does (an unwind out of `main` ends the
+///   process), and only when it is not inside `task_guard::contain`: the
+///   headless engine runs its cycle contained on the main thread
+///   (`block_on`), and a contained panic is a skipped cycle, not an exit.
+///
+/// A panic on any other thread ends that thread or task and the runtime
+/// carries on.
+fn panic_ends_process(thread_name: Option<&str>, contained: bool, aborting: bool) -> bool {
+    cfg!(panic = "abort") || aborting || (thread_name == Some("main") && !contained)
 }
 
 /// Longest panic message kept in the record.
@@ -158,11 +187,52 @@ mod tests {
     /// on a worker thread or task used to wipe them too (audit O3).
     #[test]
     fn only_a_process_ending_panic_zeroizes() {
-        assert!(panic_ends_process(Some("main")));
+        assert!(panic_ends_process(Some("main"), false, false));
+        assert!(
+            panic_ends_process(Some("worker"), false, true),
+            "a non-unwinding panic aborts"
+        );
+        assert!(is_non_unwinding_message(
+            "panic in a destructor during cleanup"
+        ));
+        assert!(is_non_unwinding_message(
+            "panic in a function that cannot unwind"
+        ));
+        assert!(!is_non_unwinding_message("index out of bounds"));
         if !cfg!(panic = "abort") {
-            assert!(!panic_ends_process(Some("tokio-runtime-worker")));
-            assert!(!panic_ends_process(None));
+            assert!(!panic_ends_process(
+                Some("tokio-runtime-worker"),
+                false,
+                false
+            ));
+            assert!(!panic_ends_process(None, false, false));
+            assert!(
+                !panic_ends_process(Some("main"), true, false),
+                "a contained panic on main (the headless cycle) is not an exit"
+            );
         }
+    }
+
+    /// Audit follow-up: the headless engine runs its cycle under
+    /// `task_guard::contain` on the main thread. A panic there is a skipped
+    /// cycle; it used to wipe the keys and let the run continue with blanks.
+    #[test]
+    fn a_contained_panic_on_the_main_thread_keeps_the_keys() {
+        install();
+        let joined = std::thread::Builder::new()
+            .name("main".into())
+            .spawn(|| {
+                futures::executor::block_on(crate::task_guard::contain("test-main", async {
+                    panic!("contained main-thread panic")
+                }))
+            })
+            .unwrap()
+            .join();
+        assert_eq!(joined.ok(), Some(None::<()>), "the panic was contained");
+        assert!(
+            !secrets_zeroized(),
+            "a contained panic must not wipe secrets"
+        );
     }
 
     /// End to end through the installed hook: a contained panic on a worker

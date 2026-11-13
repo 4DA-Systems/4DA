@@ -83,6 +83,7 @@ pub struct SettingsManager {
 // Constructor (new) lives in manager_init.rs — separate impl block.
 #[path = "manager_init.rs"]
 mod manager_init;
+pub(crate) use manager_init::{read_settings_text, settings_unreadable_notice};
 
 impl SettingsManager {
     /// Save settings to disk (excludes usage -- that's saved separately).
@@ -98,11 +99,9 @@ impl SettingsManager {
         crate::llm_egress::publish_content_level(&self.settings.privacy.llm_content_level);
 
         if self.persist_blocked {
-            return Err(
-                "settings.json could not be read when 4DA started, so it is not \
-                        overwritten this session. Restart 4DA to load it again."
-                    .into(),
-            );
+            return Err(manager_init::settings_unreadable_notice(&self.settings_path)
+                .unwrap_or("settings.json could not be read when 4DA started, so it is not overwritten this session.")
+                .into());
         }
         // A panic that wiped the secrets in memory (crash_guard) must never
         // reach the disk as blank keys.

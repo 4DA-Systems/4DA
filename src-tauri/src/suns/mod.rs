@@ -360,6 +360,27 @@ pub(crate) fn store_sun_alert(sun_id: &str, alert_type: &str, message: &str) {
 ///
 /// Split from [`store_sun_alert`] so the dedup contract is testable against
 /// an in-memory connection.
+/// Mark every open `alert_type` alert of `sun_id` resolved (acknowledged):
+/// the condition it named is over. Best-effort.
+pub(crate) fn resolve_sun_alerts(sun_id: &str, alert_type: &str) {
+    if let Ok(conn) = crate::open_db_connection() {
+        resolve_sun_alerts_with(&conn, sun_id, alert_type);
+    }
+}
+
+pub(crate) fn resolve_sun_alerts_with(
+    conn: &rusqlite::Connection,
+    sun_id: &str,
+    alert_type: &str,
+) -> usize {
+    conn.execute(
+        "UPDATE sun_alerts SET acknowledged = 1
+         WHERE sun_id = ?1 AND alert_type = ?2 AND acknowledged = 0",
+        params![sun_id, alert_type],
+    )
+    .unwrap_or(0)
+}
+
 pub(crate) fn store_sun_alert_with(
     conn: &rusqlite::Connection,
     sun_id: &str,
@@ -638,5 +659,20 @@ mod tests {
             "dismissed row untouched"
         );
         assert_eq!((rows[1].2.as_str(), rows[1].3), ("again", 0));
+    }
+
+    /// A resolved condition clears its open alert and nothing else.
+    #[test]
+    fn resolving_clears_only_that_alert() {
+        let conn = alerts_conn();
+        store_sun_alert_with(&conn, "scheduler_watchdog", "scheduler_stalled", "stalled");
+        store_sun_alert_with(&conn, "engine_watchdog", "engine_stale", "quiet");
+        assert_eq!(
+            resolve_sun_alerts_with(&conn, "scheduler_watchdog", "scheduler_stalled"),
+            1
+        );
+        let open: Vec<_> = alert_rows(&conn).into_iter().filter(|r| r.3 == 0).collect();
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].2, "quiet");
     }
 }

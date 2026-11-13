@@ -140,23 +140,18 @@ impl SettingsManager {
                 }
                 Err(e) => {
                     // The user's file is there but unreadable this moment (a
-                    // sharing violation, an I/O error, bytes that are not
-                    // text). Defaults written now would replace it AND its
-                    // backup, so read the backup and write nothing this run.
+                    // sharing violation, a permission error, broken UTF-16).
+                    // Defaults written now would replace it AND its backup,
+                    // so read the backup, write nothing this run, and say so
+                    // (startup health check, every refused save).
                     persist_blocked = true;
-                    match read_settings_text(&settings_path.with_extension("json.bak"))
+                    let backup = read_settings_text(&settings_path.with_extension("json.bak"))
                         .ok()
-                        .and_then(|c| parse_settings_preserving(&c))
-                    {
-                        Some(restored) => {
-                            warn!(target: "4da::settings", error = %e, "settings.json could not be read: using its backup, and leaving both files untouched this session");
-                            restored
-                        }
-                        None => {
-                            warn!(target: "4da::settings", error = %e, "settings.json could not be read and has no readable backup: using defaults, and leaving the file untouched this session");
-                            Settings::default()
-                        }
-                    }
+                        .and_then(|c| parse_settings_preserving(&c));
+                    let notice = unreadable_notice_text(&settings_path, &e, backup.is_some());
+                    warn!(target: "4da::settings", "{notice}");
+                    let _ = UNREADABLE_NOTICE.set((settings_path.clone(), notice));
+                    backup.unwrap_or_default()
                 }
             }
         } else {
@@ -447,12 +442,13 @@ impl SettingsManager {
 /// Read a settings file as text, accepting the encodings Windows tools write.
 ///
 /// PowerShell 5's `Out-File` / `>` write UTF-16LE with a byte-order mark and
-/// its `-Encoding UTF8` writes a UTF-8 BOM. A plain `read_to_string` refused the
-/// first (an error, so the app fell back to defaults) and handed serde the BOM
-/// with the second (a parse failure). Both are the user's own valid settings.
-/// Bytes that are none of these are an `InvalidData` error: unreadable, not
-/// corrupt — the caller must not write over them.
-fn read_settings_text(path: &std::path::Path) -> std::io::Result<String> {
+/// its `-Encoding UTF8` writes a UTF-8 BOM; Notepad and older editors save in
+/// the ANSI code page (Windows-1252). A plain `read_to_string` refused UTF-16
+/// and ANSI (an error, so the app fell back to defaults) and handed serde the
+/// BOM (a parse failure). All of them are the user's own settings. Only an I/O
+/// failure (a sharing violation, a permission error) or broken UTF-16 is an
+/// error, and the caller must not write over the file then.
+pub(crate) fn read_settings_text(path: &std::path::Path) -> std::io::Result<String> {
     decode_settings_bytes(&fs::read(path)?)
 }
 
@@ -475,13 +471,71 @@ fn decode_settings_bytes(bytes: &[u8]) -> std::io::Result<String> {
             .map_err(|_| invalid("settings.json is not valid UTF-16"))
     };
     match bytes {
-        [0xEF, 0xBB, 0xBF, rest @ ..] => String::from_utf8(rest.to_vec())
-            .map_err(|_| invalid("settings.json is not valid UTF-8")),
+        [0xEF, 0xBB, 0xBF, rest @ ..] => Ok(utf8_or_windows_1252(rest)),
         [0xFF, 0xFE, rest @ ..] => utf16(rest, true),
         [0xFE, 0xFF, rest @ ..] => utf16(rest, false),
-        _ => String::from_utf8(bytes.to_vec())
-            .map_err(|_| invalid("settings.json is not valid UTF-8")),
+        _ => Ok(utf8_or_windows_1252(bytes)),
     }
+}
+
+/// UTF-8 when the bytes are UTF-8, otherwise Windows-1252 (every byte maps
+/// to a character, so this cannot fail).
+fn utf8_or_windows_1252(bytes: &[u8]) -> String {
+    if let Ok(s) = std::str::from_utf8(bytes) {
+        return s.to_string();
+    }
+    warn!(target: "4da::settings", "settings.json is not UTF-8: read it as Windows-1252 (ANSI); it is saved back as UTF-8");
+    // 0x80..=0x9F differ from Latin-1; the five bytes Windows leaves
+    // undefined keep their C1 code point, as Windows itself decodes them.
+    const HIGH: [char; 32] = [
+        '\u{20AC}', '\u{81}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}',
+        '\u{2021}', '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{8D}',
+        '\u{017D}', '\u{8F}', '\u{90}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}',
+        '\u{2013}', '\u{2014}', '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}', '\u{0153}',
+        '\u{9D}', '\u{017E}', '\u{0178}',
+    ];
+    bytes
+        .iter()
+        .map(|&b| match b {
+            0x80..=0x9F => HIGH[usize::from(b - 0x80)],
+            _ => char::from(b),
+        })
+        .collect()
+}
+
+/// Set once per run when settings.json existed but could not be read: what
+/// happened, what 4DA is running on instead, and what the user can do. Shown
+/// by the startup health check and returned by every refused save.
+static UNREADABLE_NOTICE: std::sync::OnceLock<(std::path::PathBuf, String)> =
+    std::sync::OnceLock::new();
+
+/// The unreadable-settings notice for this run, if `settings_path` is the
+/// file that could not be read.
+pub(crate) fn settings_unreadable_notice(settings_path: &std::path::Path) -> Option<&'static str> {
+    UNREADABLE_NOTICE
+        .get()
+        .filter(|(path, _)| path == settings_path)
+        .map(|(_, notice)| notice.as_str())
+}
+
+fn unreadable_notice_text(
+    path: &std::path::Path,
+    error: &std::io::Error,
+    used_backup: bool,
+) -> String {
+    let bak = path.with_extension("json.bak");
+    let running_on = if used_backup {
+        format!("its backup copy, {}", bak.display())
+    } else {
+        "default settings (the backup could not be read either)".to_string()
+    };
+    format!(
+        "4DA could not read {} when it started ({error}). It is running on {running_on}, and it \
+         will not save setting changes until it can read that file, so your file is never \
+         overwritten. Close any program that has the file open (an editor, a sync or backup \
+         tool), or replace it with the backup copy, then restart 4DA.",
+        path.display()
+    )
 }
 
 /// Write `settings` (scrubbed per `posture`) to settings.json and its .bak.
@@ -713,17 +767,17 @@ mod settings_durability_tests {
         assert_eq!(manager.get().license.tier, "signal");
     }
 
-    /// An unreadable settings.json (bytes that are no text encoding) is read
-    /// from its backup, and neither file is written during that run — not by
-    /// startup and not by a later save (audit O3: the defaults used to be
-    /// persisted over the file AND the backup).
+    /// A settings.json that cannot be read (here: a directory in its place,
+    /// standing in for a sharing violation) is replaced in memory by its
+    /// backup; neither file is written during that run, not by startup and not
+    /// by a later save (audit O3: the defaults used to be persisted over the
+    /// file AND the backup). The refusal says what happened and what to do.
     #[test]
     fn unreadable_settings_uses_backup_and_writes_nothing() {
         let tmp = tempfile::tempdir().unwrap();
         let main = tmp.path().join("settings.json");
         let bak = tmp.path().join("settings.json.bak");
-        let unreadable: Vec<u8> = vec![b'{', 0xC3, 0x28, 0xFF, 0x80, b'}'];
-        std::fs::write(&main, &unreadable).unwrap();
+        std::fs::create_dir(&main).unwrap();
         std::fs::write(&bak, signal_json()).unwrap();
 
         let mut manager = SettingsManager::new_without_keychain(tmp.path());
@@ -732,13 +786,15 @@ mod settings_durability_tests {
             "signal",
             "loaded from the backup"
         );
-        assert!(manager.save().is_err(), "save must refuse this session");
-
-        assert_eq!(
-            std::fs::read(&main).unwrap(),
-            unreadable,
-            "settings.json untouched"
+        let refusal = manager.save().expect_err("save must refuse this session");
+        let notice = settings_unreadable_notice(&main).expect("the run records a notice");
+        assert!(
+            notice.contains("settings.json") && notice.contains("backup"),
+            "{notice}"
         );
+        assert!(refusal.to_string().contains("will not save"), "{refusal}");
+
+        assert!(main.is_dir(), "settings.json untouched");
         assert_eq!(
             std::fs::read_to_string(&bak).unwrap(),
             signal_json(),
@@ -746,9 +802,28 @@ mod settings_durability_tests {
         );
     }
 
+    /// A file saved in the ANSI code page (Windows-1252) is the user's own
+    /// settings: it loads, accents intact, instead of blocking every save.
     #[test]
-    fn decode_rejects_bytes_that_are_not_text() {
-        assert!(decode_settings_bytes(&[0xC3, 0x28]).is_err());
+    fn windows_1252_settings_file_loads() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut json = signal_json().into_bytes();
+        json.truncate(json.len() - 1); // drop the closing brace
+        json.extend_from_slice(b", \"twitter_handles\": [\"caf\xE9\x80\"]}");
+        std::fs::write(tmp.path().join("settings.json"), &json).unwrap();
+
+        let mut manager = SettingsManager::new_without_keychain(tmp.path());
+        assert_eq!(manager.get().license.tier, "signal");
+        assert_eq!(
+            manager.get().twitter_handles,
+            vec!["caf\u{e9}\u{20ac}".to_string()]
+        );
+        assert!(manager.save().is_ok(), "an ANSI file never blocks saving");
+    }
+
+    #[test]
+    fn decode_reads_ansi_and_rejects_broken_utf16() {
+        assert_eq!(decode_settings_bytes(&[0x63, 0xE9]).unwrap(), "c\u{e9}");
         assert!(
             decode_settings_bytes(&[0xFF, 0xFE, 0x00]).is_err(),
             "odd UTF-16"

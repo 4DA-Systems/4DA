@@ -41,7 +41,7 @@ pub fn persist_upgrade_plan(
     steps: &[UpgradeStep],
     validation_drop_count: u32,
     engine_run_id: Option<i64>,
-) {
+) -> Option<String> {
     let steps: Vec<UpgradeStep> = steps
         .iter()
         .filter(|s| items.iter().any(|i| i.id == s.item_id))
@@ -101,13 +101,16 @@ pub fn persist_upgrade_plan(
         steps,
     };
     match serde_json::to_string(&snapshot) {
-        Ok(json) => {
-            if let Err(e) = db.set_kv(PLAN_KV_KEY, &json) {
+        Ok(json) => match db.set_kv(PLAN_KV_KEY, &json) {
+            Ok(()) => Some(snapshot.generated_at),
+            Err(e) => {
                 tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to persist upgrade plan snapshot");
+                None
             }
-        }
+        },
         Err(e) => {
             tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to serialize upgrade plan snapshot");
+            None
         }
     }
 }
@@ -115,21 +118,22 @@ pub fn persist_upgrade_plan(
 /// Attribute the stored snapshot to the engine run that built it. The engine
 /// builds the plan early in its cycle (dependency intelligence first, audit
 /// R7), before that cycle's receipt exists; this sets `engine_run_id` once the
-/// receipt is written. Only the id changes; a snapshot that is absent or not
-/// an object is left alone. Best-effort.
-pub fn stamp_plan_engine_run(db: &Database, engine_run_id: i64) {
-    let Ok(Some(json)) = db.get_kv(PLAN_KV_KEY) else {
-        return;
-    };
-    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&json) else {
-        return;
-    };
-    let Some(obj) = value.as_object_mut() else {
-        return;
-    };
-    obj.insert("engine_run_id".to_string(), engine_run_id.into());
-    if let Err(e) = db.set_kv(PLAN_KV_KEY, &value.to_string()) {
-        tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to attribute the plan snapshot to its engine run");
+/// receipt is written. Compare-and-set in one statement: only when the stored
+/// snapshot is still the one this cycle wrote (`generated_at` matches), so a
+/// plan the app wrote in between is never credited to the engine run.
+/// Returns whether the snapshot was attributed. Best-effort.
+pub fn stamp_plan_engine_run(db: &Database, engine_run_id: i64, generated_at: &str) -> bool {
+    let conn = db.conn.lock();
+    match conn.execute(
+        "UPDATE kv_store SET value = json_set(value, '$.engine_run_id', ?1)
+         WHERE key = ?2 AND json_valid(value) AND json_extract(value, '$.generated_at') = ?3",
+        rusqlite::params![engine_run_id, PLAN_KV_KEY, generated_at],
+    ) {
+        Ok(n) => n == 1,
+        Err(e) => {
+            tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to attribute the plan snapshot to its engine run");
+            false
+        }
     }
 }
 

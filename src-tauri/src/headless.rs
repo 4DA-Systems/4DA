@@ -396,13 +396,13 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // DB-only (no LLM, no network); a plan that was built is always written (even an empty
     // one = "evaluated, nothing to do"). Rebuilt when its inputs changed this cycle, or hourly
     // (it was rebuilt every cycle: ~60 s of a 258 s "nothing changed" cycle, debug build).
-    let plan_built = if gates::plan_refresh_due(
+    let plan_generated_at = if gates::plan_refresh_due(
         rescanned || synced || force_osv,
         gates::plan_snapshot_age_minutes(),
     ) {
         build_plan_snapshot()
     } else {
-        false
+        None
     };
 
     // ---- Registry and interest feeds ---------------------------------------------------
@@ -426,10 +426,13 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     receipt.duration_ms = started.elapsed().as_millis() as u64;
     let exit_code = i32::from(!receipt.ok);
     let run_id = crate::engine_runs::record(receipt);
-    // The plan was built before this cycle's receipt existed: attribute it now.
-    if plan_built {
-        if let (Ok(db), Some(id)) = (crate::get_database(), run_id) {
-            crate::evidence::stamp_plan_engine_run(db, id);
+    // The plan was built before this cycle's receipt existed: attribute it now,
+    // unless the app has written a newer plan in the meantime.
+    if let (Some(generated_at), Ok(db), Some(id)) =
+        (plan_generated_at.as_deref(), crate::get_database(), run_id)
+    {
+        if !crate::evidence::stamp_plan_engine_run(db, id, generated_at) {
+            info!(target: "4da::headless", "The plan snapshot was replaced during the cycle; not attributing it to this run");
         }
     }
 
@@ -548,13 +551,12 @@ async fn refresh_dependency_intelligence(receipt: &mut RunReceipt, force_osv: bo
     true
 }
 
-/// Step 1d: rebuild the Upgrade Plan snapshot; returns whether one was written.
-fn build_plan_snapshot() -> bool {
-    let Ok(db) = crate::get_database() else {
-        return false;
-    };
-    match refresh_plan_snapshot(db, None) {
-        Ok(steps) => {
+/// Step 1d: rebuild the Upgrade Plan snapshot; returns the written
+/// snapshot's `generated_at`, or `None` when nothing was written.
+fn build_plan_snapshot() -> Option<String> {
+    let db = crate::get_database().ok()?;
+    match refresh_plan_snapshot_at(db, None) {
+        Ok((steps, generated_at)) => {
             info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
             if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
                 crate::scheduler_state::persist_run(
@@ -562,7 +564,7 @@ fn build_plan_snapshot() -> bool {
                     now.as_secs(),
                 );
             }
-            true
+            generated_at
         }
         Err(e) => {
             error!(
@@ -571,7 +573,7 @@ fn build_plan_snapshot() -> bool {
                 "Upgrade Plan snapshot NOT refreshed: the plan could not be read, so the \
                  previous snapshot is kept"
             );
-            false
+            None
         }
     }
 }
@@ -747,18 +749,30 @@ async fn ensure_dependencies_scanned() -> bool {
     true
 }
 
-/// Build the Upgrade Plan and persist it as the snapshot `4da plan` and the MCP
-/// server read; returns how many items it holds. A plan that could not be READ
-/// is an error and nothing is written (audit 2026-11-11): the engine used to
-/// persist the empty plan a failed read produced, replacing the last good
-/// snapshot with "evaluated, nothing to do".
+/// [`refresh_plan_snapshot_at`], item count only.
+#[cfg(test)]
 fn refresh_plan_snapshot(
     db: &crate::db::Database,
     run_id: Option<i64>,
 ) -> crate::error::Result<usize> {
+    refresh_plan_snapshot_at(db, run_id).map(|(items, _)| items)
+}
+
+/// Build the Upgrade Plan and persist it as the snapshot `4da plan` and the MCP
+/// server read; returns how many items it holds and the written snapshot's
+/// `generated_at` (`None` when the write failed), which identifies it for
+/// [`crate::evidence::stamp_plan_engine_run`]. A plan that could not be READ
+/// is an error and nothing is written (audit 2026-11-11): the engine used to
+/// persist the empty plan a failed read produced, replacing the last good
+/// snapshot with "evaluated, nothing to do".
+fn refresh_plan_snapshot_at(
+    db: &crate::db::Database,
+    run_id: Option<i64>,
+) -> crate::error::Result<(usize, Option<String>)> {
     let plan = crate::evidence::build_upgrade_plan(db)?;
-    crate::evidence::persist_upgrade_plan(db, &plan.items, &plan.steps, plan.drops, run_id);
-    Ok(plan.items.len())
+    let written =
+        crate::evidence::persist_upgrade_plan(db, &plan.items, &plan.steps, plan.drops, run_id);
+    Ok((plan.items.len(), written))
 }
 
 fn append_receipt_error(receipt: &mut RunReceipt, error: String) {
