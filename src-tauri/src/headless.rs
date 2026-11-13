@@ -162,7 +162,7 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
                 tauri::async_runtime::block_on(async {
                     crate::task_guard::contain(
                         "headless-once-cycle",
-                        run_one_cycle(&handle, "headless_once", force),
+                        Box::pin(run_one_cycle(&handle, "headless_once", force)),
                     )
                     .await
                     .unwrap_or(1)
@@ -370,195 +370,69 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // outlive this process — this engine has no UI (`db_recovery_marker`).
     crate::db_recovery_marker::persist_pending_notice();
 
-    // Step 0b — refresh the dependency profile if a manifest changed or it has gone stale.
+    // ---- Dependency intelligence FIRST (audit R7) ----------------------------------------
+    // It used to be step 3 of 3, after news fetching and scoring: on a fresh profile the
+    // first advisories appeared minutes in, behind every registry and news fetch. The
+    // product is the dependency engine, so its steps run before anything else.
+
+    // Step 1a — refresh the dependency profile if a manifest changed or it has gone stale.
     // Decoupled from the context cold-start gate so a dep added or a version bumped on a LIVE
     // deployment is picked up (the dependency axis + OSV version-matching read these tables
     // every cycle), not frozen until a re-bootstrap.
-    ensure_dependencies_scanned().await;
-    // Step 0c — pins changed? Re-judge the dependency releases they grade. Was GUI-only,
+    info!(target: "4da::headless", "Cycle step 1/3: dependency intelligence...");
+    let rescanned = ensure_dependencies_scanned().await;
+    // Step 1b — pins changed? Re-judge the dependency releases they grade. Was GUI-only,
     // so an engine-only deployment never re-examined anything (scoring::reexamination).
     if let Ok(db) = crate::get_database() {
         let _ = crate::scoring::reexamination::reexamine_if_pins_changed(db).await;
     }
-
-    // Step 1 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
-    info!(target: "4da::headless", "Cycle step 1/3: fetching sources...");
-    let fetched = if crate::e2e_gate::skip_feed_fetch() {
-        info!(target: "4da::headless", "Feed fetch skipped (engine end-to-end gate build)");
-        None
+    // Step 1c — the advisory mirror. It has its own six-hour freshness gate (and an ETag
+    // check per archive): source-feed freshness must never suppress a stale security mirror.
+    let synced = refresh_dependency_intelligence(&mut receipt, force_osv).await;
+    // Step 1d — the persisted Upgrade Plan snapshot, so out-of-process readers (the `4da plan`
+    // CLI, the MCP handoff) see a CURRENT plan even when the GUI never runs. Without this the
+    // snapshot is written ONLY by the GUI's Signal-tier preemption compute, so a headless-only
+    // deployment leaves the DB-as-interface starved. `build_upgrade_plan` is deterministic +
+    // DB-only (no LLM, no network); a plan that was built is always written (even an empty
+    // one = "evaluated, nothing to do"). Rebuilt when its inputs changed this cycle, or hourly
+    // (it was rebuilt every cycle: ~60 s of a 258 s "nothing changed" cycle, debug build).
+    let plan_generated_at = if gates::plan_refresh_due(
+        rescanned || synced || force_osv,
+        gates::plan_snapshot_age_minutes(),
+    ) {
+        build_plan_snapshot()
     } else {
-        Some(crate::source_fetching::fill_cache_background(handle).await)
+        None
     };
-    match fetched {
-        None => {}
-        Some(Ok(summary)) => {
-            receipt.sources_succeeded = summary.succeeded;
-            receipt.sources_failed = summary.failed;
-            receipt.sources_skipped = summary.skipped_disabled;
-            receipt.new_items = summary.new_items;
-            receipt.cached_touches = summary.cached_touches;
-            info!(
-                target: "4da::headless",
-                succeeded = summary.succeeded,
-                failed = summary.failed,
-                new_items = summary.new_items,
-                "Fetch complete"
-            );
-        }
-        Some(Err(e)) => {
-            warn!(target: "4da::headless", error = %e, "Fetch failed — scoring existing cache anyway");
-        }
-    }
 
-    // Step 2 — score (embeds + PASIFA; writes relevance_score). Silent variant: no UI progress events.
-    info!(target: "4da::headless", "Cycle step 2/3: scoring cached content...");
-    match crate::analysis::analyze_cached_content_silent(handle).await {
-        Ok(cycle) => {
-            // Honest receipt numbers (audit item 9): on a differential run the
-            // cycle scores only new/stale items; `items_scored` records that
-            // real work, not the size of a merged display set. This receipt is
-            // ALSO the next run's differential watermark (`ok=1 AND
-            // items_scored>0` — see engine_runs::last_scoring_watermark).
-            receipt.items_scored = cycle.scored_count();
-            receipt.relevant_count = cycle.scored_relevant();
-
-            // Scores, pipeline-version stamps, feed verdicts, and the scoring-event
-            // row are now persisted once at the shared analysis boundary
-            // (analyze_cached_content_silent -> analyze_cached_content_inner ->
-            // persist_cycle_results), which this headless cycle already routes
-            // through. That also gives the headless daemon the curation VERDICT it
-            // previously never wrote — so a headless-only deployment now curates the
-            // corpus (feed_relevant), not just scores it. Do NOT re-add a local
-            // persist here.
-
-            info!(
-                target: "4da::headless",
-                scored = receipt.items_scored,
-                relevant = receipt.relevant_count,
-                "Scoring complete"
-            );
-        }
-        Err(e) => {
-            error!(target: "4da::headless", error = %e, "Scoring failed");
-            receipt.ok = false;
-            append_receipt_error(&mut receipt, e.to_string());
-        }
-    }
-
-    // Step 2b — drain the never-scored backlog. The Phase-2 backfill worker's
-    // only other caller is the GUI monitoring loop (monitoring.rs), so a
-    // deployment that runs engine-only — the recommended OS-scheduled setup —
-    // accumulated a version-0 backlog forever: measured live 2026-08-23, 463
-    // unscored items spanning 35 hours INCLUDING 5 CVE items, across ~30
-    // scheduled cycles that never touched them. The analysis path only scores
-    // a recent window, so arrivals that outpace it age out silently; security
-    // items sitting unscored is a recall hole in the flagship lane. The engine
-    // now drains a bounded slice every cycle (security-first order comes from
-    // get_unscored_backlog_chunk). Best-effort like the GUI path: a failed
-    // chunk logs and the next cycle retries — never fails the run.
-    for _ in 0..ENGINE_BACKFILL_MAX_CHUNKS {
-        match crate::analysis_backfill::backfill_unscored_cycle(ENGINE_BACKFILL_CHUNK).await {
-            Ok(p) => {
-                if p.scored_this_cycle > 0 {
-                    info!(
-                        target: "4da::headless",
-                        scored = p.scored_this_cycle,
-                        relevant = p.relevant_this_cycle,
-                        remaining = p.remaining_unscored,
-                        "Never-scored backfill chunk complete"
-                    );
-                }
-                if p.done {
-                    break;
-                }
-            }
-            Err(e) => {
-                warn!(
-                    target: "4da::headless",
-                    error = %e,
-                    "Never-scored backfill failed — next cycle retries"
-                );
-                break;
-            }
-        }
-    }
-
-    // Step 3 — dependency audit. This has its own six-hour freshness gate:
-    // source-feed freshness must never suppress a stale security mirror.
-    info!(target: "4da::headless", "Cycle step 3/3: refreshing dependency intelligence...");
-    match crate::get_database() {
-        Ok(db) => {
-            let needs_sync = force_osv
-                || crate::osv::sync::needs_sync(&db, crate::osv::sync::osv_sync_max_age_hours())
-                    .unwrap_or(true);
-            if needs_sync {
-                match crate::osv::sync::sync(&db).await {
-                    Ok(result) => {
-                        if result.errors.is_empty() {
-                            info!(
-                                target: "4da::headless",
-                                ecosystems = ?result.ecosystems_synced,
-                                stored = result.advisories_stored,
-                                matched = result.advisories_matched,
-                                "Dependency intelligence refresh complete"
-                            );
-                        } else {
-                            warn!(
-                                target: "4da::headless",
-                                errors = ?result.errors,
-                                "Dependency intelligence refresh completed with errors"
-                            );
-                            append_receipt_error(
-                                &mut receipt,
-                                format!("OSV sync partial failure: {}", result.errors.join("; ")),
-                            );
-                            if result.ecosystems_synced.is_empty() {
-                                receipt.ok = false;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!(target: "4da::headless", error = %e, "Dependency intelligence refresh failed");
-                        receipt.ok = false;
-                        append_receipt_error(&mut receipt, format!("OSV sync failed: {e}"));
-                    }
-                }
-            } else {
-                info!(target: "4da::headless", "Dependency intelligence already fresh — skipping OSV sync");
-            }
-        }
-        Err(e) => {
-            error!(target: "4da::headless", error = %e, "Dependency intelligence refresh could not access database");
-            receipt.ok = false;
-            append_receipt_error(&mut receipt, format!("OSV sync database unavailable: {e}"));
-        }
+    // ---- Registry and interest feeds ---------------------------------------------------
+    // With every interest off only the registry feeds remain, and they are polled hourly,
+    // not on every 10-minute cycle (`headless_gates`). A due scoring epoch still scores.
+    let fetch = force_osv
+        || gates::fetch_due(
+            gates::interests_enabled(),
+            gates::last_fetch_age_minutes(),
+            daemon_interval().as_secs() / 60,
+        );
+    if fetch || scoring_epoch_is_behind() {
+        run_feed_steps(handle, &mut receipt, fetch).await;
+    } else {
+        info!(
+            target: "4da::headless",
+            "Cycle steps 2-3/3 skipped: no interest is on and the registry feeds were read within the hour"
+        );
     }
 
     receipt.duration_ms = started.elapsed().as_millis() as u64;
     let exit_code = i32::from(!receipt.ok);
-    // Record the receipt FIRST so the plan snapshot below can stamp this cycle's
-    // engine_run_id (the receipt's inserted row id).
     let run_id = crate::engine_runs::record(receipt);
-
-    // Step 3b — refresh the persisted Upgrade Plan snapshot so out-of-process
-    // readers (the `4da plan` CLI, the Phase-2a MCP handoff) see a CURRENT plan
-    // even when the GUI never runs. Without this the snapshot is written ONLY by
-    // the GUI's Signal-tier preemption compute (warm_preemption_cache /
-    // get_preemption_alerts), so a headless-only or GUI-closed deployment leaves
-    // the DB-as-interface starved — the engine freshens the plan's exact inputs
-    // (deps in step 0b, OSV matches in step 3) yet never computed the plan from
-    // them. `build_upgrade_plan` is deterministic + DB-only (no LLM, no
-    // network), so this is cheap; a plan that was built is always written (even
-    // an empty one = "evaluated, nothing to do"). Best-effort: failures are logged.
-    if let Ok(db) = crate::get_database() {
-        match refresh_plan_snapshot(db, run_id) {
-            Ok(steps) => info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed"),
-            Err(e) => error!(
-                target: "4da::headless",
-                error = %e,
-                "Upgrade Plan snapshot NOT refreshed: the plan could not be read, so the \
-                 previous snapshot is kept"
-            ),
+    // The plan was built before this cycle's receipt existed: attribute it now,
+    // unless the app has written a newer plan in the meantime.
+    if let (Some(generated_at), Ok(db), Some(id)) =
+        (plan_generated_at.as_deref(), crate::get_database(), run_id)
+    {
+        if !crate::evidence::stamp_plan_engine_run(db, id, generated_at) {
+            info!(target: "4da::headless", "The plan snapshot was replaced during the cycle; not attributing it to this run");
         }
     }
 
@@ -605,6 +479,10 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // checkpoint.
     run_cycle_maintenance();
 
+    // Step 3d — daily retention. It ran only in the GUI's monitoring loop, so an
+    // engine-only deployment never pruned anything (audit 2026-11-11).
+    gates::run_daily_retention();
+
     // Log the resulting ground-truth freshness so a tail of the run shows the real DB state — this
     // is what an external verifier asserts against (count moved / watermark advanced / fingerprint changed).
     if let Ok(snap) = crate::engine_runs::freshness_snapshot() {
@@ -618,6 +496,195 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         );
     }
     exit_code
+}
+
+/// Steps 1c: sync the advisory mirror when it is due. Returns whether a sync ran (its
+/// result changes what the Upgrade Plan reads). Failures are recorded on the receipt.
+async fn refresh_dependency_intelligence(receipt: &mut RunReceipt, force_osv: bool) -> bool {
+    let db = match crate::get_database() {
+        Ok(db) => db,
+        Err(e) => {
+            error!(target: "4da::headless", error = %e, "Dependency intelligence refresh could not access database");
+            receipt.ok = false;
+            append_receipt_error(receipt, format!("OSV sync database unavailable: {e}"));
+            return false;
+        }
+    };
+    let needs_sync = force_osv
+        || crate::osv::sync::needs_sync(&db, crate::osv::sync::osv_sync_max_age_hours())
+            .unwrap_or(true);
+    if !needs_sync {
+        info!(target: "4da::headless", "Dependency intelligence already fresh — skipping OSV sync");
+        return false;
+    }
+    match crate::osv::sync::sync(&db).await {
+        Ok(result) => {
+            if result.errors.is_empty() {
+                info!(
+                    target: "4da::headless",
+                    ecosystems = ?result.ecosystems_synced,
+                    stored = result.advisories_stored,
+                    matched = result.advisories_matched,
+                    "Dependency intelligence refresh complete"
+                );
+            } else {
+                warn!(
+                    target: "4da::headless",
+                    errors = ?result.errors,
+                    "Dependency intelligence refresh completed with errors"
+                );
+                append_receipt_error(
+                    receipt,
+                    format!("OSV sync partial failure: {}", result.errors.join("; ")),
+                );
+                if result.ecosystems_synced.is_empty() {
+                    receipt.ok = false;
+                }
+            }
+        }
+        Err(e) => {
+            error!(target: "4da::headless", error = %e, "Dependency intelligence refresh failed");
+            receipt.ok = false;
+            append_receipt_error(receipt, format!("OSV sync failed: {e}"));
+        }
+    }
+    true
+}
+
+/// Step 1d: rebuild the Upgrade Plan snapshot; returns the written
+/// snapshot's `generated_at`, or `None` when nothing was written.
+fn build_plan_snapshot() -> Option<String> {
+    let db = crate::get_database().ok()?;
+    match refresh_plan_snapshot_at(db, None) {
+        Ok((steps, generated_at)) => {
+            info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
+            if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                crate::scheduler_state::persist_run(
+                    crate::scheduler_state::jobs::PLAN_SNAPSHOT,
+                    now.as_secs(),
+                );
+            }
+            generated_at
+        }
+        Err(e) => {
+            error!(
+                target: "4da::headless",
+                error = %e,
+                "Upgrade Plan snapshot NOT refreshed: the plan could not be read, so the \
+                 previous snapshot is kept"
+            );
+            None
+        }
+    }
+}
+
+/// Steps 2-3: fetch (when `fetch`), score, and drain the never-scored backlog.
+async fn run_feed_steps(handle: &AppHandle, receipt: &mut RunReceipt, fetch: bool) {
+    // Step 2 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
+    let fetched = if !fetch {
+        None
+    } else if crate::e2e_gate::skip_feed_fetch() {
+        info!(target: "4da::headless", "Feed fetch skipped (engine end-to-end gate build)");
+        None
+    } else {
+        info!(target: "4da::headless", "Cycle step 2/3: fetching sources...");
+        Some(crate::source_fetching::fill_cache_background(handle).await)
+    };
+    {
+        match fetched {
+            None => {}
+            Some(Ok(summary)) => {
+                receipt.sources_succeeded = summary.succeeded;
+                receipt.sources_failed = summary.failed;
+                receipt.sources_skipped = summary.skipped_disabled;
+                receipt.new_items = summary.new_items;
+                receipt.cached_touches = summary.cached_touches;
+                info!(
+                    target: "4da::headless",
+                    succeeded = summary.succeeded,
+                    failed = summary.failed,
+                    new_items = summary.new_items,
+                    "Fetch complete"
+                );
+            }
+            Some(Err(e)) => {
+                warn!(target: "4da::headless", error = %e, "Fetch failed — scoring existing cache anyway");
+            }
+        }
+    }
+
+    // Step 3 — score (embeds + PASIFA; writes relevance_score). Silent variant: no UI progress events.
+    info!(target: "4da::headless", "Cycle step 3/3: scoring cached content...");
+    match crate::analysis::analyze_cached_content_silent(handle).await {
+        Ok(cycle) => {
+            // Honest receipt numbers (audit item 9): on a differential run the
+            // cycle scores only new/stale items; `items_scored` records that
+            // real work, not the size of a merged display set. This receipt is
+            // ALSO the next run's differential watermark (`ok=1 AND
+            // items_scored>0` — see engine_runs::last_scoring_watermark).
+            receipt.items_scored = cycle.scored_count();
+            receipt.relevant_count = cycle.scored_relevant();
+
+            // Scores, pipeline-version stamps, feed verdicts, and the scoring-event
+            // row are now persisted once at the shared analysis boundary
+            // (analyze_cached_content_silent -> analyze_cached_content_inner ->
+            // persist_cycle_results), which this headless cycle already routes
+            // through. That also gives the headless daemon the curation VERDICT it
+            // previously never wrote — so a headless-only deployment now curates the
+            // corpus (feed_relevant), not just scores it. Do NOT re-add a local
+            // persist here.
+
+            info!(
+                target: "4da::headless",
+                scored = receipt.items_scored,
+                relevant = receipt.relevant_count,
+                "Scoring complete"
+            );
+        }
+        Err(e) => {
+            error!(target: "4da::headless", error = %e, "Scoring failed");
+            receipt.ok = false;
+            append_receipt_error(receipt, e.to_string());
+        }
+    }
+
+    // Step 3b — drain the never-scored backlog. The Phase-2 backfill worker's
+    // only other caller is the GUI monitoring loop (monitoring.rs), so a
+    // deployment that runs engine-only — the recommended OS-scheduled setup —
+    // accumulated a version-0 backlog forever: measured live 2026-08-23, 463
+    // unscored items spanning 35 hours INCLUDING 5 CVE items, across ~30
+    // scheduled cycles that never touched them. The analysis path only scores
+    // a recent window, so arrivals that outpace it age out silently; security
+    // items sitting unscored is a recall hole in the flagship lane. The engine
+    // now drains a bounded slice every cycle (security-first order comes from
+    // get_unscored_backlog_chunk). Best-effort like the GUI path: a failed
+    // chunk logs and the next cycle retries — never fails the run.
+    for _ in 0..ENGINE_BACKFILL_MAX_CHUNKS {
+        match crate::analysis_backfill::backfill_unscored_cycle(ENGINE_BACKFILL_CHUNK).await {
+            Ok(p) => {
+                if p.scored_this_cycle > 0 {
+                    info!(
+                        target: "4da::headless",
+                        scored = p.scored_this_cycle,
+                        relevant = p.relevant_this_cycle,
+                        remaining = p.remaining_unscored,
+                        "Never-scored backfill chunk complete"
+                    );
+                }
+                if p.done {
+                    break;
+                }
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::headless",
+                    error = %e,
+                    "Never-scored backfill failed — next cycle retries"
+                );
+                break;
+            }
+        }
+    }
 }
 
 /// Cold-start self-heal: index configured context directories when nothing is indexed yet.
@@ -667,9 +734,9 @@ async fn ensure_context_indexed() {
 /// without a re-bootstrap, since the dependency axis and OSV version-matching read these tables
 /// every cycle. Failures are logged and non-fatal: a cycle with a stale dep profile still
 /// fetches and scores.
-async fn ensure_dependencies_scanned() {
+async fn ensure_dependencies_scanned() -> bool {
     let Some(dir_strings) = crate::dep_rescan::due_scan_paths() else {
-        return;
+        return false;
     };
     match crate::ace_commands::ace_full_scan(dir_strings).await {
         Ok(_) => {
@@ -679,20 +746,33 @@ async fn ensure_dependencies_scanned() {
             warn!(target: "4da::headless", error = %e, "ACE dependency scan failed — cycle continues without dependency profile");
         }
     }
+    true
 }
 
-/// Build the Upgrade Plan and persist it as the snapshot `4da plan` and the MCP
-/// server read; returns how many items it holds. A plan that could not be READ
-/// is an error and nothing is written (audit 2026-11-11): the engine used to
-/// persist the empty plan a failed read produced, replacing the last good
-/// snapshot with "evaluated, nothing to do".
+/// [`refresh_plan_snapshot_at`], item count only.
+#[cfg(test)]
 fn refresh_plan_snapshot(
     db: &crate::db::Database,
     run_id: Option<i64>,
 ) -> crate::error::Result<usize> {
+    refresh_plan_snapshot_at(db, run_id).map(|(items, _)| items)
+}
+
+/// Build the Upgrade Plan and persist it as the snapshot `4da plan` and the MCP
+/// server read; returns how many items it holds and the written snapshot's
+/// `generated_at` (`None` when the write failed), which identifies it for
+/// [`crate::evidence::stamp_plan_engine_run`]. A plan that could not be READ
+/// is an error and nothing is written (audit 2026-11-11): the engine used to
+/// persist the empty plan a failed read produced, replacing the last good
+/// snapshot with "evaluated, nothing to do".
+fn refresh_plan_snapshot_at(
+    db: &crate::db::Database,
+    run_id: Option<i64>,
+) -> crate::error::Result<(usize, Option<String>)> {
     let plan = crate::evidence::build_upgrade_plan(db)?;
-    crate::evidence::persist_upgrade_plan(db, &plan.items, &plan.steps, plan.drops, run_id);
-    Ok(plan.items.len())
+    let written =
+        crate::evidence::persist_upgrade_plan(db, &plan.items, &plan.steps, plan.drops, run_id);
+    Ok((plan.items.len(), written))
 }
 
 fn append_receipt_error(receipt: &mut RunReceipt, error: String) {
@@ -723,7 +803,7 @@ async fn run_daemon_loop(handle: &AppHandle, force: bool) {
             // cycle is logged and skipped; the loop sleeps and retries.
             if crate::task_guard::contain(
                 "headless-daemon-cycle",
-                run_one_cycle(handle, "headless_daemon", force),
+                Box::pin(run_one_cycle(handle, "headless_daemon", force)),
             )
             .await
             .is_none()
@@ -837,6 +917,9 @@ fn scoring_epoch_is_behind() -> bool {
 fn is_cycle_fresh() -> bool {
     is_data_fresh() && is_osv_fresh() && !scoring_epoch_is_behind()
 }
+
+#[path = "headless_gates.rs"]
+mod gates;
 
 #[cfg(test)]
 #[path = "headless_tests.rs"]

@@ -9,6 +9,7 @@
 //! and other secrets BEFORE the default handler writes the dump.
 
 use crate::settings::types::SensitiveString;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 
 static INSTALL_ONCE: Once = Once::new();
@@ -26,13 +27,66 @@ pub(crate) fn install() {
             let record = panic_record(info);
             tracing::error!(target: "4da::security", panic = %record, "Panic detected — zeroizing sensitive memory");
             write_panic_record(&record);
-            // Zeroize all sensitive memory BEFORE the crash dump is written
-            zeroize_sensitive_memory();
+            // Zeroize BEFORE the crash dump is written — but only when this
+            // panic ends the process. Most panics here are contained (a tokio
+            // task, `task_guard::contain`, a worker thread) and the app runs
+            // on: wiping the keys then left a live app with blank secrets
+            // that the next save() wrote to disk (audit O3).
+            if panic_ends_process(
+                std::thread::current().name(),
+                crate::task_guard::panic_is_contained(),
+                is_non_unwinding(info),
+            ) {
+                zeroize_sensitive_memory();
+            }
             // Then run the default panic handler (which may create a crash dump)
             default_hook(info);
         }));
         tracing::info!(target: "4da::security", "Crash guard installed — secrets will be zeroized on panic");
     });
+}
+
+/// Set once the secrets in memory were wiped; `SettingsManager::save` refuses
+/// to write after that, so blanks never replace the stored keys.
+static SECRETS_ZEROIZED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn secrets_zeroized() -> bool {
+    SECRETS_ZEROIZED.load(Ordering::SeqCst)
+}
+
+/// Whether this panic aborts the process whatever thread it is on. The
+/// standard library raises these with fixed messages: a panic in a `Drop`
+/// while the thread is already unwinding ("panic in a destructor during
+/// cleanup") and a panic that reaches a function that cannot unwind.
+fn is_non_unwinding(info: &std::panic::PanicHookInfo<'_>) -> bool {
+    let payload = info.payload();
+    let msg = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("");
+    is_non_unwinding_message(msg)
+}
+
+fn is_non_unwinding_message(msg: &str) -> bool {
+    msg.starts_with("panic in a destructor during cleanup")
+        || msg.starts_with("panic in a function that cannot unwind")
+}
+
+/// Whether this panic takes the process down.
+///
+/// - `panic = "abort"`: every panic does.
+/// - A panic in a destructor while unwinding, or one that reaches a function
+///   that cannot unwind, aborts, on any thread.
+/// - Otherwise only the main thread's does (an unwind out of `main` ends the
+///   process), and only when it is not inside `task_guard::contain`: the
+///   headless engine runs its cycle contained on the main thread
+///   (`block_on`), and a contained panic is a skipped cycle, not an exit.
+///
+/// A panic on any other thread ends that thread or task and the runtime
+/// carries on.
+fn panic_ends_process(thread_name: Option<&str>, contained: bool, aborting: bool) -> bool {
+    cfg!(panic = "abort") || aborting || (thread_name == Some("main") && !contained)
 }
 
 /// Longest panic message kept in the record.
@@ -86,6 +140,8 @@ fn write_panic_record(record: &str) {
 fn zeroize_sensitive_memory() {
     use zeroize::Zeroize;
 
+    // Before touching anything: from here on no save may run.
+    SECRETS_ZEROIZED.store(true, Ordering::SeqCst);
     let manager = crate::get_settings_manager();
     if let Some(mut guard) = manager.try_lock() {
         let settings = guard.get_mut();
@@ -125,5 +181,74 @@ mod tests {
         // Calling install() multiple times should not panic
         install();
         install();
+    }
+
+    /// Only a panic that ends the process wipes the keys. A contained panic
+    /// on a worker thread or task used to wipe them too (audit O3).
+    #[test]
+    fn only_a_process_ending_panic_zeroizes() {
+        assert!(panic_ends_process(Some("main"), false, false));
+        assert!(
+            panic_ends_process(Some("worker"), false, true),
+            "a non-unwinding panic aborts"
+        );
+        assert!(is_non_unwinding_message(
+            "panic in a destructor during cleanup"
+        ));
+        assert!(is_non_unwinding_message(
+            "panic in a function that cannot unwind"
+        ));
+        assert!(!is_non_unwinding_message("index out of bounds"));
+        if !cfg!(panic = "abort") {
+            assert!(!panic_ends_process(
+                Some("tokio-runtime-worker"),
+                false,
+                false
+            ));
+            assert!(!panic_ends_process(None, false, false));
+            assert!(
+                !panic_ends_process(Some("main"), true, false),
+                "a contained panic on main (the headless cycle) is not an exit"
+            );
+        }
+    }
+
+    /// Audit follow-up: the headless engine runs its cycle under
+    /// `task_guard::contain` on the main thread. A panic there is a skipped
+    /// cycle; it used to wipe the keys and let the run continue with blanks.
+    #[test]
+    fn a_contained_panic_on_the_main_thread_keeps_the_keys() {
+        install();
+        let joined = std::thread::Builder::new()
+            .name("main".into())
+            .spawn(|| {
+                futures::executor::block_on(crate::task_guard::contain("test-main", async {
+                    panic!("contained main-thread panic")
+                }))
+            })
+            .unwrap()
+            .join();
+        assert_eq!(joined.ok(), Some(None::<()>), "the panic was contained");
+        assert!(
+            !secrets_zeroized(),
+            "a contained panic must not wipe secrets"
+        );
+    }
+
+    /// End to end through the installed hook: a contained panic on a worker
+    /// thread leaves the save gate open.
+    #[test]
+    fn a_contained_panic_does_not_close_the_save_gate() {
+        install();
+        let joined = std::thread::Builder::new()
+            .name("contained-worker".into())
+            .spawn(|| panic!("contained test panic"))
+            .unwrap()
+            .join();
+        assert!(joined.is_err(), "the worker panicked");
+        assert!(
+            !secrets_zeroized(),
+            "a contained panic must not wipe secrets"
+        );
     }
 }

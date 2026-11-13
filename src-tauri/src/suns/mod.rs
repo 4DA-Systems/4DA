@@ -104,8 +104,10 @@ impl SunRegistry {
         registry.register("uptime_monitor", "S", 300, uptime_monitor::execute); // 5 min
         registry.register("market_tracker", "R", 86400, market_tracker::execute); // 24h
         registry.register("api_cost_monitor", "R", 3600, api_cost_monitor::execute); // 1h
-        registry.register("engine_watchdog", "S", 900, engine_watchdog::execute); // 15 min — a quiet engine must name itself within one refresh-multiple
-                                                                                  // T = Technical Moats module
+                                                                                     // engine_watchdog is NOT a registry sun: it runs on its own task
+                                                                                     // (`scheduler_supervisor::spawn_watchdog`), outside the scheduler loop
+                                                                                     // it watches (audit O2).
+                                                                                     // T = Technical Moats module
         registry.register("tech_moat_scanner", "T", 86400, tech_moat_scanner::execute); // 24h
                                                                                         // E1 = Execution Playbook module
         registry.register("execution_tracker", "E1", 43200, execution_tracker::execute); // 12h
@@ -358,6 +360,27 @@ pub(crate) fn store_sun_alert(sun_id: &str, alert_type: &str, message: &str) {
 ///
 /// Split from [`store_sun_alert`] so the dedup contract is testable against
 /// an in-memory connection.
+/// Mark every open `alert_type` alert of `sun_id` resolved (acknowledged):
+/// the condition it named is over. Best-effort.
+pub(crate) fn resolve_sun_alerts(sun_id: &str, alert_type: &str) {
+    if let Ok(conn) = crate::open_db_connection() {
+        resolve_sun_alerts_with(&conn, sun_id, alert_type);
+    }
+}
+
+pub(crate) fn resolve_sun_alerts_with(
+    conn: &rusqlite::Connection,
+    sun_id: &str,
+    alert_type: &str,
+) -> usize {
+    conn.execute(
+        "UPDATE sun_alerts SET acknowledged = 1
+         WHERE sun_id = ?1 AND alert_type = ?2 AND acknowledged = 0",
+        params![sun_id, alert_type],
+    )
+    .unwrap_or(0)
+}
+
 pub(crate) fn store_sun_alert_with(
     conn: &rusqlite::Connection,
     sun_id: &str,
@@ -419,10 +442,14 @@ mod tests {
 
     // Test registry construction and behavior
     #[test]
-    fn test_registry_has_11_suns() {
+    fn test_registry_has_10_suns() {
         let registry = SunRegistry::new();
         let statuses = registry.get_statuses();
-        assert_eq!(statuses.len(), 11, "Expected 11 registered suns");
+        assert_eq!(statuses.len(), 10, "Expected 10 registered suns");
+        assert!(
+            statuses.iter().all(|s| s.id != "engine_watchdog"),
+            "the engine watchdog runs outside the loop it watches"
+        );
     }
 
     #[test]
@@ -474,11 +501,11 @@ mod tests {
         let mut registry = SunRegistry::new();
         // First tick: all suns are due (never run before)
         let results = registry.tick();
-        // All 11 enabled suns should run
+        // All 10 enabled suns should run
         assert_eq!(
             results.len(),
-            11,
-            "All 11 suns should execute on first tick"
+            10,
+            "All 10 suns should execute on first tick"
         );
         for (id, result) in &results {
             assert!(
@@ -497,8 +524,8 @@ mod tests {
         // uptime_monitor should NOT be in results
         let uptime_ran = results.iter().any(|(id, _)| id == "uptime_monitor");
         assert!(!uptime_ran, "Disabled sun should not execute on tick");
-        // Should have 10 results (11 - 1 disabled)
-        assert_eq!(results.len(), 10, "Should execute 10 of 11 suns");
+        // Should have 9 results (10 - 1 disabled)
+        assert_eq!(results.len(), 9, "Should execute 9 of 10 suns");
     }
 
     #[test]
@@ -632,5 +659,20 @@ mod tests {
             "dismissed row untouched"
         );
         assert_eq!((rows[1].2.as_str(), rows[1].3), ("again", 0));
+    }
+
+    /// A resolved condition clears its open alert and nothing else.
+    #[test]
+    fn resolving_clears_only_that_alert() {
+        let conn = alerts_conn();
+        store_sun_alert_with(&conn, "scheduler_watchdog", "scheduler_stalled", "stalled");
+        store_sun_alert_with(&conn, "engine_watchdog", "engine_stale", "quiet");
+        assert_eq!(
+            resolve_sun_alerts_with(&conn, "scheduler_watchdog", "scheduler_stalled"),
+            1
+        );
+        let open: Vec<_> = alert_rows(&conn).into_iter().filter(|r| r.3 == 0).collect();
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].2, "quiet");
     }
 }

@@ -465,32 +465,27 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                 }
 
                 // Last-resort recovery — Database::new() still failed even after
-                // the preemptive pass. Rename the offending file to the legacy
-                // single-slot `.db.corrupt` name and create a fresh DB. This
-                // path only fires for edge cases (rusqlite open errors that
-                // PRAGMA quick_check didn't catch) and intentionally uses a
-                // different filename pattern from the new recovery so both
-                // artifacts can coexist for support investigation.
+                // the preemptive pass. Quarantine the offending file and create
+                // a fresh DB. This path only fires for edge cases (rusqlite open
+                // errors that PRAGMA quick_check didn't catch).
                 tracing::warn!(
                     target: "4da::db",
                     error = %e,
                     "Database open failed after preemptive recovery — last-resort fallback"
                 );
-                let corrupt_path = db_path.with_extension("db.corrupt");
-                if let Err(rename_err) = std::fs::rename(&db_path, &corrupt_path) {
-                    return Err(format!(
-                        "Database corrupted and recovery failed: {e} (rename: {rename_err})"
-                    ));
-                }
-                // Also move WAL/SHM files if present
-                let wal = db_path.with_extension("db-wal");
-                let shm = db_path.with_extension("db-shm");
-                if wal.exists() {
-                    std::fs::remove_file(&wal).ok();
-                }
-                if shm.exists() {
-                    std::fs::remove_file(&shm).ok();
-                }
+                // A fresh timestamped name every time (a single `.db.corrupt`
+                // slot overwrote the previous quarantine), and the WAL/SHM go
+                // WITH it: they used to be deleted, losing the WAL's
+                // uncheckpointed writes from the only copy of that data.
+                let corrupt_path = match crate::db::migrations::quarantine_with_sidecars(&db_path)
+                {
+                    Ok(p) => p,
+                    Err(rename_err) => {
+                        return Err(format!(
+                            "Database corrupted and recovery failed: {e} (rename: {rename_err})"
+                        ));
+                    }
+                };
                 crate::db::integrity_gate::invalidate(&db_path);
                 tracing::info!(
                     target: "4da::db",

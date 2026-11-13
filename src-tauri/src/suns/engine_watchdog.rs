@@ -3,8 +3,9 @@
 //!
 //! #549 added the schema-refusal marker and startup banner, but a scheduler
 //! that silently stops for any OTHER reason stayed invisible until someone
-//! went looking. This sun runs from the same monitoring tick as every other
-//! sun and checks the ground-truth freshness receipts (`engine_runs`,
+//! went looking. It runs on its own task (`scheduler_supervisor`), not in the
+//! scheduler loop beside the other suns: a loop that hung took its watchdog
+//! down with it (audit O2). It checks the ground-truth freshness receipts (`engine_runs`,
 //! written by BOTH the GUI scheduler and the headless `fourda-engine`): when
 //! the newest `completed_at` is older than **3x the configured refresh
 //! interval** while monitoring is enabled, it stores an `engine_stale`
@@ -31,7 +32,7 @@ use super::SunResult;
 const STALE_INTERVAL_MULTIPLE: u64 = 3;
 
 /// First-observation instant for the uptime grace period (set when the first
-/// watchdog tick runs, which the sun registry fires immediately at startup).
+/// watchdog tick runs, which its task fires immediately at startup).
 static FIRST_TICK: Lazy<std::time::Instant> = Lazy::new(std::time::Instant::now);
 
 pub fn execute() -> SunResult {

@@ -176,6 +176,10 @@ impl Database {
         )
         .unwrap_or(0);
 
+        // Bookkeeping tables that had no pruner (engine_runs, security_audit_log,
+        // anomalies, scoring_churn, ai_usage): see `retention`.
+        let telemetry = super::retention::prune_telemetry_on(&tx);
+
         // Clean orphaned embeddings (belt-and-suspenders with cleanup_old_items)
         if let Err(e) = tx.execute(
             "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
@@ -188,6 +192,11 @@ impl Database {
             target: "4da::db",
             deleted_intelligence, deleted_windows, deleted_cycles, deleted_necessity,
             deleted_temporal, deleted_file_signals, deleted_sun_runs, deleted_dep_snapshots,
+            engine_runs = telemetry.engine_runs,
+            security_audit_log = telemetry.security_audit_log,
+            anomalies = telemetry.anomalies,
+            scoring_churn = telemetry.scoring_churn,
+            ai_usage = telemetry.ai_usage,
             "Deep clean: pruned unbounded tables"
         );
 

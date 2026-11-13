@@ -90,7 +90,7 @@ pub use types::{
 // readers (the `4da plan` CLI and the MCP `upgrade_planner`, which read the
 // kv_store key themselves). The app reads the plan live from the feed.
 #[allow(unused_imports)]
-pub use plan_snapshot::persist_upgrade_plan;
+pub use plan_snapshot::{persist_upgrade_plan, stamp_plan_engine_run};
 // The plan tests read the persisted envelope back through this.
 #[cfg(test)]
 pub use plan_snapshot::read_upgrade_plan_snapshot;

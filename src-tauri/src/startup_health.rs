@@ -297,7 +297,17 @@ pub(crate) fn check_settings(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
         });
         return;
     }
-    match std::fs::read_to_string(&settings_path) {
+    // Settings 4DA could not read at startup and is not saving over: say what
+    // it is running on and what to do (see `SettingsManager::new`).
+    if let Some(notice) = crate::settings::settings_unreadable_notice(&settings_path) {
+        issues.push(HealthIssue {
+            component: "settings",
+            severity: HealthSeverity::Error,
+            message: notice.to_string(),
+        });
+    }
+    // The same decoding the app loads with (UTF-16, a BOM, ANSI are all read).
+    match crate::settings::read_settings_text(&settings_path) {
         Ok(content) => {
             if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
                 issues.push(HealthIssue {

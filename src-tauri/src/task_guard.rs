@@ -50,6 +50,33 @@ fn payload_text(payload: &(dyn Any + Send)) -> &str {
     }
 }
 
+thread_local! {
+    /// How many contained polls are on this thread's stack right now.
+    static CONTAINED_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Marks one contained poll on this thread for its lifetime.
+struct ContainedPoll;
+
+impl ContainedPoll {
+    fn enter() -> Self {
+        CONTAINED_DEPTH.with(|d| d.set(d.get() + 1));
+        Self
+    }
+}
+
+impl Drop for ContainedPoll {
+    fn drop(&mut self) {
+        CONTAINED_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+    }
+}
+
+/// Whether the current thread is inside a [`contain`] poll: a panic raised
+/// now is caught by it, so it does not end the process.
+pub(crate) fn panic_is_contained() -> bool {
+    CONTAINED_DEPTH.with(std::cell::Cell::get) > 0
+}
+
 /// Await `fut`, containing any panic it unwinds.
 ///
 /// Returns `Some(output)` on normal completion, `None` if the future panicked.
@@ -62,7 +89,15 @@ pub(crate) async fn contain<F>(label: &'static str, fut: F) -> Option<F::Output>
 where
     F: Future,
 {
-    match AssertUnwindSafe(fut).catch_unwind().await {
+    // Every poll of `fut` is marked as contained, so the process panic hook
+    // (`crash_guard`) knows this unwind will be caught here and is not an
+    // exit. The mark is per thread and is undone on return and on unwind.
+    let mut fut = Box::pin(fut);
+    let marked = std::future::poll_fn(move |cx| {
+        let _inside = ContainedPoll::enter();
+        fut.as_mut().poll(cx)
+    });
+    match AssertUnwindSafe(marked).catch_unwind().await {
         Ok(output) => Some(output),
         Err(payload) => {
             tracing::error!(
