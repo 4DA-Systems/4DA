@@ -109,14 +109,17 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />
-            {/* The age ticks every minute: announced only when work starts. */}
-            {isLoading ? (
-              <span className="text-xs text-text-secondary whitespace-nowrap" role="status" aria-live="polite">
-                {t('action.analyzing')}
-              </span>
-            ) : (
-              <HeaderFreshness {...freshness} />
-            )}
+            {/* One live status region for screen readers: the analysis state
+                while working, otherwise the freshness line. */}
+            <span role="status" aria-live="polite" aria-atomic="true">
+              {isLoading ? (
+                <span className="text-xs text-text-secondary whitespace-nowrap">
+                  {t('action.analyzing')}
+                </span>
+              ) : (
+                <HeaderFreshness {...freshness} />
+              )}
+            </span>
           </div>
         </div>
 

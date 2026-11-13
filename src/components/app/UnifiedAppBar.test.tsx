@@ -105,6 +105,15 @@ describe('UnifiedAppBar — freshness', () => {
     expect(screen.queryByText('action.analysisComplete')).toBeNull();
   });
 
+  // PR #1131 CI: the freshness line left the live region, so screen readers
+  // lost the header status. One role="status" region carries it.
+  it('keeps one polite live status region carrying the freshness line', () => {
+    renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(2), advisory_sync: sync('ready', 3) } });
+    const status = screen.getByRole('status');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(status).toContainElement(screen.getByTestId('header-freshness'));
+  });
+
   it('turns amber when the last cycle is more than a day old', () => {
     renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(30), advisory_sync: sync('ready', 1) } });
     expect(screen.getByTestId('header-freshness').getAttribute('data-amber')).toBe('true');

@@ -26,7 +26,9 @@ test.describe('Analysis Flow & Action Bar', () => {
   test('status area has aria-live for screen readers', async ({ page }) => {
     const status = appBar(page).getByRole('status');
     await expect(status).toHaveAttribute('aria-live', 'polite');
-    await expect(status).toHaveText('Ready to analyze');
+    // The header states freshness, not a fixed "Ready" (audit 2026-11-11):
+    // with no cycle recorded yet it says so, and never reads as fresh.
+    await expect(status).toHaveText(/^(Analyzing\.\.\.|Not updated yet|Updated .+)/);
   });
 
   test('search input is functional', async ({ page }) => {
