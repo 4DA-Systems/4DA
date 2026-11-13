@@ -13,6 +13,7 @@ import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
 import { ThemeToggle } from '../ThemeToggle';
 import { CommandSearch } from '../search/CommandSearch';
+import { HeaderFreshness, freshnessState, freshnessView, type FreshnessInput } from './HeaderFreshness';
 
 // ============================================================================
 // Types
@@ -20,7 +21,12 @@ import { CommandSearch } from '../search/CommandSearch';
 
 interface UnifiedAppBarProps {
   state: { loading: boolean; analysisComplete: boolean };
-  monitoring: { enabled: boolean } | null;
+  /** Freshness the backend states: last successful cycle, advisory check. */
+  monitoring: {
+    enabled: boolean;
+    last_cycle_at?: string | null;
+    advisory_sync?: FreshnessInput['advisorySync'];
+  } | null;
   settingsFormProvider: string;
   isPro: boolean;
   tier: string;
@@ -34,7 +40,7 @@ interface UnifiedAppBarProps {
    * pipeline-only "69 relevant" must not read as a judged 69.
    */
   judged: boolean;
-  aiBriefing: { error: string | null; pending?: string | null };
+  aiBriefing: { error: string | null; pending?: string | null; notice?: string | null };
   onAnalyze: () => void;
   onOpenSettings: () => void;
   analysisPulse: boolean;
@@ -68,21 +74,21 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
   const isLoading = state.loading;
   const isComplete = state.analysisComplete && !isLoading;
 
-  // Status dot color
-  const statusDotColor = isComplete
-    ? 'bg-green-500'
-    : isLoading
-      ? 'bg-orange-400 animate-pulse'
-      : 'bg-gray-500';
+  const freshness = {
+    lastCycleAt: monitoring?.last_cycle_at ?? null,
+    advisorySync: monitoring?.advisory_sync ?? null,
+  };
+  const view = freshnessView(freshness);
+  const stale = view.amber;
+  const liveState = freshnessState(view, isLoading);
 
-  // Compact status text. Keyed on completion alone: the summary badge counts
-  // reading rows and is absent with every interest off, which is a finished
-  // analysis too, not "Ready to analyze".
-  const statusText = isLoading
-    ? t('action.analyzing')
-    : isComplete
-      ? t('action.analysisComplete')
-      : t('action.ready');
+  // Status dot: working, or the age of what the app last fetched. Never a
+  // green that stays green for days (audit 2026-11-11).
+  const statusDotColor = isLoading
+    ? 'bg-orange-400 animate-pulse'
+    : stale
+      ? 'bg-amber-400'
+      : 'bg-green-500';
 
   return (
     <div className="mb-3">
@@ -105,13 +111,19 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />
-            <span className="text-xs text-text-secondary whitespace-nowrap" role="status" aria-live="polite">
-              {statusText}
+            {/* The live region announces state changes only (analyzing /
+                fresh / stale / check failed / not checked). The ticking ages
+                sit outside it, so a screen reader is not interrupted every
+                minute. */}
+            <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              {t(`header.freshness.state.${liveState}`)}
             </span>
-            {monitoring?.enabled && (
-              <span className="text-[10px] text-green-400 font-medium uppercase tracking-wider">
-                {t('header.live')}
+            {isLoading ? (
+              <span className="text-xs text-text-secondary whitespace-nowrap">
+                {t('action.analyzing')}
               </span>
+            ) : (
+              <HeaderFreshness {...freshness} />
             )}
           </div>
         </div>
@@ -293,6 +305,13 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         <div role="status" className="mx-4 mt-2 px-3 py-2 bg-bg-secondary border border-border rounded-md text-text-secondary text-xs flex items-center gap-2">
           <span className="w-3 h-3 border-2 border-text-muted/30 border-t-text-muted rounded-full animate-spin" aria-hidden="true" />
           <span className="flex-1">{aiBriefing.pending}</span>
+        </div>
+      )}
+
+      {/* The brief on screen is the facts view because the model call failed */}
+      {aiBriefing.notice && !aiBriefing.pending && !aiBriefing.error && (
+        <div role="status" className="mx-4 mt-2 px-3 py-2 bg-bg-secondary border border-border rounded-md text-text-secondary text-xs">
+          {aiBriefing.notice}
         </div>
       )}
 

@@ -555,6 +555,22 @@ fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
+/// When the last SUCCESSFUL fetch+score cycle finished (RFC 3339), for the
+/// app header's "updated N ago". A run that failed, or whose every source
+/// failed (offline), is not an update. `None` when no cycle succeeded yet.
+pub(crate) fn last_successful_cycle_at(conn: &Connection) -> Option<String> {
+    let _ = ensure_table(conn);
+    conn.query_row(
+        "SELECT completed_at FROM engine_runs
+         WHERE ok = 1 AND NOT (sources_succeeded = 0 AND sources_failed > 0)
+           AND completed_at <> ''
+         ORDER BY id DESC LIMIT 1",
+        [],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
 // ============================================================================
 // Tests — the signing contract an external verifier depends on
 // ============================================================================
@@ -859,5 +875,34 @@ mod tests {
     #[test]
     fn cold_foreground_run_takes_full_window() {
         assert!(differential_since(Some(&wm(30)), 0, false, false).is_none());
+    }
+
+    /// Audit 2026-11-11: the header's green "Analysis complete" never aged.
+    /// It now shows the age of the last cycle that actually fetched: a failed
+    /// run, or one where every source failed (offline), is not an update.
+    #[test]
+    fn last_successful_cycle_skips_failed_and_offline_runs() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert_eq!(last_successful_cycle_at(&conn), None);
+        let insert = |completed: &str, ok: i64, succeeded: i64, failed: i64| {
+            conn.execute(
+                "INSERT INTO engine_runs (trigger, started_at, completed_at, ok, sources_succeeded, sources_failed)
+                 VALUES ('scheduled', ?1, ?1, ?2, ?3, ?4)",
+                rusqlite::params![completed, ok, succeeded, failed],
+            )
+            .unwrap();
+        };
+        insert("2026-11-10T08:00:00+00:00", 1, 12, 1);
+        insert("2026-11-11T08:00:00+00:00", 1, 0, 14); // offline
+        insert("2026-11-12T08:00:00+00:00", 0, 3, 0); // failed
+        assert_eq!(
+            last_successful_cycle_at(&conn).as_deref(),
+            Some("2026-11-10T08:00:00+00:00")
+        );
+        insert("2026-11-12T09:00:00+00:00", 1, 0, 0); // stack sources only, none failed
+        assert_eq!(
+            last_successful_cycle_at(&conn).as_deref(),
+            Some("2026-11-12T09:00:00+00:00")
+        );
     }
 }

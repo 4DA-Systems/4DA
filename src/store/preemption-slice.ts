@@ -4,10 +4,11 @@ import type { AppStore } from './types';
 import { cmd } from '../lib/commands';
 import { isSignalGateError, translateError } from '../utils/error-messages';
 import {
-  loadPersistedDismissals,
-  persistDismissal,
-  removeDismissal,
-} from '../lib/preemption-dismissals';
+  dismissAlert,
+  evidenceAlertKey,
+  moveLegacyPreemptionDismissals,
+  undoDismissal,
+} from '../lib/alert-dismissals';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 
@@ -19,12 +20,15 @@ import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFee
 // The slice holds the canonical EvidenceFeed (EvidenceItem[] + summary counts).
 //
 // AD-035 (2026-08-31): the backend is the single source of truth for what the
-// Preemption list shows. `loadPreemption` sends the persisted local dismissals
-// and the plan-expansion flag; `get_preemption_alerts` applies THE visibility
-// filter and returns counts that equal the rendered cards. Dismiss/undo
-// persist locally, then refetch — the view never filters or counts on its own.
+// Preemption list shows. Dismissals live in the backend triage store shared
+// with the critical banner (lib/alert-dismissals, 7-day expiry, undo);
+// `get_preemption_alerts` reads them, applies THE visibility filter and
+// returns counts that equal the rendered cards. Dismiss/undo write the store,
+// then refetch — the view never filters or counts on its own.
 
 export type PreemptionAlert = EvidenceItem;
+/** What a Preemption dismissal says; it sets how long it holds. */
+export type PreemptionDismissAction = 'not_applicable' | 'snoozed' | 'acknowledged';
 export type { EvidenceFeed as PreemptionFeed };
 
 // ============================================================================
@@ -57,8 +61,9 @@ export interface PreemptionSlice {
    * blanking the tab. Same dismissals and plan scope as a normal load.
    */
   refreshPreemptionQuietly: () => Promise<void>;
-  /** Persist a dismissal, then refetch so items AND counts move together. */
-  dismissPreemptionItem: (id: string) => Promise<void>;
+  /** Persist a dismissal, then refetch so items AND counts move together.
+   *  "Not affected" (`not_applicable`) holds 90 days; a snooze 7. */
+  dismissPreemptionItem: (id: string, action?: PreemptionDismissAction) => Promise<void>;
   /** Undo the most recent dismissal, then refetch. */
   undoPreemptionDismissal: () => Promise<void>;
   /** Expire the undo affordance without touching the dismissal itself. */
@@ -77,6 +82,7 @@ interface InflightLoad {
 }
 
 let preemptionInflight: InflightLoad | null = null;
+let dismissalGeneration = 0;
 
 export const createPreemptionSlice: StateCreator<
   AppStore,
@@ -92,9 +98,10 @@ export const createPreemptionSlice: StateCreator<
   preemptionPlanExpanded: false,
 
   loadPreemption: async () => {
-    const dismissedIds = [...loadPersistedDismissals()].sort();
     const fullPlan = get().preemptionPlanExpanded;
-    const key = `${fullPlan}|${dismissedIds.join(',')}`;
+    // A load after a dismissal must not join the load it raced with: the
+    // generation moves on every dismissal and undo.
+    const key = `${fullPlan}|${dismissalGeneration}`;
     // Join an identical in-flight request (double-mount); a request with a
     // DIFFERENT dismissal set or plan scope chains behind it instead — a
     // dismissal must never be swallowed by the initial load's promise.
@@ -104,7 +111,8 @@ export const createPreemptionSlice: StateCreator<
     const doLoad = async () => {
       set({ preemptionLoading: true, preemptionError: null, preemptionPaywalled: false });
       try {
-        const feed = await cmd('get_preemption_alerts', { dismissedIds, fullPlan });
+        await moveLegacyPreemptionDismissals();
+        const feed = await cmd('get_preemption_alerts', { fullPlan });
         set({ preemptionFeed: feed, preemptionLoading: false });
       } catch (error) {
         if (isSignalGateError(error)) {
@@ -131,10 +139,9 @@ export const createPreemptionSlice: StateCreator<
   refreshPreemptionQuietly: async () => {
     // A normal load (first open, dismiss, undo) owns the feed while it runs.
     if (get().preemptionLoading || preemptionInflight) return;
-    const dismissedIds = [...loadPersistedDismissals()].sort();
     const fullPlan = get().preemptionPlanExpanded;
     try {
-      const feed = await cmd('get_preemption_alerts', { dismissedIds, fullPlan });
+      const feed = await cmd('get_preemption_alerts', { fullPlan });
       // A dismissal made while this was in flight wins: its load refetches.
       if (!get().preemptionLoading && !preemptionInflight) set({ preemptionFeed: feed });
     } catch {
@@ -142,8 +149,15 @@ export const createPreemptionSlice: StateCreator<
     }
   },
 
-  dismissPreemptionItem: async (id: string) => {
-    persistDismissal(id);
+  dismissPreemptionItem: async (id: string, action: PreemptionDismissAction = 'acknowledged') => {
+    try {
+      await dismissAlert({ alertKey: evidenceAlertKey(id) }, action);
+    } catch (error) {
+      // Not stored, so not hidden: say so instead of pretending.
+      set({ preemptionError: translateError(error) });
+      return;
+    }
+    dismissalGeneration += 1;
     set({ preemptionLastDismissed: id });
     await get().loadPreemption();
   },
@@ -151,7 +165,13 @@ export const createPreemptionSlice: StateCreator<
   undoPreemptionDismissal: async () => {
     const id = get().preemptionLastDismissed;
     if (!id) return;
-    removeDismissal(id);
+    try {
+      await undoDismissal({ alertKey: evidenceAlertKey(id) });
+    } catch (error) {
+      set({ preemptionError: translateError(error) });
+      return;
+    }
+    dismissalGeneration += 1;
     set({ preemptionLastDismissed: null });
     await get().loadPreemption();
   },

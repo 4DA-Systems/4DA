@@ -1643,7 +1643,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 130;
+        const TARGET_VERSION: i64 = 131;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -6152,6 +6152,22 @@ impl Database {
                         );
                         Ok(())
                     },
+                )?;
+            }
+
+            // Phase 131 (audit 2026-11-11): one store for alert dismissals.
+            // `alert_triage` is keyed by `alert_key` so Preemption cards
+            // (no source item) and banner alerts share it, and a decision
+            // with no expiry gets one counted from when it was made: 90 days
+            // for not_applicable / accepted_risk, 7 for the rest
+            // (`alert_triage::migrate_to_alert_keys`, `default_days`).
+            if current_version < 131 {
+                Self::run_versioned_migration(
+                    &conn,
+                    130,
+                    131,
+                    "Phase 131: alert_triage keyed by alert_key; every decision expires",
+                    crate::alert_triage::migrate_to_alert_keys,
                 )?;
             }
 

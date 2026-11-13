@@ -85,18 +85,81 @@ describe('UnifiedAppBar — unjudged badge on the relevant chip', () => {
   });
 });
 
-describe('UnifiedAppBar — status text', () => {
-  // With every interest off the summary badge is absent (it counts reading
-  // rows only); a finished analysis still reads as finished, not "Ready".
-  it('reads "analysis complete" after a run with no reading rows to count', () => {
-    renderBar({ summaryBadges: null, state: { loading: false, analysisComplete: true } });
-    expect(screen.getByText('action.analysisComplete')).toBeInTheDocument();
-    expect(screen.queryByText('action.ready')).toBeNull();
+// Audit 2026-11-11: a green "Analysis complete" never aged and "LIVE" only
+// meant monitoring was switched on. The bar states the real ages instead.
+describe('UnifiedAppBar — freshness', () => {
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const sync = (state: 'ready' | 'failed' | 'stale', h: number | null) => ({
+    state, ecosystems: 2, synced_at: h === null ? null
+      : new Date(Date.now() - h * 3_600_000).toISOString().replace('T', ' ').slice(0, 19),
+    error: state === 'failed' ? 'offline' : null, in_flight: false, skipped_temp: 0,
   });
 
-  it('reads "ready" before any run', () => {
-    renderBar({ summaryBadges: null, state: { loading: false, analysisComplete: false } });
-    expect(screen.getByText('action.ready')).toBeInTheDocument();
+  it('states the age of the last cycle and of the advisory check', () => {
+    renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(2), advisory_sync: sync('ready', 3) } });
+    const line = screen.getByTestId('header-freshness');
+    expect(line).toHaveTextContent('header.freshness.updated');
+    expect(line).toHaveTextContent('header.freshness.advisories');
+    expect(line.getAttribute('data-amber')).toBe('false');
+    expect(screen.queryByText('header.live')).toBeNull();
+    expect(screen.queryByText('action.analysisComplete')).toBeNull();
+  });
+
+  // PR #1131 CI + review: one polite live region, announcing state changes
+  // only; the ticking ages sit outside it.
+  it('keeps one polite live status region that announces the state, not the age', () => {
+    renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(2), advisory_sync: sync('ready', 3) } });
+    const status = screen.getByRole('status');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(status).toHaveTextContent('header.freshness.state.fresh');
+    expect(status).not.toContainElement(screen.getByTestId('header-freshness'));
+  });
+
+  it('the region text does not change when only the age moves', () => {
+    const { rerender } = renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(2), advisory_sync: sync('ready', 3) } });
+    const before = screen.getByRole('status').textContent;
+    const line = screen.getByTestId('header-freshness').innerHTML;
+    rerender(
+      <UnifiedAppBar
+        state={{ loading: false, analysisComplete: true }}
+        monitoring={{ enabled: true, last_cycle_at: hoursAgo(5), advisory_sync: sync('ready', 6) }}
+        settingsFormProvider="anthropic"
+        isPro={false}
+        tier="FREE"
+        summaryBadges={{ relevantCount: 69, topCount: 12, total: 580 }}
+        judged={false}
+        aiBriefing={{ error: null }}
+        onAnalyze={() => {}}
+        onOpenSettings={() => {}}
+        analysisPulse={false}
+      />,
+    );
+    expect(screen.getByRole('status').textContent).toBe(before);
+    expect(screen.getByTestId('header-freshness').innerHTML).toBe(line); // keys only under the i18n mock
+  });
+
+  it('announces a state change: a failed check, then analyzing', () => {
+    renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(1), advisory_sync: sync('failed', 2) } });
+    expect(screen.getByRole('status')).toHaveTextContent('header.freshness.state.checkFailed');
+  });
+
+  it('turns amber when the last cycle is more than a day old', () => {
+    renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(30), advisory_sync: sync('ready', 1) } });
+    expect(screen.getByTestId('header-freshness').getAttribute('data-amber')).toBe('true');
+  });
+
+  it('turns amber and says so when the advisory check failed', () => {
+    renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(1), advisory_sync: sync('failed', 2) } });
+    const line = screen.getByTestId('header-freshness');
+    expect(line.getAttribute('data-amber')).toBe('true');
+    expect(line).toHaveTextContent('header.freshness.advisoriesFailedAsOf');
+  });
+
+  it('never reads as fresh before any cycle succeeded', () => {
+    renderBar({ state: { loading: false, analysisComplete: true }, monitoring: { enabled: true, last_cycle_at: null } });
+    const line = screen.getByTestId('header-freshness');
+    expect(line).toHaveTextContent('header.freshness.notUpdated');
+    expect(line.getAttribute('data-amber')).toBe('true');
   });
 });
 

@@ -3,7 +3,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { useAppStore } from '../store';
+import { HIDING_ACTIONS, dismissAlert, dismissalDays, undoDismissal } from '../lib/alert-dismissals';
 import { cmd } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 import { isSafeUrl } from '../utils/sanitize-html';
 import type { SourceRelevance } from '../types/analysis';
 
@@ -24,21 +26,30 @@ interface CriticalAlert {
   dependency_path?: string;
 }
 
+/** Alerts listed at once; the header counts all of them. */
+const SHOWN = 3;
+
 /**
  * Persistent critical alert banner — shows when security advisories
  * or breaking changes affect the user's actual dependencies.
  *
- * Unlike HealthBanner (dismissible, one-time), this banner persists
- * until the user explicitly triages each alert. Triage state is
- * persisted to SQLite via the triage_alert IPC command.
+ * It persists until the user triages each alert. Triage goes to the one
+ * dismissal store Preemption also uses (lib/alert-dismissals): every
+ * dismissal expires (90 days for N/A, 7 otherwise) and can be undone. "Investigate"
+ * only opens the advisory; it never hides the alert (audit 2026-11-11).
  */
 export function CriticalAlertBanner() {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
   const relevanceResults = useAppStore(s => s.appState.relevanceResults);
   const [triaged, setTriaged] = useState<Set<number>>(new Set<number>());
+  // The alerts the last dismissal hid, for Undo.
+  const [lastDismissed, setLastDismissed] = useState<CriticalAlert[]>([]);
+  const [lastAction, setLastAction] = useState('acknowledged');
+  const [triageError, setTriageError] = useState<string | null>(null);
 
-  // Load triage state from SQLite on mount and when results change
+  // Load live triage decisions when results change. A failed read hides
+  // nothing: an alert shows until a decision about it is known.
   useEffect(() => {
     const ids = relevanceResults
       .filter((r: SourceRelevance) => r.is_critical_alert === true)
@@ -47,13 +58,14 @@ export function CriticalAlertBanner() {
 
     void cmd('get_triage_states', { itemIds: ids })
       .then(records => {
-        setTriaged(new Set(records.map(r => r.item_id)));
+        setTriaged(new Set(records.filter(r => HIDING_ACTIONS.has(r.action)).map(r => r.item_id)));
       })
-      .catch(() => { /* fallback: empty set */ });
+      .catch(() => { /* show every alert */ });
   }, [relevanceResults]);
 
-  // Find critical alerts from results
-  const criticalAlerts: CriticalAlert[] = useMemo(() =>
+  // Every untriaged critical alert: the header counts these and the list
+  // shows the first SHOWN (it used to slice first and count the slice).
+  const pendingAlerts: CriticalAlert[] = useMemo(() =>
     relevanceResults
       .filter((r: SourceRelevance) =>
         r.is_critical_alert === true
@@ -74,29 +86,38 @@ export function CriticalAlertBanner() {
         fixed_version: r.score_breakdown?.fixed_version,
         installed_version: r.score_breakdown?.installed_version,
         dependency_path: r.score_breakdown?.dependency_path,
-      }))
-      .slice(0, 3),
+      })),
     [relevanceResults, triaged],
   );
+  const criticalAlerts = useMemo(() => pendingAlerts.slice(0, SHOWN), [pendingAlerts]);
 
-  const handleTriage = useCallback((id: number, action: string, advisory_id?: string) => {
-    setTriaged(prev => new Set([...prev, id]));
-    void cmd('triage_alert', {
-      itemId: id,
-      action,
-      advisoryId: advisory_id ?? null,
-      reason: null,
-      expiresAt: action === 'snoozed'
-        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-        : null,
-    }).catch(() => { /* best-effort persist */ });
+  // Hide at once, store it, and put it back if the store refused: a
+  // dismissal that was not saved must not look saved.
+  const handleTriage = useCallback((alerts: CriticalAlert[], action: string) => {
+    const ids = alerts.map(a => a.id);
+    setTriageError(null);
+    setTriaged(prev => new Set([...prev, ...ids]));
+    setLastDismissed(alerts);
+    setLastAction(action);
+    void Promise.all(alerts.map(a => dismissAlert({ itemId: a.id }, action, a.advisory_id ?? null)))
+      .catch((e: unknown) => {
+        setTriaged(prev => new Set([...prev].filter(id => !ids.includes(id))));
+        setLastDismissed([]);
+        setTriageError(readableError(e));
+      });
   }, []);
 
+  const handleUndo = useCallback(() => {
+    const alerts = lastDismissed;
+    setLastDismissed([]);
+    setTriaged(prev => new Set([...prev].filter(id => !alerts.some(a => a.id === id))));
+    void Promise.all(alerts.map(a => undoDismissal({ itemId: a.id })))
+      .catch((e: unknown) => setTriageError(readableError(e)));
+  }, [lastDismissed]);
+
   const handleTriageAll = useCallback(() => {
-    for (const alert of criticalAlerts) {
-      handleTriage(alert.id, 'acknowledged', alert.advisory_id);
-    }
-  }, [criticalAlerts, handleTriage]);
+    handleTriage(pendingAlerts, 'acknowledged');
+  }, [pendingAlerts, handleTriage]);
 
   // Request translations for critical alert content
   useEffect(() => {
@@ -109,21 +130,43 @@ export function CriticalAlertBanner() {
     }
   }, [criticalAlerts, requestTranslation]);
 
-  if (criticalAlerts.length === 0) return null;
+  const notices = (
+    <>
+      {triageError && (
+        <div role="alert" className="mx-4 mt-2 mb-1 px-3 py-2 text-xs bg-red-900/20 border border-red-500/30 rounded-lg text-red-300">
+          {t('alerts.triageFailed', { error: triageError })}
+        </div>
+      )}
+      {lastDismissed.length > 0 && (
+        <div role="status" className="mx-4 mt-2 mb-1 px-3 py-2 flex items-center gap-2 text-xs bg-bg-secondary border border-border rounded-lg text-text-secondary">
+          <span className="flex-1">{t('alerts.dismissedFor', { count: lastDismissed.length, days: dismissalDays(lastAction) })}</span>
+          <button onClick={handleUndo} className="px-2 py-0.5 rounded bg-bg-tertiary hover:text-text-primary transition-colors">
+            {t('alerts.undo')}
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  if (criticalAlerts.length === 0) {
+    return triageError || lastDismissed.length > 0 ? notices : null;
+  }
 
   return (
+    <>
+    {notices}
     <div className="mx-4 mt-2 mb-1 bg-amber-500/15 border border-amber-500/30 rounded-lg overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-amber-400" />
           <span className="text-sm font-medium text-amber-400">
-            {criticalAlerts.length === 1
+            {pendingAlerts.length === 1
               ? t('alerts.criticalSingular', 'Needs Attention')
-              : t('alerts.criticalPlural', '{{count}} Items Need Attention', { count: criticalAlerts.length })}
+              : t('alerts.criticalPlural', '{{count}} Items Need Attention', { count: pendingAlerts.length })}
           </span>
         </div>
-        {criticalAlerts.length > 1 && (
+        {pendingAlerts.length > 1 && (
           <button
             onClick={handleTriageAll}
             className="text-xs text-text-muted hover:text-text-secondary transition-colors"
@@ -186,12 +229,12 @@ export function CriticalAlertBanner() {
               {alert.url != null && alert.url !== '' && isSafeUrl(alert.url) && (
                 <button
                   onClick={() => {
+                    // Opening the advisory is not a decision about it.
                     import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
                       void openUrl(alert.url!);
                     }).catch(() => {
                       window.open(alert.url, '_blank', 'noopener,noreferrer');
                     });
-                    handleTriage(alert.id, 'investigating', alert.advisory_id);
                   }}
                   className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-colors"
                 >
@@ -199,14 +242,14 @@ export function CriticalAlertBanner() {
                 </button>
               )}
               <button
-                onClick={() => { handleTriage(alert.id, 'not_applicable', alert.advisory_id); }}
+                onClick={() => { handleTriage([alert], 'not_applicable'); }}
                 className="px-1.5 py-0.5 text-[10px] rounded bg-zinc-500/15 text-text-muted hover:bg-zinc-500/25 transition-colors"
                 title={t('alerts.notApplicable', 'Not applicable to this project')}
               >
                 {t('alerts.notApplicableShort', 'N/A')}
               </button>
               <button
-                onClick={() => { handleTriage(alert.id, 'fixed', alert.advisory_id); }}
+                onClick={() => { handleTriage([alert], 'fixed'); }}
                 className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors"
                 title={t('alerts.alreadyFixed', 'Already fixed/updated')}
               >
@@ -215,7 +258,13 @@ export function CriticalAlertBanner() {
             </div>
           </div>
         ))}
+        {pendingAlerts.length > SHOWN && (
+          <p className="text-[10px] text-text-muted px-2">
+            {t('alerts.moreNotShown', { count: pendingAlerts.length - SHOWN })}
+          </p>
+        )}
       </div>
     </div>
+    </>
   );
 }

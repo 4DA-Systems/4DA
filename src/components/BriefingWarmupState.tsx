@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  autoAnalysisStartedThisSession,
+  markAutoAnalysisStarted,
+  onboardingSettled,
+} from '../lib/auto-analysis-gate';
 import { cmd } from '../lib/commands';
 import { isVictauriDogfoodMode } from '../lib/startup-runtime';
 import { useAppStore } from '../store';
 import { AmbientGlow } from './AmbientGlow';
+import { BriefingReadyState } from './BriefingEmptyStates';
 import { ColdStartCard } from './ColdStartCard';
 
 export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
@@ -12,11 +18,14 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const userContext = useAppStore(s => s.userContext);
   const isBrowserMode = useAppStore(s => s.isBrowserMode);
   const analysisComplete = useAppStore(s => s.appState.analysisComplete);
+  const analysisRunning = useAppStore(s => s.appState.loading);
+  const isFirstRun = useAppStore(s => s.isFirstRun);
+  const settled = useAppStore(onboardingSettled);
   const fired = useRef(false);
   const [enabledSources, setEnabledSources] = useState<string[]>([]);
   // null until the source list loads; interests are opt-in (AD-054).
   const [interestsOn, setInterestsOn] = useState<number | null>(null);
-  const [autoStartPending, setAutoStartPending] = useState(!isBrowserMode);
+  const [autoStartPending, setAutoStartPending] = useState(false);
 
   // Load actual configured sources from the backend
   useEffect(() => {
@@ -34,20 +43,20 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
       });
   }, []);
 
-  // Auto-start analysis after 3 seconds so new users aren't stuck (skip in browser mode)
-  // Cooldown prevents hot-reload restart loops from re-triggering analysis endlessly
+  // Auto-start one analysis 3 seconds after the user reaches the app, so a new
+  // user isn't stuck — but never behind the onboarding wizard (it fetches from
+  // the network), never during the first-run flow (which starts its own),
+  // never after an analysis already ran, and at most once per session: an
+  // offline first run used to re-run it on every return to the Brief tab.
+  const mayAutoStart = !isBrowserMode && settled && !isFirstRun && !analysisComplete && !analysisRunning;
   useEffect(() => {
-    if (fired.current || isBrowserMode) {
-      setAutoStartPending(false);
-      return;
-    }
-    const lastAuto = Number(window.sessionStorage.getItem('4da-last-auto-analysis') ?? '0');
-    if (Date.now() - lastAuto < 15_000) {
+    if (fired.current || !mayAutoStart || autoAnalysisStartedThisSession()) {
       setAutoStartPending(false);
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
+    setAutoStartPending(true);
     void isVictauriDogfoodMode().then((dogfoodMode) => {
       if (cancelled) return;
       if (dogfoodMode) {
@@ -55,9 +64,13 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
         return;
       }
       timer = setTimeout(() => {
-        fired.current = true;
         setAutoStartPending(false);
-        window.sessionStorage.setItem('4da-last-auto-analysis', String(Date.now()));
+        const s = useAppStore.getState();
+        // Re-read at fire time: onboarding can open after a slow settings load.
+        if (!onboardingSettled(s) || s.appState.loading || s.appState.analysisComplete
+          || autoAnalysisStartedThisSession()) return;
+        fired.current = true;
+        markAutoAnalysisStarted();
         onAnalyze();
       }, 3000);
     });
@@ -65,7 +78,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [onAnalyze, isBrowserMode]);
+  }, [onAnalyze, mayAutoStart]);
 
   // Gather detected info
   const stack = userContext?.tech_stack || [];
@@ -74,6 +87,12 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   // first run has finished — a setup step, not an empty result.
   if (analysisComplete && stack.length === 0 && interestsOn === 0) {
     return <ColdStartCard />;
+  }
+  // An analysis finished with no rows to read (offline, or interests off):
+  // the facts-first brief needs none, so offer it instead of re-running the
+  // analysis behind a "Start Intelligence" button.
+  if (analysisComplete) {
+    return <BriefingReadyState />;
   }
 
   return (

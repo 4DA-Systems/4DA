@@ -1336,6 +1336,7 @@ pub fn run() {
             trust_ledger::get_false_positive_analysis,
             // Alert Triage (persistent security triage actions)
             alert_triage::triage_alert,
+            alert_triage::untriage_alert,
             alert_triage::get_triage_states,
             // Learned Preferences (P6: Compound Lattice)
             preference_commands::get_learned_preferences,

@@ -26,7 +26,10 @@ test.describe('Analysis Flow & Action Bar', () => {
   test('status area has aria-live for screen readers', async ({ page }) => {
     const status = appBar(page).getByRole('status');
     await expect(status).toHaveAttribute('aria-live', 'polite');
-    await expect(status).toHaveText('Ready to analyze');
+    // The live region announces state changes only; the visible line carries
+    // the ages (audit 2026-11-11 replaced the fixed "Ready" text).
+    await expect(status).toHaveText(/^(Analyzing|Up to date|Out of date|Advisory check failed|Not checked yet)$/);
+    await expect(appBar(page).getByText(/^(Analyzing\.\.\.|Not updated yet|Updated .+)/)).toBeVisible();
   });
 
   test('search input is functional', async ({ page }) => {

@@ -1,7 +1,7 @@
 -- 4DA app-schema contract. GENERATED, do not edit by hand.
 -- Regenerate: UPDATE_APP_SCHEMA_CONTRACT=1 cargo test --lib app_schema_contract
 -- Consumer: github.com/4DA-Systems/4da-mcp-server (pnpm run contract)
--- schema_version: 130
+-- schema_version: 131
 
 CREATE TABLE accuracy_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,16 +90,16 @@ CREATE TABLE ai_usage (
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
-CREATE TABLE alert_triage (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                item_id INTEGER NOT NULL,
-                                advisory_id TEXT,
-                                action TEXT NOT NULL CHECK(action IN ('investigating', 'fixed', 'not_applicable', 'accepted_risk', 'snoozed', 'acknowledged')),
-                                reason TEXT,
-                                resolved_at TEXT NOT NULL DEFAULT (datetime('now')),
-                                expires_at TEXT,
-                                UNIQUE(item_id)
-                            );
+CREATE TABLE "alert_triage" (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_key TEXT NOT NULL UNIQUE,
+            item_id INTEGER,
+            advisory_id TEXT,
+            action TEXT NOT NULL CHECK(action IN ('investigating', 'fixed', 'not_applicable', 'accepted_risk', 'snoozed', 'acknowledged')),
+            reason TEXT,
+            resolved_at TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at TEXT
+        );
 
 CREATE TABLE anomalies (
             id INTEGER PRIMARY KEY,
@@ -1925,4 +1925,4 @@ CREATE VIEW current_dependencies AS
                                 AND ds.ecosystem = latest.ecosystem
                                 AND ds.scanned_at = latest.latest;
 
-INSERT INTO schema_version (version) VALUES (130);
+INSERT INTO schema_version (version) VALUES (131);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, act, screen } from '@testing-library/react';
+import { render, act, screen, fireEvent } from '@testing-library/react';
 import { CelebrationState, CELEBRATION_MOTION_MS } from './CelebrationState';
 
 vi.mock('../../lib/commands', () => ({ cmd: vi.fn(() => Promise.reject(new Error('offline'))) }));
@@ -91,6 +91,27 @@ describe('CelebrationState after a project scan', () => {
       />,
     );
     expect(screen.getByTestId('first-run-advisory')).toHaveTextContent('firstRun.advisory.stale');
+  });
+
+  // Audit 2026-11-11: first-run exits went only to Brief or Signal, never to
+  // Preemption, where the dependency findings are.
+  it('with dependencies found, the first exit goes to Preemption', () => {
+    const onDismiss = vi.fn();
+    render(
+      <CelebrationState
+        relevantCount={0}
+        totalCount={400}
+        topSignal={null}
+        stackInsights={[]}
+        embeddingMode={null}
+        scanSummary={summary}
+        onDismiss={onDismiss}
+      />,
+    );
+    const exits = screen.getAllByRole('button');
+    expect(exits[0]).toHaveTextContent('firstRun.seePreemption');
+    fireEvent.click(exits[0]!);
+    expect(onDismiss).toHaveBeenCalledWith('preemption');
   });
 
   it('without a scan, the relevance view is unchanged', () => {

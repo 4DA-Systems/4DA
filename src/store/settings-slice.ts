@@ -40,6 +40,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
   settingsStatus: '',
   showOnboarding: false,
   settingsLoaded: false,
+  onboardingKnown: false,
   ollamaStatus: null,
   ollamaModels: [],
   modelRegistry: null,
@@ -94,7 +95,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
         }
       }
       // Boot gate: the onboarding decision is now made — let the splash lift.
-      set({ settingsLoaded: true });
+      set({ settingsLoaded: true, onboardingKnown: true });
 
       // Load model registry (non-blocking)
       void cmd('get_model_registry').then((registry) => {

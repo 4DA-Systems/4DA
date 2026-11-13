@@ -3,6 +3,13 @@ import { useEffect } from 'react';
 import { useAppStore } from '../store';
 
 /**
+ * How often the header's freshness is re-read. The headless engine process
+ * and failed advisory checks emit no event to this window, so without a
+ * poll the line could stay green after a check failed.
+ */
+export const MONITORING_REFRESH_MS = 3 * 60 * 1000;
+
+/**
  * Monitoring hook — thin wrapper around Zustand store.
  * All state lives in the store; this hook adds the init-load effect.
  */
@@ -17,6 +24,13 @@ export function useMonitoring() {
 
   useEffect(() => {
     void loadMonitoringStatus();
+    const id = setInterval(() => { void loadMonitoringStatus(); }, MONITORING_REFRESH_MS);
+    const onFocus = () => { void loadMonitoringStatus(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [loadMonitoringStatus]);
 
   return {

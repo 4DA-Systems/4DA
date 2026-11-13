@@ -22,6 +22,7 @@ describe('OnboardingChoiceGate', () => {
   const mockStartUsing = vi.fn();
   const mockContinueSetup = vi.fn();
   const mockScanProjects = vi.fn();
+  const mockFinish = vi.fn();
 
   beforeEach(() => {
     cmdMock.mockReset();
@@ -32,7 +33,9 @@ describe('OnboardingChoiceGate', () => {
     });
     mockStartUsing.mockClear();
     mockContinueSetup.mockClear();
-    mockScanProjects.mockClear();
+    mockScanProjects.mockReset();
+    mockScanProjects.mockResolvedValue({ kind: 'none', directories: 0 });
+    mockFinish.mockClear();
   });
 
   const renderGate = (hasProviderConfigured = false, isAnimating = false) =>
@@ -43,6 +46,7 @@ describe('OnboardingChoiceGate', () => {
         onStartUsing={mockStartUsing}
         onContinueSetup={mockContinueSetup}
         onScanProjects={mockScanProjects}
+        onFinish={mockFinish}
       />,
     );
 
@@ -66,7 +70,7 @@ describe('OnboardingChoiceGate', () => {
   });
 
   it('calls onScanProjects with only the ticked folders', async () => {
-    mockScanProjects.mockResolvedValue(undefined);
+    mockScanProjects.mockResolvedValue({ kind: 'none', directories: 0 });
     renderGate();
 
     const second = await screen.findByLabelText(HOME_FOLDERS[1]!);
@@ -90,7 +94,7 @@ describe('OnboardingChoiceGate', () => {
   });
 
   it('offers other drives only on request, unticked, and adds typed folders ticked', async () => {
-    mockScanProjects.mockResolvedValue(undefined);
+    mockScanProjects.mockResolvedValue({ kind: 'none', directories: 0 });
     renderGate();
     await screen.findByText(HOME_FOLDERS[0]!);
     expect(cmdMock).not.toHaveBeenCalledWith('ace_candidate_dev_roots');
@@ -179,5 +183,43 @@ describe('OnboardingChoiceGate', () => {
     const status = screen.getByRole('status');
     expect(status.className).toContain('text-green-400');
     expect(screen.getByText('AI Provider configured')).toBeInTheDocument();
+  });
+
+  // Audit 2026-11-11: the scan result was discarded and onboarding ended
+  // whatever it found, so a scan that found nothing said nothing.
+  describe('after the scan', () => {
+    async function scan() {
+      renderGate();
+      await screen.findByText(HOME_FOLDERS[0]!);
+      fireEvent.click(screen.getByText('Scan my projects'));
+    }
+
+    it('shows what it found, per ecosystem, and finishes only on Continue', async () => {
+      mockScanProjects.mockResolvedValue({
+        kind: 'found', projects: 3, dependencies: 1048,
+        ecosystems: [{ ecosystem: 'npm', count: 900 }, { ecosystem: 'rust', count: 148 }],
+      });
+      await scan();
+      expect(await screen.findByTestId('scan-outcome-found')).toHaveTextContent('onboarding.scanResult.found');
+      expect(screen.getByText(/onboarding.scanResult.ecosystem.npm/)).toHaveTextContent('900');
+      expect(mockFinish).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByText('onboarding.scanResult.continue'));
+      expect(mockFinish).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays on the step with guidance when nothing was found', async () => {
+      await scan();
+      expect(await screen.findByTestId('scan-outcome-none')).toHaveTextContent('onboarding.scanResult.none');
+      expect(screen.getByText('Scan my projects')).toBeInTheDocument();
+      expect(screen.getByText('Continue full setup')).toBeInTheDocument();
+      expect(mockFinish).not.toHaveBeenCalled();
+    });
+
+    it('says the scan failed instead of swallowing it', async () => {
+      mockScanProjects.mockResolvedValue({ kind: 'error', message: 'Access denied' });
+      await scan();
+      expect(await screen.findByTestId('scan-outcome-error')).toBeInTheDocument();
+      expect(mockFinish).not.toHaveBeenCalled();
+    });
   });
 });

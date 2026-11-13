@@ -26,6 +26,10 @@ pub(crate) enum FloorReason {
     NoCapableModel,
     /// A narration stated a version the facts do not hold, twice.
     NarrationRejected,
+    /// The model call failed (provider unreachable, key rejected, budget
+    /// reached). The facts need no model, so they are served instead of an
+    /// error; the reason travels beside the brief as `narration_error`.
+    ModelFailed,
     /// The morning notification's written summary was not available
     /// (`morning_floor`); the facts go out in its place.
     Morning(MorningWhy),
@@ -201,6 +205,14 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
         (FloorReason::NarrationRejected, true) => {
             "---\n_The written brief stated a version these facts do not hold, so the facts are \
              shown instead._\n"
+        }
+        (FloorReason::ModelFailed, false) => {
+            "---\n_Computed from your lockfiles, OSV advisories and package registries. The AI \
+             provider did not return a written brief, so the facts are shown instead._\n"
+        }
+        (FloorReason::ModelFailed, true) => {
+            "---\n_The AI provider did not return a written brief, so the facts are shown \
+             instead._\n"
         }
         // Rendered above with its reason.
         (FloorReason::Morning(_), _) => "",

@@ -235,6 +235,14 @@ pub async fn translate_via_google(
 // Provider Routing
 // ============================================================================
 
+/// Whether content may be translated by the configured LLM. A model on this
+/// machine sends nothing anywhere; a cloud model needs the same explicit
+/// consent the dedicated cloud translation APIs require (audit 2026-11-11:
+/// a non-English UI with a cloud key sent card text without it).
+pub(crate) fn llm_translation_allowed(cloud_consent: bool, llm_on_machine: bool) -> bool {
+    cloud_consent || llm_on_machine
+}
+
 /// Routing result from `try_dedicated_provider`.
 pub enum ProviderResult {
     /// Dedicated provider returned translations successfully.
@@ -267,7 +275,8 @@ pub async fn try_dedicated_provider(
     };
 
     // Privacy gate: cloud translation APIs require explicit user consent.
-    // Local providers (ollama, llm) are always allowed.
+    // The LLM path checks the same consent unless the model runs on this
+    // machine (`llm_translation_allowed`, in content_translation).
     if !cloud_consent && matches!(provider.as_str(), "deepl" | "google" | "azure" | "auto") {
         tracing::debug!(
             target: "4da::i18n",
@@ -317,6 +326,13 @@ pub async fn try_dedicated_provider(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cloud_model_translates_only_with_consent() {
+        assert!(!llm_translation_allowed(false, false));
+        assert!(llm_translation_allowed(true, false));
+        assert!(llm_translation_allowed(false, true));
+    }
 
     #[test]
     fn test_deepl_lang_mapping_standard() {

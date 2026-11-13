@@ -4,6 +4,7 @@
 
 import { memo, useState } from 'react';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
+import type { PreemptionDismissAction } from '../../store/preemption-slice';
 import { ItemCard } from './PreemptionCard';
 
 interface PreemptionTierSectionProps {
@@ -13,7 +14,7 @@ interface PreemptionTierSectionProps {
   subtitle: string;
   items: EvidenceItem[];
   surfacedRef: React.RefObject<Set<string>>;
-  onDismiss: (id: string) => void;
+  onDismiss: (id: string, action: PreemptionDismissAction) => void;
   emptyText: string;
   /**
    * When set and `items.length` exceeds it, only the first `maxVisible` items

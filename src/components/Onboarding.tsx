@@ -15,6 +15,8 @@ import { TasteTestStep } from './onboarding/TasteTestStep';
 import { OnboardingChoiceGate } from './onboarding/OnboardingChoiceGate';
 import { QuickSetupStep } from './onboarding/QuickSetupStep';
 import { CalibrationStep } from './onboarding/CalibrationStep';
+import { scanOutcome, type ScanOutcome } from './onboarding/scan-outcome';
+import type { ScanSummary as FirstRunScanSummary } from './first-run/utils';
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -155,15 +157,20 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   const handleSkipToContent = persistCompletionAndEnter;
 
-  // Consented, recommended local scan of the folders the user ticked, then
-  // finish onboarding. Nothing leaves the machine.
-  const handleScanAndComplete = async (dirs: string[]) => {
+  // Consented, recommended local scan of the folders the user ticked. The
+  // gate shows what it found before onboarding ends; a scan that found
+  // nothing or failed keeps the user on the step (audit 2026-11-11).
+  const handleScan = async (dirs: string[]): Promise<ScanOutcome> => {
     try {
-      await runDiscovery(dirs);
-    } catch {
-      // Non-critical — proceed even if discovery fails
+      const result = await runDiscovery(dirs);
+      // The command map's ScanSummary predates the dependency fields.
+      const summary = await cmd('ace_get_scan_summary')
+        .then(s => s as unknown as FirstRunScanSummary)
+        .catch(() => null);
+      return scanOutcome(result, summary);
+    } catch (e) {
+      return { kind: 'error', message: readableError(e) };
     }
-    await persistCompletionAndEnter();
   };
 
   // Hide progress indicator on the choice gate — it's a decision point, not a step
@@ -292,7 +299,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             busy={finishing}
             onStartUsing={() => void handleSkipToContent()}
             onContinueSetup={nextStep}
-            onScanProjects={handleScanAndComplete}
+            onScanProjects={handleScan}
+            onFinish={() => void persistCompletionAndEnter()}
           />
         )}
 

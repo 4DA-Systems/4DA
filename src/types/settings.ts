@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+import type { AdvisorySync } from '../../src-tauri/bindings/bindings/AdvisorySync';
 // Settings and monitoring types
 
 interface LicenseConfig {
@@ -51,6 +52,10 @@ export interface MonitoringStatus {
   total_checks: number;
   close_to_tray: boolean;
   notification_style?: string;
+  /** When the last cycle that actually fetched finished (RFC 3339); null = none yet. */
+  last_cycle_at?: string | null;
+  /** Where the advisory check stands (the readiness Preemption reads). */
+  advisory_sync?: AdvisorySync | null;
 }
 
 export interface UserContext {

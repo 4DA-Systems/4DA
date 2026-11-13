@@ -6,6 +6,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
+import type { PreemptionDismissAction } from '../../store/preemption-slice';
 import { canBuildFixPrompt } from '../../lib/agent-handoff';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
@@ -158,7 +159,8 @@ export const ItemCard = memo(function ItemCard({
 }: {
   item: EvidenceItem;
   surfacedRef: React.RefObject<Set<string>>;
-  onDismiss: (id: string) => void;
+  /** `not_applicable` holds 90 days, `snoozed` 7 (lib/alert-dismissals). */
+  onDismiss: (id: string, action: PreemptionDismissAction) => void;
 }) {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
@@ -269,15 +271,6 @@ export const ItemCard = memo(function ItemCard({
           <h3 className="flex-1 min-w-0 text-[13px] font-medium text-text-primary leading-snug">
             {displayTitle}
           </h3>
-          <span
-            className="shrink-0 text-[10px] font-mono tabular-nums text-text-muted"
-            title={t('preemption.confidence.provenance', {
-              provenance: item.confidence.provenance,
-              sampleSize: item.confidence.sample_size ? ` (n=${item.confidence.sample_size})` : '',
-            })}
-          >
-            {Math.round(item.confidence.value * 100)}%
-          </span>
         </div>
       </header>
       <div className="px-4 pb-4">
@@ -343,7 +336,7 @@ export const ItemCard = memo(function ItemCard({
                     notes: action.label,
                   });
                   if (action.action_id === 'dismiss' || action.action_id === 'snooze_7d') {
-                    onDismiss(item.id);
+                    onDismiss(item.id, action.action_id === 'dismiss' ? 'not_applicable' : 'snoozed');
                   } else if (action.action_id === 'investigate' || action.action_id === 'view_source') {
                     const now = Date.now();
                     if (now - lastClickRef.current < 500) return;

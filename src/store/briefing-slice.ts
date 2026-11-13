@@ -6,6 +6,7 @@ import {
   briefStillWritingMessage,
   budgetRefusalMessage,
   inventoryRefreshingMessage,
+  narrationFailedMessage,
   translateError,
 } from '../utils/error-messages';
 import type { AppStore, BriefingSlice, BriefingState, BriefVerdicts, FreeBriefingData, InstantBriefingSnapshot } from './types';
@@ -81,6 +82,39 @@ export async function askForBriefing(auto: boolean, onStillWriting: () => void):
       onStillWriting();
     }
   }
+}
+
+/**
+ * A brief's time: SQLite's zoneless UTC ("2026-11-12 01:30:00") or an
+ * RFC 3339 value that already names its zone ("...Z", "...+10:00").
+ */
+export function parseBriefTime(at: string): Date {
+  const iso = at.includes('T') ? at : at.replace(' ', 'T');
+  return new Date(/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(iso) ? iso : `${iso}Z`);
+}
+
+/**
+ * The briefing state a delivered brief sets — the one mapping for the
+ * command's answer and the scheduler's `briefing-auto-generated` event
+ * (whose payload is the same object). A reused brief keeps its real age
+ * ("written 3h ago"), not "just now". A facts brief served because the model
+ * failed carries `narration_error`: shown as a notice beside it, never as an
+ * error that hides the brief.
+ */
+export function briefingStateFrom(
+  result: Pick<BriefingResult, 'briefing' | 'model' | 'briefing_created_at' | 'narration_error'>,
+  now: Date = new Date(),
+): BriefingState {
+  const createdAt = result.briefing_created_at ? parseBriefTime(result.briefing_created_at) : null;
+  return {
+    content: result.briefing ?? null,
+    loading: false,
+    error: null,
+    pending: null,
+    notice: result.narration_error ? narrationFailedMessage(result.narration_error) : null,
+    model: result.model || null,
+    lastGenerated: createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : now,
+  };
 }
 
 /** Test seam: forget an armed retry between tests. */
@@ -228,19 +262,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
       });
 
       if (result.success && result.briefing) {
-        // A reused brief keeps its real age ("written 3h ago"), not "just now".
-        const createdAt = result.briefing_created_at
-          ? new Date(`${result.briefing_created_at.replace(' ', 'T')}Z`)
-          : null;
-        set({
-          aiBriefing: {
-            content: result.briefing,
-            loading: false,
-            error: null,
-            model: result.model || null,
-            lastGenerated: createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : new Date(),
-          },
-        });
+        set({ aiBriefing: briefingStateFrom(result) });
         // AD-035: the generation just recorded (or superseded) the display-
         // binding verdicts — refresh so the same screen the briefing renders
         // on already honors them. Fire-and-forget: verdicts are supplementary

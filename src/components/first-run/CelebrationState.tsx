@@ -24,6 +24,9 @@ interface TopSignal {
   };
 }
 
+/** Where the first run hands the user over. */
+export type FirstRunExit = 'briefing' | 'preemption' | 'results';
+
 /** How long the mark turns as the celebration arrives before it rests. */
 export const CELEBRATION_MOTION_MS = 2_400;
 
@@ -41,7 +44,7 @@ interface CelebrationStateProps {
   /** What the project scan found. With dependencies, the screen leads with
    *  them and their vulnerability check, not a news relevance count (E7). */
   scanSummary?: ScanSummary | null;
-  onDismiss: (view: 'briefing' | 'results') => void;
+  onDismiss: (view: FirstRunExit) => void;
 }
 
 /** Build a human-readable insight explaining why the top signal matched */
@@ -261,10 +264,22 @@ export function CelebrationState({
           </>
         ) : (
           <>
+            {/* Dependencies found: their findings are the product (AD-054),
+                so Preemption is the first exit, not the last. */}
+            {(scanSummary?.total_dependencies ?? 0) > 0 && (
+              <button
+                onClick={() => onDismiss('preemption')}
+                className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
+              >
+                {t('firstRun.seePreemption')}
+              </button>
+            )}
             <button
               onClick={() => onDismiss('briefing')}
               aria-label={t('firstRun.ariaSeeBriefing')}
-              className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
+              className={(scanSummary?.total_dependencies ?? 0) > 0
+                ? 'text-sm text-text-secondary hover:text-text-primary transition-colors'
+                : 'px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all'}
             >
               {t('firstRun.seeBriefing')}
             </button>

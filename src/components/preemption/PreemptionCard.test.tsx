@@ -63,9 +63,38 @@ describe('ItemCard', () => {
     expect(screen.getByText('React 19 breaking change')).toBeDefined();
   });
 
-  it('renders confidence percentage', () => {
-    render(<ItemCard item={makeItem()} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
-    expect(screen.getByText('85%')).toBeDefined();
+  // Doctrine rule 3: the percentage came from fixed constants per card kind
+  // (70/80/90/95 in `evidence/upgrade_plan.rs`), so it informed no action.
+  // The provenance badge (Verified / AI) carries what the user can act on.
+  it('shows no confidence percentage', () => {
+    for (const value of [0.7, 0.8, 0.85, 0.9, 0.95]) {
+      const { container, unmount } = render(
+        <ItemCard
+          item={makeItem({ confidence: { value, provenance: 'osv_verified', sample_size: null } })}
+          surfacedRef={surfacedRef}
+          onDismiss={vi.fn()}
+        />,
+      );
+      expect(container.textContent).not.toContain(`${Math.round(value * 100)}%`);
+      unmount();
+    }
+  });
+
+  // Product decision 2026-11-13: "Not affected" is a deliberate N/A (held 90
+  // days by the store); a snooze is 7.
+  it('"Not affected" dismisses as not_applicable, a snooze as snoozed', () => {
+    const onDismiss = vi.fn();
+    const item = makeItem({
+      suggested_actions: [
+        { action_id: 'dismiss', label: 'Not affected', description: '' },
+        { action_id: 'snooze_7d', label: 'Snooze', description: '' },
+      ],
+    } as Partial<EvidenceItem>);
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={onDismiss} />);
+    fireEvent.click(screen.getByText('Not affected'));
+    expect(onDismiss).toHaveBeenLastCalledWith(item.id, 'not_applicable');
+    fireEvent.click(screen.getByText('Snooze'));
+    expect(onDismiss).toHaveBeenLastCalledWith(item.id, 'snoozed');
   });
 
   it('renders explanation text', () => {

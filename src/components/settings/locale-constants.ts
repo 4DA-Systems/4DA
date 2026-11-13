@@ -57,6 +57,19 @@ export const TRANSLATION_PROVIDERS = [
 
 export const PROVIDERS_REQUIRING_KEY = new Set(['deepl', 'google', 'azure']);
 
+/**
+ * Whether the user's AI model runs on this machine (mirrors the backend's
+ * `llm_egress::provider_is_on_machine`). Every translation provider other
+ * than DeepL / Google / Azure translates with that model, so when it is a
+ * cloud model, the cloud-translation consent applies to it too.
+ */
+export function aiRunsOnMachine(llm: { provider: string; base_url: string | null } | null | undefined): boolean {
+  if (!llm) return false;
+  const url = llm.base_url?.trim();
+  if (url) return /^(https?:\/\/)?(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(\/|$)/i.test(url);
+  return llm.provider === 'ollama' || llm.provider === 'none' || llm.provider === '';
+}
+
 export function getLanguageName(code: string): string {
   return LANGUAGES.find((l) => l.code === code)?.name ?? code;
 }

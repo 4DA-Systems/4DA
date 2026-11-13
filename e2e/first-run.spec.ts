@@ -113,7 +113,11 @@ test.describe('First-Run Flow', () => {
       // Main view: the app bar's live status line reports the analysis state
       // and the Run analysis control is available.
       const appBar = page.getByRole('banner', { name: '4DA' });
-      await expect(appBar.getByRole('status')).toHaveText(/^(Ready to analyze|Analyzing\.\.\.|Analysis complete)$/);
+      // Analysis state while working, otherwise the freshness line (audit
+      // 2026-11-11 replaced the "Ready" / "Analysis complete" text that
+      // never aged).
+      await expect(appBar.getByRole('status')).toHaveText(/^(Analyzing|Up to date|Out of date|Advisory check failed|Not checked yet)$/);
+      await expect(appBar.getByText(/^(Analyzing\.\.\.|Not updated yet|Updated .+)/)).toBeVisible();
       await expect(appBar.getByRole('button', { name: 'Run analysis' })).toBeVisible();
     }
   });

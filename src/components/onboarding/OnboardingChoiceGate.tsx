@@ -3,6 +3,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DiscoveryFolderPicker } from './DiscoveryFolderPicker';
+import { readableError } from '../../utils/error-messages';
+import { ScanOutcomePanel } from './ScanOutcomePanel';
+import type { ScanOutcome } from './scan-outcome';
 import { useDiscoveryFolders } from './use-discovery-folders';
 
 interface OnboardingChoiceGateProps {
@@ -13,7 +16,9 @@ interface OnboardingChoiceGateProps {
   onStartUsing: () => void;
   onContinueSetup: () => void;
   /** Scan exactly these folders (the ones the user left ticked). */
-  onScanProjects: (dirs: string[]) => void | Promise<void>;
+  onScanProjects: (dirs: string[]) => Promise<ScanOutcome>;
+  /** Finish onboarding after a scan that found projects. */
+  onFinish: () => void;
 }
 
 export function OnboardingChoiceGate({
@@ -23,19 +28,21 @@ export function OnboardingChoiceGate({
   onStartUsing,
   onContinueSetup,
   onScanProjects,
+  onFinish,
 }: OnboardingChoiceGateProps) {
   const { t } = useTranslation();
   const [scanning, setScanning] = useState(false);
+  const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const discovery = useDiscoveryFolders();
   const nothingTicked = discovery.selected.length === 0;
 
   const handleScan = () => {
     if (scanning || busy || nothingTicked) return;
     setScanning(true);
-    // Reset once the handler settles: on success the gate unmounts anyway, and
-    // when finishing fails the user must get the buttons back to retry.
-    void Promise.resolve(onScanProjects(discovery.selected))
-      .catch(() => { /* surfaced by the parent */ })
+    setOutcome(null);
+    void onScanProjects(discovery.selected)
+      .then(setOutcome)
+      .catch((e: unknown) => setOutcome({ kind: 'error', message: readableError(e) }))
       .finally(() => setScanning(false));
   };
 
@@ -83,8 +90,11 @@ export function OnboardingChoiceGate({
             {t('onboarding.choice.scanning', 'Scanning your projects… this stays on your device')}
           </p>
         </div>
+      ) : outcome?.kind === 'found' ? (
+        <ScanOutcomePanel outcome={outcome} busy={busy} onContinue={onFinish} />
       ) : (
         <div className="flex flex-col items-center gap-4 max-w-sm mx-auto">
+          {outcome && <ScanOutcomePanel outcome={outcome} busy={busy} onContinue={onFinish} />}
           {/* Primary, recommended path: a fully-local project scan */}
           <button
             onClick={handleScan}
@@ -118,7 +128,7 @@ export function OnboardingChoiceGate({
           <button
             onClick={onContinueSetup}
             disabled={scanning || busy}
-            className="w-full px-8 py-2.5 bg-bg-secondary text-text-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-all text-sm disabled:opacity-50"
+            className="w-full px-8 py-2.5 bg-bg-secondary text-text-secondary rounded-lg border border-border hover:border-text-muted transition-all text-sm disabled:opacity-50"
           >
             {t('onboarding.choice.continueSetup', 'Continue full setup')}
           </button>
