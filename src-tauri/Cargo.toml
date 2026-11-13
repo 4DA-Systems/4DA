@@ -73,7 +73,7 @@ fastembed = { version = "7", optional = true, default-features = false, features
 
 # Thread-safe state
 once_cell = "1"
-parking_lot = "0.12"
+parking_lot = "0.13"
 
 # Database (sqlite + vector search)
 # Default: "bundled" (plaintext SQLite). For encrypted databases:
