@@ -15,9 +15,9 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 818 Rust crates, 41 npm packages.
+Totals: 821 Rust crates, 41 npm packages.
 
-Rust Crates (818)
+Rust Crates (821)
 -----------------
 
 adler2 2.0.1 - 0BSD OR MIT OR Apache-2.0 - https://github.com/oyvindln/adler2
@@ -456,6 +456,7 @@ phf_codegen 0.14.0 - MIT - https://github.com/rust-phf/rust-phf
 phf_generator 0.13.1 - MIT - https://github.com/rust-phf/rust-phf
 phf_generator 0.14.0 - MIT - https://github.com/rust-phf/rust-phf
 phf_macros 0.13.1 - MIT - https://github.com/rust-phf/rust-phf
+phf_macros 0.14.0 - MIT - https://github.com/rust-phf/rust-phf
 phf_shared 0.13.1 - MIT - https://github.com/rust-phf/rust-phf
 phf_shared 0.14.0 - MIT - https://github.com/rust-phf/rust-phf
 pin-project-lite 0.2.17 - Apache-2.0 OR MIT - https://github.com/taiki-e/pin-project-lite
@@ -548,11 +549,12 @@ schemars 1.2.2 - MIT - https://github.com/GREsau/schemars
 schemars_derive 0.8.22 - MIT - https://github.com/GREsau/schemars
 schemars_derive 1.2.2 - MIT - https://github.com/GREsau/schemars
 scopeguard 1.2.0 - MIT OR Apache-2.0 - https://github.com/bluss/scopeguard
-scraper 0.27.0 - ISC - https://github.com/rust-scraper/scraper
+scraper 0.29.0 - ISC - https://github.com/rust-scraper/scraper
 security-framework 2.11.1 - MIT OR Apache-2.0 - https://github.com/kornelski/rust-security-framework
 security-framework 3.7.0 - MIT OR Apache-2.0 - https://github.com/kornelski/rust-security-framework
 security-framework-sys 2.17.0 - MIT OR Apache-2.0 - https://github.com/kornelski/rust-security-framework
 selectors 0.38.0 - MPL-2.0 - https://github.com/servo/stylo
+selectors 0.41.0 - MPL-2.0 - https://github.com/servo/stylo
 semver 1.0.28 - MIT OR Apache-2.0 - https://github.com/dtolnay/semver
 serde 1.0.229 - MIT OR Apache-2.0 - https://github.com/serde-rs/serde
 serde_core 1.0.229 - MIT OR Apache-2.0 - https://github.com/serde-rs/serde
@@ -571,6 +573,7 @@ serde-untagged 0.1.9 - MIT OR Apache-2.0 - https://github.com/dtolnay/serde-unta
 serialize-to-javascript 0.1.2 - MIT OR Apache-2.0 - https://github.com/chippers/serialize-to-javascript
 serialize-to-javascript-impl 0.1.2 - MIT OR Apache-2.0 - https://github.com/chippers/serialize-to-javascript
 servo_arc 0.4.3 - MIT OR Apache-2.0 - https://github.com/servo/stylo
+servo_arc 0.5.0 - MIT OR Apache-2.0 - https://github.com/servo/stylo
 sha1 0.11.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/hashes
 sha2 0.10.9 - MIT OR Apache-2.0 - https://github.com/RustCrypto/hashes
 sha2 0.11.1 - MIT OR Apache-2.0 - https://github.com/RustCrypto/hashes
@@ -914,7 +917,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Reciprocal-Licence Components (6)
+Reciprocal-Licence Components (7)
 ---------------------------------
 
 The components below are licensed under weak-copyleft terms (MPL-2.0,
@@ -931,6 +934,7 @@ cssparser-macros 0.7.1 - MPL-2.0 - https://github.com/servo/rust-cssparser
 dtoa-short 0.3.5 - MPL-2.0 - https://github.com/upsuper/dtoa-short
 option-ext 0.2.0 - MPL-2.0 - https://github.com/soc/option-ext.git
 selectors 0.38.0 - MPL-2.0 - https://github.com/servo/stylo
+selectors 0.41.0 - MPL-2.0 - https://github.com/servo/stylo
 
 Full Licence Text - @fontsource-variable/inter 5.3.0 (SIL Open Font License 1.1)
 --------------------------------------------------------------------------------
