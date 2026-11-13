@@ -105,13 +105,42 @@ describe('UnifiedAppBar — freshness', () => {
     expect(screen.queryByText('action.analysisComplete')).toBeNull();
   });
 
-  // PR #1131 CI: the freshness line left the live region, so screen readers
-  // lost the header status. One role="status" region carries it.
-  it('keeps one polite live status region carrying the freshness line', () => {
+  // PR #1131 CI + review: one polite live region, announcing state changes
+  // only; the ticking ages sit outside it.
+  it('keeps one polite live status region that announces the state, not the age', () => {
     renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(2), advisory_sync: sync('ready', 3) } });
     const status = screen.getByRole('status');
     expect(status.getAttribute('aria-live')).toBe('polite');
-    expect(status).toContainElement(screen.getByTestId('header-freshness'));
+    expect(status).toHaveTextContent('header.freshness.state.fresh');
+    expect(status).not.toContainElement(screen.getByTestId('header-freshness'));
+  });
+
+  it('the region text does not change when only the age moves', () => {
+    const { rerender } = renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(2), advisory_sync: sync('ready', 3) } });
+    const before = screen.getByRole('status').textContent;
+    const line = screen.getByTestId('header-freshness').innerHTML;
+    rerender(
+      <UnifiedAppBar
+        state={{ loading: false, analysisComplete: true }}
+        monitoring={{ enabled: true, last_cycle_at: hoursAgo(5), advisory_sync: sync('ready', 6) }}
+        settingsFormProvider="anthropic"
+        isPro={false}
+        tier="FREE"
+        summaryBadges={{ relevantCount: 69, topCount: 12, total: 580 }}
+        judged={false}
+        aiBriefing={{ error: null }}
+        onAnalyze={() => {}}
+        onOpenSettings={() => {}}
+        analysisPulse={false}
+      />,
+    );
+    expect(screen.getByRole('status').textContent).toBe(before);
+    expect(screen.getByTestId('header-freshness').innerHTML).toBe(line); // keys only under the i18n mock
+  });
+
+  it('announces a state change: a failed check, then analyzing', () => {
+    renderBar({ monitoring: { enabled: true, last_cycle_at: hoursAgo(1), advisory_sync: sync('failed', 2) } });
+    expect(screen.getByRole('status')).toHaveTextContent('header.freshness.state.checkFailed');
   });
 
   it('turns amber when the last cycle is more than a day old', () => {

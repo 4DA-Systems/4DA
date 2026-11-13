@@ -60,6 +60,21 @@ export function freshnessView(input: FreshnessInput, now: number = Date.now()): 
   return { cycleAt, advisoriesAt, advisoryFailed, advisoryStale, advisoryUnknown, amber };
 }
 
+/** What the header's live region announces: a state, never an age. */
+export type FreshnessState = 'analyzing' | 'fresh' | 'stale' | 'checkFailed' | 'notChecked';
+
+/**
+ * The announced state. The visible line carries ages that tick every
+ * minute; announcing them would interrupt a screen reader once a minute,
+ * so the live region changes only when this does.
+ */
+export function freshnessState(view: FreshnessView, analyzing: boolean): FreshnessState {
+  if (analyzing) return 'analyzing';
+  if (view.advisoryFailed) return 'checkFailed';
+  if (view.cycleAt === null || view.advisoryUnknown) return 'notChecked';
+  return view.amber ? 'stale' : 'fresh';
+}
+
 /** Re-render every minute so an age keeps moving on an idle screen. */
 function useMinuteTick(): number {
   const [now, setNow] = useState(() => Date.now());

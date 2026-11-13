@@ -13,7 +13,7 @@ import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
 import { ThemeToggle } from '../ThemeToggle';
 import { CommandSearch } from '../search/CommandSearch';
-import { HeaderFreshness, freshnessView, type FreshnessInput } from './HeaderFreshness';
+import { HeaderFreshness, freshnessState, freshnessView, type FreshnessInput } from './HeaderFreshness';
 
 // ============================================================================
 // Types
@@ -78,7 +78,9 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
     lastCycleAt: monitoring?.last_cycle_at ?? null,
     advisorySync: monitoring?.advisory_sync ?? null,
   };
-  const stale = freshnessView(freshness).amber;
+  const view = freshnessView(freshness);
+  const stale = view.amber;
+  const liveState = freshnessState(view, isLoading);
 
   // Status dot: working, or the age of what the app last fetched. Never a
   // green that stays green for days (audit 2026-11-11).
@@ -109,17 +111,20 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />
-            {/* One live status region for screen readers: the analysis state
-                while working, otherwise the freshness line. */}
-            <span role="status" aria-live="polite" aria-atomic="true">
-              {isLoading ? (
-                <span className="text-xs text-text-secondary whitespace-nowrap">
-                  {t('action.analyzing')}
-                </span>
-              ) : (
-                <HeaderFreshness {...freshness} />
-              )}
+            {/* The live region announces state changes only (analyzing /
+                fresh / stale / check failed / not checked). The ticking ages
+                sit outside it, so a screen reader is not interrupted every
+                minute. */}
+            <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              {t(`header.freshness.state.${liveState}`)}
             </span>
+            {isLoading ? (
+              <span className="text-xs text-text-secondary whitespace-nowrap">
+                {t('action.analyzing')}
+              </span>
+            ) : (
+              <HeaderFreshness {...freshness} />
+            )}
           </div>
         </div>
 

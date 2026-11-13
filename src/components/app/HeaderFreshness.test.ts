@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect } from 'vitest';
-import { freshnessView, STALE_AFTER_MS } from './HeaderFreshness';
+import { freshnessState, freshnessView, STALE_AFTER_MS } from './HeaderFreshness';
 
 const NOW = Date.parse('2026-11-12T13:00:00Z');
 const sync = (state: 'ready' | 'failed' | 'stale' | 'syncing' | 'no_inventory', synced_at: string | null) => ({
@@ -46,5 +46,20 @@ describe('freshnessView', () => {
     expect(v.advisoryStale).toBe(true);
     expect(v.advisoryFailed).toBe(false);
     expect(v.amber).toBe(true);
+  });
+
+  // The live region announces this state; the minute-by-minute age must not
+  // change it, or a screen reader is interrupted every minute.
+  it('the announced state does not move while only the age ticks', () => {
+    const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString();
+    const states = [5, 6, 7, 60, 300].map(m => freshnessState(freshnessView({
+      lastCycleAt: at(m), advisorySync: sync('ready', '2026-11-12 11:00:00'),
+    }, NOW), false));
+    expect(new Set(states)).toEqual(new Set(['fresh']));
+    const old = freshnessView({ lastCycleAt: at(25 * 60), advisorySync: sync('ready', '2026-11-12 11:00:00') }, NOW);
+    expect(freshnessState(old, false)).toBe('stale');
+    expect(freshnessState(old, true)).toBe('analyzing');
+    expect(freshnessState(freshnessView({ lastCycleAt: null, advisorySync: null }, NOW), false)).toBe('notChecked');
+    expect(freshnessState(freshnessView({ lastCycleAt: at(5), advisorySync: sync('failed', null) }, NOW), false)).toBe('checkFailed');
   });
 });
