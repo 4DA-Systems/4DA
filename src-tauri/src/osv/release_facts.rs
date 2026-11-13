@@ -23,6 +23,8 @@
 //!   deprecated (retired whole) excludes nothing.
 //! - Each ecosystem is read only while its registry source (`npm_registry`,
 //!   `crates_io`, `pypi`) is enabled: a disabled source makes no calls.
+//!   Nothing is read while Settings → Privacy → Registry lookups is off, and
+//!   a private package name is never read (`registry_privacy::may_look_up`).
 //! - **Go:** not covered. A module's `retract` directives live in the
 //!   `go.mod` of its newest version, which 4DA does not read; Go targets are
 //!   computed from the advisory data alone, as before.
@@ -214,10 +216,13 @@ fn wanted(db: &Database) -> Wants {
     for key in super::parent_hint::wanted_release_lists(db, &matches) {
         out.entry(key).or_default();
     }
+    // Registry lookups off (Settings → Privacy) or a private name: no read,
+    // and the target is judged from the advisory data alone (P1).
     let kept: BTreeSet<(String, String)> = gate(out.keys().cloned().collect(), |source| {
         db.is_source_enabled(source)
     })
     .into_iter()
+    .filter(|(eco, name)| crate::registry_privacy::may_look_up(eco, name))
     .collect();
     out.retain(|k, _| kept.contains(k));
     out
@@ -287,7 +292,8 @@ pub(crate) async fn refresh(db: &Database) -> usize {
     // D-4, second round: the documents of the dependencies the vulnerable
     // packages hold through a narrow range, read now so the first sync can
     // judge them; inside the same budget and cap.
-    let held_only = held_wants(&stored, &wants, |source| db.is_source_enabled(source));
+    let mut held_only = held_wants(&stored, &wants, |source| db.is_source_enabled(source));
+    held_only.retain(|(eco, name), _| crate::registry_privacy::may_look_up(eco, name));
     let second: Vec<Due> = due(held_only, &stored, now)
         .into_iter()
         .take(MAX_FETCHES_PER_SYNC.saturating_sub(fetched))
@@ -392,7 +398,7 @@ async fn fetch_all(
     // Large documents are normal here: `next`'s abbreviated packument is
     // ~26 MB and boto3's PyPI JSON ~3.3 MB (2026-10-17), so the budget is
     // per-request generous rather than the 30 s the small reads use.
-    let client = match reqwest::Client::builder()
+    let client = match crate::http_client::outbound_builder()
         .user_agent(USER_AGENT)
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))

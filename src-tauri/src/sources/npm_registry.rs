@@ -159,8 +159,12 @@ impl NpmRegistrySource {
         max: usize,
     ) -> SourceResult<Vec<SourceItem>> {
         let mut items = Vec::new();
-        // Never re-send a name the public registry already 404'd on.
-        let packages = super::npm_negative_cache::without_known_missing(packages);
+        // Never re-send a name the public registry already 404'd on, never a
+        // private one, and nothing while registry lookups are off.
+        let packages = crate::registry_privacy::lookable(
+            "npm",
+            &super::npm_negative_cache::without_known_missing(packages),
+        );
 
         for (i, package) in packages.iter().enumerate() {
             if items.len() >= max {
@@ -242,7 +246,10 @@ impl Source for NpmRegistrySource {
         // already stops at `max_items`, but it always stopped at the same FIRST
         // `max_items` names, so a dependency list longer than the cap had a
         // permanently unwatched tail.
-        let candidates = super::npm_negative_cache::without_known_missing(&self.packages);
+        let candidates = crate::registry_privacy::lookable(
+            "npm",
+            &super::npm_negative_cache::without_known_missing(&self.packages),
+        );
         let monitored = crate::source_fetching::rotating_window(
             "sources.npm_registry.rotation_cursor",
             &candidates,
@@ -285,7 +292,10 @@ impl Source for NpmRegistrySource {
         // are never mixed in: a release of a package the user does not use
         // is ungrounded by construction and can never reach the feed.
         if self.user_declared {
-            let candidates = super::npm_negative_cache::without_known_missing(&self.packages);
+            let candidates = crate::registry_privacy::lookable(
+                "npm",
+                &super::npm_negative_cache::without_known_missing(&self.packages),
+            );
             let window = crate::source_fetching::rotating_window(
                 "sources.npm_registry.rotation_cursor",
                 &candidates,

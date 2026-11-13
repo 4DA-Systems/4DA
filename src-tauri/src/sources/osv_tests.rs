@@ -1,4 +1,5 @@
 use super::*;
+use crate::sources::osv_types::*;
 
 #[test]
 fn test_matched_advisory_title_is_grounding_compatible() {
@@ -49,6 +50,31 @@ fn test_matched_advisory_title_is_grounding_compatible() {
     // Content names the package+ecosystem and the fix, so the receipt is self-describing.
     assert!(item.content.contains("axios (npm)"));
     assert!(item.content.contains("Fixed in: 1.6.8"));
+    // The scoring pipeline reads the CVSS score from this line.
+    assert!(
+        item.content.contains("Severity: CVSS_V3: 7.5"),
+        "{}",
+        item.content
+    );
+}
+
+/// P2 (audit 2026-11-11): the desktop OSV source used to send every
+/// dependency name and installed version to `api.osv.dev` each hour. It now
+/// reads the local mirror, so this module names no host at all; strict
+/// manifest mode's live query lives in `osv_live` (ledger only).
+#[test]
+fn the_desktop_osv_source_contacts_no_host() {
+    let source = include_str!("osv.rs");
+    let code: String = source
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !code.contains("https://api.osv.dev"),
+        "osv.rs must not call the OSV API"
+    );
+    assert!(!code.contains(".post("), "osv.rs must not POST anything");
 }
 
 #[test]
@@ -65,280 +91,6 @@ fn test_osv_source_creation() {
 fn test_osv_source_default() {
     let source = OsvSource::default();
     assert_eq!(source.source_type(), "osv");
-}
-
-#[test]
-fn test_default_packages_cover_all_nine_osv_ecosystems() {
-    // Both fetch paths share ONE fallback list now. Every OSV ecosystem the
-    // adapter monitors must have defaults — the batch path previously only
-    // knew npm/crates.io/PyPI and silently skipped the other six.
-    for eco in [
-        "npm",
-        "crates.io",
-        "PyPI",
-        "Go",
-        "Maven",
-        "NuGet",
-        "RubyGems",
-        "Packagist",
-        "Pub",
-    ] {
-        assert!(
-            !default_packages_for(eco).is_empty(),
-            "no default packages for {eco}"
-        );
-    }
-    // Defaults are versionless; unknown ecosystems get nothing.
-    assert!(default_packages_for("npm").iter().all(|(_, v)| v.is_none()));
-    assert!(default_packages_for("swift").is_empty());
-    assert!(default_packages_for("made-up").is_empty());
-}
-
-fn pair(pkg: &str) -> (OsvQueryRequest, String) {
-    (
-        OsvQueryRequest {
-            package: Some(OsvPackage {
-                name: pkg.to_string(),
-                ecosystem: "Go".to_string(),
-            }),
-            version: None,
-        },
-        pkg.to_string(),
-    )
-}
-
-#[test]
-fn test_chunk_query_pairs_preserves_positional_pairing() {
-    // 2 chunks of 3 + a remainder of 1: within every chunk, query[i] must
-    // still describe packages[i] — the positional pairing is the only link
-    // from a batch response row back to the dep it was queried for.
-    let pairs: Vec<_> = ["a", "b", "c", "d", "e", "f", "g"]
-        .iter()
-        .map(|p| pair(p))
-        .collect();
-    let chunks = chunk_query_pairs(pairs, 3);
-    assert_eq!(chunks.len(), 3);
-    assert_eq!(chunks[0].1, vec!["a", "b", "c"]);
-    assert_eq!(chunks[1].1, vec!["d", "e", "f"]);
-    assert_eq!(chunks[2].1, vec!["g"]);
-    for (queries, packages) in &chunks {
-        assert_eq!(queries.len(), packages.len());
-        for (q, p) in queries.iter().zip(packages) {
-            assert_eq!(&q.package.as_ref().unwrap().name, p);
-        }
-    }
-}
-
-#[test]
-fn test_chunk_query_pairs_edges() {
-    // Empty input -> no chunks (no empty batch request goes on the wire).
-    assert!(chunk_query_pairs(Vec::new(), 1000).is_empty());
-    // Under-capacity input -> a single chunk.
-    let chunks = chunk_query_pairs(vec![pair("serde"), pair("tokio")], 1000);
-    assert_eq!(chunks.len(), 1);
-    assert_eq!(chunks[0].1, vec!["serde", "tokio"]);
-    // A zero chunk_size caller must not panic or loop — clamped to 1.
-    let chunks = chunk_query_pairs(vec![pair("serde"), pair("tokio")], 0);
-    assert_eq!(chunks.len(), 2);
-}
-
-#[test]
-fn test_chunk_query_pairs_never_drops_synthetic_go_deps() {
-    // go.mod directives can surface deps literally named "stdlib" and
-    // "toolchain" (synthetic Go entries). Nothing in the discovery path may
-    // name-filter them out.
-    let pairs = vec![pair("stdlib"), pair("toolchain"), pair("golang.org/x/net")];
-    let chunks = chunk_query_pairs(pairs, 1000);
-    assert_eq!(chunks.len(), 1);
-    assert_eq!(chunks[0].1, vec!["stdlib", "toolchain", "golang.org/x/net"]);
-}
-
-#[test]
-fn test_vuln_to_source_item_full() {
-    let vuln = OsvVulnerability {
-        id: "GHSA-xxxx-yyyy-zzzz".to_string(),
-        summary: Some("XSS in React Router".to_string()),
-        details: Some("A cross-site scripting vulnerability exists in...".to_string()),
-        severity: Some(vec![OsvSeverity {
-            severity_type: "CVSS_V3".to_string(),
-            score: "7.5".to_string(),
-        }]),
-        affected: Some(vec![OsvAffected {
-            package: Some(OsvPackage {
-                name: "react-router".to_string(),
-                ecosystem: "npm".to_string(),
-            }),
-            ranges: Some(vec![OsvRange {
-                range_type: "SEMVER".to_string(),
-                events: Some(vec![
-                    serde_json::json!({"introduced": "0"}),
-                    serde_json::json!({"fixed": "6.4.5"}),
-                ]),
-            }]),
-        }]),
-        references: Some(vec![
-            OsvReference {
-                ref_type: "ADVISORY".to_string(),
-                url: "https://github.com/advisories/GHSA-xxxx-yyyy-zzzz".to_string(),
-            },
-            OsvReference {
-                ref_type: "WEB".to_string(),
-                url: "https://example.com/blog".to_string(),
-            },
-        ]),
-        published: Some("2026-03-15T10:00:00Z".to_string()),
-        modified: Some("2026-03-20T12:00:00Z".to_string()),
-    };
-
-    let item = vuln_to_source_item(&vuln, None);
-
-    assert_eq!(item.source_type, "osv");
-    assert_eq!(item.source_id, "GHSA-xxxx-yyyy-zzzz");
-    assert_eq!(item.title, "[GHSA-xxxx-yyyy-zzzz] XSS in React Router");
-    assert_eq!(
-        item.url,
-        Some("https://github.com/advisories/GHSA-xxxx-yyyy-zzzz".to_string())
-    );
-    assert!(item.content.contains("XSS in React Router"));
-    assert!(item.content.contains("CVSS_V3: 7.5"));
-    assert!(item.content.contains("react-router (npm)"));
-    assert!(item.content.contains("Fixed in: 6.4.5"));
-
-    let metadata = item.metadata.unwrap();
-    assert_eq!(metadata["severity"], "CVSS_V3: 7.5");
-    assert_eq!(metadata["cvss_score"], 7.5);
-    assert_eq!(metadata["published"], "2026-03-15T10:00:00Z");
-    assert_eq!(metadata["modified"], "2026-03-20T12:00:00Z");
-    assert_eq!(metadata["fixed_versions"], serde_json::json!(["6.4.5"]));
-}
-
-#[test]
-fn test_vuln_to_source_item_minimal() {
-    let vuln = OsvVulnerability {
-        id: "OSV-2026-1234".to_string(),
-        summary: None,
-        details: None,
-        severity: None,
-        affected: None,
-        references: None,
-        published: None,
-        modified: None,
-    };
-
-    let item = vuln_to_source_item(&vuln, None);
-
-    assert_eq!(item.source_id, "OSV-2026-1234");
-    assert_eq!(item.title, "[OSV-2026-1234] Security advisory");
-    assert_eq!(
-        item.url,
-        Some("https://osv.dev/vulnerability/OSV-2026-1234".to_string())
-    );
-    assert!(item.content.contains("Severity: Unknown"));
-    assert!(item.content.contains("Affected: Unknown"));
-}
-
-#[test]
-fn test_batch_husk_is_never_informative() {
-    // `/v1/querybatch` returns `{id, modified}` only. A record in that shape
-    // must never be stored: it produced the "[ID] Security advisory /
-    // Severity: Unknown / Affected: Unknown" husks that filled the OSV lane
-    // with unscoreable noise (374/374 items, live audit 2026-08-20). This
-    // pins the guard both fetch paths run before conversion.
-    let husk = OsvVulnerability {
-        id: "PYSEC-2026-3717".to_string(),
-        summary: None,
-        details: None,
-        severity: None,
-        affected: None,
-        references: None,
-        published: None,
-        modified: Some("2026-08-19T00:00:00Z".to_string()),
-    };
-    assert!(!vuln_is_informative(&husk), "an id-only record is a husk");
-
-    // Any single descriptive field rescues the record.
-    let with_summary = OsvVulnerability {
-        summary: Some("RCE in parser".to_string()),
-        ..husk
-    };
-    assert!(vuln_is_informative(&with_summary));
-}
-
-#[test]
-fn test_hydrated_title_leads_with_the_queried_package() {
-    // The queried package is one of the USER'S manifest dependencies. The
-    // title leads with it — the same `[id] pkg: summary` contract as the
-    // strict-manifest path, which the ledger grounding gate and the scoring
-    // dep-matcher's standalone-title match both key on.
-    let vuln = OsvVulnerability {
-        id: "GHSA-aaaa-bbbb-cccc".to_string(),
-        summary: Some("Prototype pollution".to_string()),
-        details: None,
-        severity: None,
-        affected: None,
-        references: None,
-        published: None,
-        modified: None,
-    };
-    let item = vuln_to_source_item(&vuln, Some("lodash"));
-    assert_eq!(
-        item.title,
-        "[GHSA-aaaa-bbbb-cccc] lodash: Prototype pollution"
-    );
-    let metadata = item.metadata.unwrap();
-    assert_eq!(metadata["package"], "lodash");
-}
-
-#[test]
-fn test_vuln_to_source_item_prefers_advisory_url() {
-    let vuln = OsvVulnerability {
-        id: "TEST-001".to_string(),
-        summary: Some("Test".to_string()),
-        details: None,
-        severity: None,
-        affected: None,
-        references: Some(vec![
-            OsvReference {
-                ref_type: "WEB".to_string(),
-                url: "https://web.example.com".to_string(),
-            },
-            OsvReference {
-                ref_type: "ADVISORY".to_string(),
-                url: "https://advisory.example.com".to_string(),
-            },
-        ]),
-        published: None,
-        modified: None,
-    };
-
-    let item = vuln_to_source_item(&vuln, None);
-    assert_eq!(item.url, Some("https://advisory.example.com".to_string()));
-}
-
-#[test]
-fn test_vuln_to_source_item_prefers_cvss_v3() {
-    let vuln = OsvVulnerability {
-        id: "TEST-002".to_string(),
-        summary: Some("Test".to_string()),
-        details: None,
-        severity: Some(vec![
-            OsvSeverity {
-                severity_type: "CVSS_V2".to_string(),
-                score: "5.0".to_string(),
-            },
-            OsvSeverity {
-                severity_type: "CVSS_V3".to_string(),
-                score: "8.1".to_string(),
-            },
-        ]),
-        affected: None,
-        references: None,
-        published: None,
-        modified: None,
-    };
-
-    let item = vuln_to_source_item(&vuln, None);
-    assert!(item.content.contains("CVSS_V3: 8.1"));
 }
 
 #[test]
@@ -435,43 +187,6 @@ fn test_ecosystem_map_coverage() {
     assert!(manifests.contains(&"pubspec.yaml"));
 }
 
-#[test]
-fn test_multiple_affected_packages() {
-    let vuln = OsvVulnerability {
-        id: "MULTI-001".to_string(),
-        summary: Some("Cross-ecosystem vuln".to_string()),
-        details: None,
-        severity: None,
-        affected: Some(vec![
-            OsvAffected {
-                package: Some(OsvPackage {
-                    name: "pkg-a".to_string(),
-                    ecosystem: "npm".to_string(),
-                }),
-                ranges: None,
-            },
-            OsvAffected {
-                package: Some(OsvPackage {
-                    name: "pkg-b".to_string(),
-                    ecosystem: "PyPI".to_string(),
-                }),
-                ranges: None,
-            },
-        ]),
-        references: None,
-        published: None,
-        modified: None,
-    };
-
-    let item = vuln_to_source_item(&vuln, None);
-    assert!(item.content.contains("pkg-a (npm)"));
-    assert!(item.content.contains("pkg-b (PyPI)"));
-
-    let metadata = item.metadata.unwrap();
-    let pkgs = metadata["affected_packages"].as_array().unwrap();
-    assert_eq!(pkgs.len(), 2);
-}
-
 /// Mirror lane, end to end on the real record: GO-2026-6603 names `stdlib` (listed FIRST in
 /// affected[]) and golang.org/x/net <0.60.0. A go.mod `go 1.22` directive is inventoried as
 /// stdlib 1.22.0, so the matcher returns a row for EACH package; strict mode must still
@@ -524,5 +239,40 @@ fn mirror_lane_surfaces_one_go_item_named_for_the_pinned_module() {
         items[0].content.contains("Fixed in: 0.60.0"),
         "{}",
         items[0].content
+    );
+}
+
+/// Review of #1130: mirror items kept no publish date (an old advisory read
+/// as new) and dropped a GHSA grade that has no CVSS vector.
+#[test]
+fn a_mirror_item_keeps_its_date_and_a_grade_without_a_score() {
+    let m = crate::osv::types::MatchedAdvisory {
+        advisory_id: "GHSA-aaaa-bbbb-cccc".to_string(),
+        summary: "Prototype pollution".to_string(),
+        details: None,
+        package_name: "lodash".to_string(),
+        ecosystem: "npm".to_string(),
+        installed_version: Some("4.17.20".to_string()),
+        fixed_version: Some("4.17.21".to_string()),
+        severity_type: None,
+        cvss_score: None,
+        source_url: None,
+        is_version_confirmed: true,
+        project_paths: vec!["/stack".to_string()],
+        published_at: Some("2021-02-15T00:00:00Z".to_string()),
+        dependency_instances: vec![],
+        aliases: vec![],
+        severity_label: Some("high".to_string()),
+        cwe_ids: Vec::new(),
+        severity_from: None,
+        informational: None,
+    };
+    let item = matched_advisory_to_source_item(&m);
+    assert!(item.content.contains("Severity: HIGH"), "{}", item.content);
+    let meta = item.metadata.clone().expect("metadata");
+    assert_eq!(meta["published"], "2021-02-15T00:00:00Z");
+    assert_eq!(
+        crate::source_fetching::extract_published_at(&item).as_deref(),
+        Some("2021-02-15 00:00:00")
     );
 }

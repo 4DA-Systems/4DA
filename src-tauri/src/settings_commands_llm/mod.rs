@@ -159,7 +159,7 @@ pub async fn list_provider_models(
 /// Detect running local LLM servers by probing common ports
 #[tauri::command]
 pub async fn detect_local_servers() -> Result<serde_json::Value> {
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .connect_timeout(std::time::Duration::from_secs(2))
         .timeout(std::time::Duration::from_secs(3))
         .redirect(crate::http_client::local_aware_redirect_policy())

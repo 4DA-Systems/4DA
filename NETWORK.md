@@ -7,11 +7,12 @@ port it listens on (§1f).** Run Wireshark while 4DA is running and every connec
 talks to Microsoft on its own (§5). Your
 raw project files, source code, git history, file contents, and personal information **never leave
 your machine** by default. Every flow that transmits anything *derived* from your local content —
-chiefly the names and versions of your dependencies, sent to OSV.dev and the package registries
-(never your code) — is
-listed exhaustively in §4 ("What IS derived from local content and does leave"). The one opt-in
-setting that sends text from your local files is cloud embeddings (`allow_cloud_embeddings`, off by
-default, §2a).
+chiefly the names of your dependencies, sent to the package registries for release checks (never
+your code, never a private package name, and nothing at all with **Settings → Privacy → Registry
+lookups** off, §2o) — is listed exhaustively in §4 ("What IS derived from local content and does
+leave"). Advisory matching sends nothing about your dependencies: the OSV archive is downloaded and
+matched on this machine (§2c). The one opt-in setting that sends text from your local files is
+cloud embeddings (`allow_cloud_embeddings`, off by default, §2a).
 
 4DA is local-first and privacy-first. There is **no telemetry, no analytics, and no crash
 reporting** (see "Never" at the bottom). The only 4DA-operated server the app ever contacts is
@@ -37,20 +38,46 @@ All shared outbound requests use a pooled `reqwest` client
     `api.github.com` (`release_changelog/github.rs`, §2m)
   - HuggingFace / PapersWithCode / GitHub Advisory adapters → `4DA-Developer-OS/1.0`
     (`sources/huggingface.rs`, `sources/papers_with_code.rs`, `sources/cve.rs`)
-  - OSV dependency sync → `4DA/1.0 (local-osv-mirror)` (`osv/sync.rs`)
+  - OSV advisory archive download → `4DA/1.0 (local-osv-cache)` (`osv/cache.rs`)
   - Mastodon / Lemmy adapters → `4DA/1.0 (+https://4da.ai)` (`sources/mastodon.rs`,
     `sources/lemmy.rs`)
   - Feed checks you trigger in Settings / Toolkit → `Mozilla/5.0 (compatible; 4DA/1.0)`
     (`source_config_feeds.rs`) and `4DA/1.0 Feed Tester` (`toolkit_intelligence.rs`)
   - Team relay (only if you join/create a team) → `4DA-TeamSync/1.0` (`http_client.rs`)
 - No cookies, no login, no tracking headers are sent on any request.
+- **Certificates:** every outbound client starts from `http_client::outbound_builder` (a test,
+  `every_production_client_starts_from_outbound_builder`, fails on a client built any other way),
+  which trusts the operating system's certificate store (Windows certificate store, macOS
+  Keychain, the Linux system bundle) in addition to the bundled Mozilla roots
+  (`src-tauri/Cargo.toml`: reqwest `rustls-tls-native-roots` + `rustls-tls`). A corporate
+  TLS-inspection root installed on the machine is therefore accepted.
+- **Proxy:** the system proxy applies to every request: `HTTPS_PROXY` / `HTTP_PROXY` /
+  `ALL_PROXY` with `NO_PROXY`, and on Windows the Internet Options proxy (reqwest's system-proxy
+  support). `network.proxy_url` in `settings.json` is applied to every outbound client in its
+  place (`http_client::proxy_for`). These bypass it: this machine and private networks
+  (`localhost`, `*.local`, single-label host names, `127/8`, `10/8`, `172.16/12`, `192.168/16`,
+  `169.254/16`, `100.64/10`, `::1`, `fc00::/7`, `fe80::/10`) and the hosts in `NO_PROXY`; a bare
+  `NO_PROXY=*` does not switch off a proxy set in 4DA's settings (`http_client::bypasses_proxy`).
+  Only an `http://` or `https://` proxy URL is used. Anything else (a `socks5://` URL, since SOCKS
+  support is not compiled in, a typo such as `htpp://`, `ftp://`) makes requests fail rather than
+  go out directly (`http_client::usable_proxy_url`). If the settings cannot be read when a client
+  is built, that client refuses requests rather than going direct. The setting is read at
+  start-up; change it, then restart 4DA.
+- **Exception, app updates:** the update check (§2f) runs in the Tauri updater plugin, which builds
+  its own HTTP client, so `network.proxy_url` and the OS trust store do not apply to it
+  (`tauri-plugin-updater`).
+  It sends no dependency name, only a fixed request for the update manifest.
 
 ---
 
 ## 1. Always-on
 
-These run automatically while the app is open. Every source can be individually enabled/disabled in
-**Settings → Sources**.
+These run automatically while the app is open. Reading sources (Hacker News, Reddit, RSS and the
+other "interests") are off on a new install and are turned on or off one by one in **Settings →
+Sources**. The stack sources (npm, crates.io, PyPI, Go modules, OSV, GitHub Advisories) cannot be
+turned off there (`src-tauri/src/source_enable_commands.rs`, `set_source_enabled`): the
+dependency engine needs them. What they send about your dependencies is controlled instead by
+**Settings → Privacy → Registry lookups** and the private-name rules (§2o).
 
 ### 1a. Connectivity pre-check (before every fetch cycle)
 
@@ -85,30 +112,34 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 | arXiv fallback | `arxiv.org` | `/rss/cs.AI` | only if arXiv primary fails | None |
 | GitHub | `api.github.com` | `/search/repositories?q={query}&sort=stars`, `/repos/{owner}/{repo}/readme` | auto | Unauthenticated. Query holds language names + a date filter — no user data |
 | GitHub fallback | `github.com` | `/trending?since=daily` | only if GitHub primary fails | None |
-| RSS feeds | 12 default hosts (below) | `GET {feed_url}` | auto | None |
+| RSS feeds | the curated catalog (below) plus any feed you add | `GET {feed_url}` | only while the RSS interest is on (off by default) | None |
 | YouTube | `www.youtube.com` | `/feeds/videos.xml?channel_id={id}` (public Atom) | auto | None |
 | Dev.to | `dev.to` | `/api/articles?per_page=30&top=7` (+ tag pulls on deep fetch) | auto | None |
 | Lobsters | `lobste.rs` | `/hottest.json`, `/newest.json` (deep) | auto | None |
 | Product Hunt | `www.producthunt.com` | `/feed` | auto | None |
 | Bluesky | `public.api.bsky.app` | `/xrpc/app.bsky.feed.getFeed?feed=...whats-hot` | auto | None (public "What's Hot", no auth) |
-| crates.io | `crates.io` | `/api/v1/...` | auto | None (UA `4DA-Developer-OS/1.0`) |
-| npm | `registry.npmjs.org` | `/{package}/latest` | auto | None |
-| PyPI | `pypi.org` | `/pypi/{package}/json` | auto | None |
+| crates.io | `crates.io` | `/api/v1/crates/{crate}` | auto, unless Registry lookups is off (§2o) | Your **crate names**, one per request; private crates never (§2o). UA `4DA-Developer-OS/1.0` (`sources/crates_io.rs`) |
+| npm | `registry.npmjs.org` | `/{package}/latest` | auto, unless Registry lookups is off (§2o) | Your **npm package names**, one per request; private packages never (§2o) (`sources/npm_registry.rs`) |
+| PyPI | `pypi.org` | `/pypi/{package}/json` | auto, unless Registry lookups is off (§2o) | Your **Python package names**, one per request; private packages never (§2o) (`sources/pypi.rs`) |
 | HuggingFace | `huggingface.co` | `/api/models` | auto | None |
 | PapersWithCode | `huggingface.co` | `/api/daily_papers` (PwC API now redirects here) | auto | None |
 | Stack Overflow | `api.stackexchange.com` | `/2.3/questions?...&site=stackoverflow&tagged={tag}&filter=withbody` | auto | None |
-| Go modules | `proxy.golang.org` | `/{module}/@latest`, one request per module your `go.mod` files declare (200 ms apart). The global `index.golang.org` feed is never read | auto, only if Go modules were discovered | Your **full Go module paths** (see the derived-content table in §4) |
+| Go modules | `proxy.golang.org` | `/{module}/@latest`, one request per module your `go.mod` files declare (200 ms apart). The global `index.golang.org` feed is never read | auto, only if Go modules were discovered, unless Registry lookups is off (§2o) | Your **full Go module paths**, except those matching `GOPRIVATE` / `GONOPROXY` / `GONOSUMDB`, replaced by a local directory, or declared by a `go.mod` on this machine, which are never sent (§2o) (`sources/go_modules.rs`) |
 | GitHub Advisories | `api.github.com` | `/advisories?per_page=…&sort=published&direction=desc&published=>={date}[&ecosystem={eco}]` (paged via `Link`) | auto | Unauthenticated. Ecosystem names + a date filter. UA `4DA-Developer-OS/1.0` (`sources/cve.rs`) |
-| OSV advisories | `api.osv.dev` | `POST /v1/query`, `POST /v1/querybatch`, `GET /v1/vulns/{id}` | auto, only if dependencies were discovered | Your package names + ecosystems, **plus the installed version of each one whenever the lockfile gives it** (`sources/osv.rs` `fetch_ecosystem_vulns` / `fetch_batch_vuln_refs`, `sources/osv_live.rs`) — see §2c |
+| OSV advisories | none | none: the source reads the advisories the local mirror matched (§2c) | auto | **Nothing.** `sources/osv.rs` makes no request (a test, `the_desktop_osv_source_contacts_no_host`, fails if it does). The receipts-ledger mode `FOURDA_STRICT_MANIFEST=1`, which the desktop app never sets, still queries `api.osv.dev` per installed version (`sources/osv_live.rs`) |
 | Mastodon | `hachyderm.io` | `GET /api/v1/timelines/tag/{tag}?limit={n}` (n ≤ 40); fallback `GET /tags/{tag}.rss` | auto | None. Public hashtag timelines for fixed dev tags (`rust`, `programming`, `javascript`, `python`, `golang`, `webdev`, `linux`, `devops`, `opensource`, `security`). UA `4DA/1.0 (+https://4da.ai)` (`sources/mastodon.rs`) |
 | Lemmy | `programming.dev` | `GET /api/v3/post/list?type_=All&sort=Hot&limit={n}` (n ≤ 50); fallback `GET /feeds/all.xml?sort=Hot` | auto | None. UA `4DA/1.0 (+https://4da.ai)` (`sources/lemmy.rs`) |
 
-**RSS default hosts** (`sources/rss.rs`, user-customizable): `feeds.arstechnica.com`,
-`www.theverge.com`, `techcrunch.com`, `blog.rust-lang.org`, `engineering.fb.com`, `medium.com`,
-`github.blog`, `blog.cloudflare.com`, `martinfowler.com`, `simonwillison.net`, `jvns.ca`,
-`danluu.com`.
+**RSS feeds** (`sources/rss.rs`): with the RSS interest on, 4DA reads the curated catalog
+`src-tauri/data/curated_feeds.json` (125 feeds on 116 hosts, loaded by
+`source_fetching::load_default_rss_feeds`; any of them can be switched off in Settings) plus any
+feed you add.
 
-- **Disable any source:** Settings → Sources. A disabled source makes **zero** network calls.
+- **Interests** (Hacker News, Reddit, RSS and the other reading sources): Settings → Sources. One
+  that is off makes **zero** network calls.
+- **Stack sources** (npm, crates.io, PyPI, Go modules, OSV, GitHub Advisories) stay on; the
+  registry ones send nothing while **Settings → Privacy → Registry lookups** is off, and never a
+  private name (§2o).
 
 ### 1c. Article scraping
 
@@ -169,8 +200,9 @@ package itself** to say what changed between your version and the new one
 - **Budget:** each archive is fetched **once** and cached in the local database. In the
   background (after a fetch cycle) at most 6 archives per cycle, 1.1 s apart; opening a release
   card reads its archive on demand if the background pass has not. 30 s timeout per archive.
-- **Disable:** disabling the crates.io / npm sources (Settings → Sources) stops the release rows,
-  and with them this lane.
+- **Disable:** turn off **Settings → Privacy → Registry lookups** (§2o): no archive is fetched and
+  the card says the release was not looked up (`release_changelog/mod.rs` `changelog_for`). A
+  private package's archive is never fetched.
 
 ### 1f. Local listener: Signal Terminal on `127.0.0.1:4446` (inbound, this machine only)
 
@@ -204,7 +236,8 @@ search over already-scored items, and a live event stream (`src-tauri/src/signal
 ## 2. Conditional / opt-in
 
 None of these run unless you take an action (configure a key, join a team, or have local
-dependencies discovered).
+dependencies discovered). §2o is the switch and the private-name rules for every flow that sends a
+dependency name.
 
 ### 2a. BYOK cloud LLM (relevance judging)
 
@@ -269,19 +302,20 @@ Off by default. Only used if you enable a cloud translation provider and supply 
 - **What is sent:** the text you asked to translate, plus your key.
 - **Disable:** leave cloud translation off (the default); local translation paths send nothing.
 
-### 2c. Dependency-vulnerability sync (OSV) — discloses local package names
+### 2c. Dependency advisories (OSV) and registry release checks
 
-Runs only **if 4DA has discovered local dependencies** (from your projects via ACE / lockfile
-scanning). It sends the **names of your packages and their ecosystems** (e.g. `tokio` /
-`crates.io`), **never your code or file contents**. (`src-tauri/src/osv/`) This mirror sync sends
-no versions; the advisory source in §1b does send installed versions to `api.osv.dev`. It is one of
-several flows that send names derived from your projects — the package registries and the Go
-module proxy (§1b, §1e) receive them too; §4 has the complete list.
+Advisory matching **sends nothing about your dependencies.** For each ecosystem your projects use,
+4DA asks whether OSV published a newer advisory archive (an HTTP `HEAD` with the stored ETag),
+downloads it when it did, and matches it against your installed versions on this machine
+(`src-tauri/src/osv/sync.rs`, `osv/sync_pass.rs`, `osv/cache.rs`). The request is the same for
+every install. Until 2026-11-12 each pass also POSTed every dependency name to
+`api.osv.dev/v1/querybatch`, which stored nothing (audit P2); a test,
+`a_pass_requests_only_the_public_archive`, now fails if a pass requests anything but the archive.
+The registry release check below does send package names, and stops with Registry lookups (§2o).
 
 | Host | Endpoint | Data sent |
 |---|---|---|
-| `api.osv.dev` | `POST /v1/querybatch` | Your discovered package names + ecosystems, batched (≤1000/batch); for npm, also the names of the dependencies a vulnerable package's releases hold (held dependencies, below) |
-| `osv-vulnerabilities.storage.googleapis.com` | `GET /{ecosystem}/all.zip` | Plain `GET` — downloads the public advisory mirror (no user data) |
+| `osv-vulnerabilities.storage.googleapis.com` | `HEAD` / `GET /{ecosystem}/all.zip` | Nothing from your machine: plain requests for the public archive (User-Agent `4DA/1.0 (local-osv-cache)`) |
 | `registry.npmjs.org` | `GET /{package}` (abbreviated packument, `Accept: application/vnd.npm.install-v1+json`) | The package name only |
 | `crates.io` | `GET /api/v1/crates/{crate}` | The crate name only. User-Agent `4DA-Developer-OS/1.0 (https://4da.ai)` |
 | `pypi.org` | `GET /pypi/{package}/json` | The package name only |
@@ -292,46 +326,44 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
   never names one. At most 300 packages per sync (packages with no answer yet first, then the
   oldest), at most 4 npm/PyPI requests at a time, none started after 150 s; each re-read at most
   once a day; the answer is
-  kept in the local database. **Your installed version is never sent.** Each registry is read only
-  while its source (npm / crates.io / PyPI, Settings → Sources) is enabled; a disabled source makes
-  no call here either. Requests to crates.io are spaced 1.1 s apart. Go modules are not checked
-  (their `retract` directives are not read). Offline, targets come from the advisory data alone,
-  as before.
+  kept in the local database. **Your installed version is never sent.** Nothing is read while
+  **Settings → Privacy → Registry lookups** is off, and a private package name is never read
+  (`release_facts.rs` `wanted`, `registry_privacy::may_look_up`, §2o). Requests to crates.io are
+  spaced 1.1 s apart. Go modules are not checked (their `retract` directives are not read).
+  Offline or with lookups off, targets come from the advisory data alone, as before.
 - **Parent releases (npm, `src-tauri/src/osv/parent_release_load.rs`):** when a vulnerable npm
   copy is transitive and the installed package that pulls it in pins it below its fix, the same
   abbreviated document (`GET /{package}`, name only) is also read for that **parent** — and for the
   declared dependency the parent arrives through — so the plan can name the parent release whose
   own requirement admits a fixed copy. These are packages already installed in your projects; only
-  their names are sent, never a version. Same 300-per-sync cap, daily re-read, local cache and
-  npm-source toggle as above; the per-release requirements kept are only those on the vulnerable
-  package.
+  their names are sent, never a version, and never a private one. Same 300-per-sync cap, daily
+  re-read, local cache and Registry lookups switch as above; the per-release requirements kept are
+  only those on the vulnerable package.
 - **Parent release lists (crates.io, PyPI, `osv/parent_hint.rs` `wanted_release_lists`):** for
   the same kind of parent in a Cargo or Python project (and the declared dependency it arrives
   through), the same release-list document (`GET /api/v1/crates/{crate}` /
   `GET /pypi/{package}/json`, name only) is read, so the plan can say when the installed parent is
   already its newest release and no release fixes the copy yet ("blocked upstream"). No new
   destination and no new data: the same registries, package names only, the same cap, cache,
-  daily re-read and source toggles.
+  daily re-read, switch and private-name rule.
 - **Held dependencies (npm, audit 6.2.5 D-4, `src-tauri/src/osv/release_facts_held.rs`,
   `osv/held_targets.rs`):** a fix target is also judged by what it installs at a fixed version. The
   vulnerable package's own abbreviated document (already read above, no new request) is kept per
   release for the dependencies it exact-pins or narrowly ranges (`~1.2.3`, `^0.x`, `1.2.x`, a `<`
-  bound, a hyphen range), from the lowest installed copy up. **New requests:** (1) for each
+  bound, a hyphen range), from the lowest installed copy up. **New requests:** for each
   dependency held through a narrow range, its abbreviated document (`GET /{package}` on
   `registry.npmjs.org`, name only) is read in a second round of the same release check, under the
-  same 300-per-sync cap, 4-at-a-time limit, 150 s budget, daily re-read and npm-source toggle;
-  (2) the names of the held dependencies are added to the npm package names the OSV mirror sync
-  sends to `api.osv.dev` (`POST /v1/querybatch`, names only) and matches in the downloaded npm
-  archive, so their advisories are known locally. These are public package names read from the
-  public registry documents of packages already sent; no version is sent. With the npm source
-  off, no document is read and no held name is sent to OSV (the sync leaves them out). Offline or
-  with the source off, targets are judged from the facts already stored, which are used for up to
-  30 days; an npm package with no stored facts (or facts that do not reach back to its target)
-  says what it holds was NOT CHECKED.
+  same 300-per-sync cap, 4-at-a-time limit, 150 s budget, daily re-read and switch. The held names
+  are also matched in the downloaded npm archive, so their advisories are known locally; nothing
+  about them is sent to OSV (`osv/sync.rs` `with_held_names`). Offline or with lookups off,
+  targets are judged from the facts already stored, which are used for up to 30 days; an npm
+  package with no stored facts (or facts that do not reach back to its target) says what it holds
+  was NOT CHECKED.
 - **Trigger:** background, at startup, **only if dependencies exist** and the local mirror was last
   synced **> 6 hours ago** (`app_setup.rs`).
-- **Disable:** if 4DA has discovered no dependencies, nothing is sent. Removing/disabling ACE project
-  scanning prevents dependency discovery and therefore this sync.
+- **Disable:** the registry rows stop with **Settings → Privacy → Registry lookups** (§2o). The
+  archive download is not tied to your data and keeps running; without it advisories go stale and
+  4DA says so.
 
 ### 2d. License validation (Keygen)
 
@@ -376,6 +408,8 @@ contacts `4da.ai` only near expiry, to renew (§2k); a lifetime key contacts not
 - **Trigger:** shortly after startup, once per session; silent on failure.
 - **Data sent:** plain `GET` — no version reporting, no device info. Updates are
   **minisign-verified** against the embedded public key before install; the user must click to apply.
+- **Proxy:** the updater plugin builds its own client, so `network.proxy_url` and the OS trust
+  store do not apply to it (see "HTTP client identity"). It sends no dependency name.
 
 ### 2g. Team relay (only if you create/join a team)
 
@@ -530,6 +564,33 @@ operating system:
 - **Disable:** don't click it. Nothing happens without a click, and detection only reads which
   link handlers are registered (Windows registry, macOS app bundles, Linux `mimeapps.list`).
 
+### 2o. Registry lookups switch and private package names
+
+(`src-tauri/src/registry_privacy.rs`, `registry_privacy_parsers.rs`) Every request that sends a
+dependency name to a public registry asks `registry_privacy` first: the npm, crates.io, PyPI and Go
+module sources (§1b), the registry release check (§2c), the release-changelog lane (§1e) and its
+GitHub fallback (§2m). A test, `every_registry_lookup_asks_registry_privacy`, fails on a file that
+builds a registry URL without asking.
+
+- **Settings → Privacy → Registry lookups** (`privacy.registry_lookups`, on by default). Off, none
+  of those requests is made, from the next request on. Advisory matching is unaffected (§2c: it
+  sends nothing). What was not looked up is shown as not checked: Preemption says "Release checks
+  are off", fix versions come from the advisory data alone, and a release card says the release
+  was not looked up (`osv/readiness.rs` `registry_lookups_off`).
+- **Private names are never sent**, with the switch on or off:
+
+  | Ecosystem | Never sent |
+  |---|---|
+  | Go | modules matching `GOPRIVATE`, `GONOPROXY` or `GONOSUMDB` (from the environment, else the `go env -w` file), with Go's own prefix-pattern rules; every module when `GOPROXY` does not include `proxy.golang.org` (a corporate proxy, `direct`, `off`); modules a `go.mod` `replace`s with a local directory; the module a scanned `go.mod` declares |
+  | npm | packages in a scope that an `.npmrc`, a Yarn 2+ `.yarnrc.yml` (`npmScopes`) or a Yarn 1 `.yarnrc` (`"@scope:registry"`) routes to a non-public registry (the project's files, its parent folders', and the ones in your home folder); every npm package of a project whose `.npmrc` `registry=`, `.yarnrc.yml` `npmRegistryServer` or `.yarnrc` `registry` is not the public one; every npm package when your home folder's files, `npm_config_registry`, `YARN_NPM_REGISTRY_SERVER` or `YARN_REGISTRY` do |
+  | Cargo | crates whose `Cargo.lock` source is not crates.io (git, another registry, no source: workspace members and path crates); crates a `Cargo.toml` takes from `path`, `git` or `registry`; the project's own `[package]` |
+  | PyPI | packages a `uv.lock` / `poetry.lock` takes from anywhere but pypi.org; packages a requirements file or a PEP 621 dependency list takes from a URL (`name @ git+…`); Poetry dependencies with `git`, `path`, `url` or `source`; `[tool.uv.sources]` entries with `git`, `path`, `url`, `index` or `workspace`; `Pipfile` packages with `git`, `path`, `file` or `index`; the project's own name (`pyproject.toml`); every PyPI package of a project whose requirements (`-i`, `--index-url`, `--extra-index-url`, `--find-links`), `pyproject.toml` (`[[tool.uv.index]]`, `[[tool.poetry.source]]`) or `Pipfile` (`[[source]]`) name another index; every PyPI package when `PIP_INDEX_URL`, `PIP_EXTRA_INDEX_URL`, `UV_INDEX_URL`, `UV_DEFAULT_INDEX`, `UV_INDEX`, `UV_EXTRA_INDEX_URL` or your pip / uv configuration file does |
+
+  Project files are read from each project folder in the dependency inventory. The set is
+  recomputed when the inventory changes (checked every 30 seconds) and at least every 10 minutes.
+  If the inventory cannot be read, every registry name is withheld until it can be. Preemption counts the dependencies withheld this way ("N private
+  packages are never looked up"; `private_not_looked_up`), because their releases are not checked.
+
 ---
 
 ## 3. Setup-time (one-time downloads)
@@ -595,16 +656,15 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
 
   | Destination | What it receives | Why |
   |---|---|---|
-  | `api.osv.dev` | package names + versions | vulnerability matching (§2c) |
-  | `registry.npmjs.org` | your npm package names | release / version intelligence |
-  | `pypi.org` | your Python package names | as above |
-  | `crates.io` | your crate names | as above |
+  | `registry.npmjs.org` | your npm package names, unless Registry lookups is off; never a private one (§2o) | release / version intelligence (§1b) |
+  | `pypi.org` | your Python package names, on the same terms | as above |
+  | `crates.io` | your crate names, on the same terms | as above |
   | `static.crates.io` / `registry.npmjs.org` (§1e) | the crate / package name and the new public version of a graded release — never your installed version | the release card's "what changed" |
   | `api.github.com/repos/{owner}/{repo}/releases` (§2m) — **only with `github_release_notes = true`** (off by default) | the GitHub repository of a dependency whose package shipped no usable changelog for a graded release | the release card's "what changed" |
-  | `registry.npmjs.org` / `crates.io` / `pypi.org` registry release check (§2c) | the name of each package with a version-confirmed advisory, of each installed package that pins such a copy (npm, crates.io, PyPI), and (npm) of each dependency a vulnerable package's releases hold through a narrow range — name only | no fix target names a yanked or deprecated release; the parent release that fixes a nested advisory is named; an npm fix target is judged by what it installs (D-4) |
+  | `registry.npmjs.org` / `crates.io` / `pypi.org` registry release check (§2c) | the name of each package with a version-confirmed advisory, of each installed package that pins such a copy (npm, crates.io, PyPI), and (npm) of each dependency a vulnerable package's releases hold through a narrow range — name only; not while Registry lookups is off, never a private name (§2o) | no fix target names a yanked or deprecated release; the parent release that fixes a nested advisory is named; an npm fix target is judged by what it installs (D-4) |
   | `registry.npmjs.org` full packument (MCP `dependency_check`, §2j) | the npm package name being checked — name only | release vetting |
   | `crates.io/api/v1/crates/{crate}/versions` (MCP `dependency_check`, §2j) | the crate name being checked — name only | release vetting |
-  | `proxy.golang.org` | your **full Go module paths** | as above |
+  | `proxy.golang.org` | your **full Go module paths**, except private ones (`GOPRIVATE` and the rest of §2o); none while Registry lookups is off | as above |
   | `api.github.com/advisories` | your ecosystem names | advisory matching |
   | `api.github.com/search` | your languages | repo discovery |
   | Reddit | the subreddits you follow | feed fetch (Lemmy and Mastodon use fixed instances and tags — nothing of yours is sent) |
@@ -615,8 +675,13 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
   | your SMTP server (§2l) — only if you configure digest email | SMTP credentials + the digest (item titles, links, scores, the topics of yours they matched); **unencrypted if `use_tls = false`** | digest email |
 
   Go module paths are the sharpest edge here: a private module path such as
-  `github.com/yourcompany/internal-service` discloses the organisation and repository name to
-  Google's module proxy. If that matters to you, disable the Go source in Settings → Sources.
+  `github.com/yourcompany/internal-service` would disclose the organisation and repository name to
+  Google's module proxy. 4DA never sends a module that matches `GOPRIVATE`, `GONOPROXY` or
+  `GONOSUMDB` (the same settings the `go` command uses to keep it private), that a `go.mod`
+  replaces with a local directory, or that a `go.mod` on this machine declares
+  (`registry_privacy.rs`, §2o). To send no module path at all, turn off **Settings → Privacy →
+  Registry lookups**. Advisory matching sends nothing either way (§2c); the MCP server's tools are a
+  separate program with their own rules (§2j).
 - **No device fingerprinting.** License validation sends the key only (§2d).
 - **No cookies, no tracking pixels, no third-party scripts.** The frontend loads zero external
   resources.
@@ -640,11 +705,15 @@ to Microsoft ([Data and privacy in WebView2](https://learn.microsoft.com/microso
 - **What 4DA sends through it:** nothing. The webview's CSP allows no network host (below), so 4DA's
   interface code cannot open a connection; every request 4DA makes comes from the Rust backend and
   is listed in §1–§3.
-- **SmartScreen:** WebView2 turns Microsoft Defender SmartScreen on by default, and 4DA does not
-  turn it off (it does not set WebView2's `IsReputationCheckingRequired`). Microsoft says
-  SmartScreen sends information about the content a webview loads to Microsoft. 4DA's webview loads the
-  app's own bundled pages, and the app opens article links through your default browser
-  (`tauri-plugin-opener`).
+- **SmartScreen is off in 4DA's webview.** WebView2 turns Microsoft Defender SmartScreen on by
+  default (Microsoft says it sends information about the content a webview loads to Microsoft).
+  Tauri's webview layer, wry, starts WebView2 with
+  `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` whenever the app sets no browser
+  arguments of its own (wry 0.57.1, `src/webview2/mod.rs`, the `additional_browser_args` default);
+  4DA's release build sets none, and the debug build repeats the same flags
+  (`src-tauri/src/dev_inspection.rs`). The webview only loads the app's own bundled pages; article
+  links open in your default browser (`tauri-plugin-opener`), whose own SmartScreen setting applies
+  there.
 - **Crash dumps:** if a WebView2 process crashes, Windows sends its minidump to Microsoft unless the
   app enables WebView2's custom crash reporting. 4DA does not enable it today.
 - **How to limit it:** Microsoft's documented control for WebView2's *optional* diagnostic data is

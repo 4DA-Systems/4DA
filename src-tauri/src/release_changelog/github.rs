@@ -539,7 +539,12 @@ pub(crate) async fn with_github_fallback(
     enabled: bool,
     net: &dyn NotesNet,
 ) -> ReleaseChanges {
-    if !enabled || !archive_yields_nothing(archive_card.status) {
+    // Never for a private package, and never while registry lookups are off:
+    // the registry read that finds the repository sends the package name.
+    if !enabled
+        || !archive_yields_nothing(archive_card.status)
+        || !crate::registry_privacy::may_look_up(t.eco.as_str(), &t.package)
+    {
         return archive_card;
     }
     match notes_for(db, t, net).await {
@@ -576,7 +581,7 @@ pub(crate) fn is_notes_url(url: &str) -> bool {
 }
 
 static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
+    crate::http_client::outbound_builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(TIMEOUT)
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
@@ -589,7 +594,7 @@ static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .build()
         .unwrap_or_else(|e| {
             warn!(target: "4da::release_changelog", "notes client build failed: {e}; using default");
-            reqwest::Client::new()
+            crate::http_client::default_client()
         })
 });
 

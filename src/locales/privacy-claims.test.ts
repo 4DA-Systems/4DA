@@ -4,8 +4,9 @@
 // Project scanning used to promise "100% local, nothing ever leaves your
 // machine", and the cloud-AI consent text said only "titles and short
 // snippets" go to the provider. Both were false: scanning feeds package names
-// and versions to OSV.dev and the package registries (sources/osv.rs,
-// sources/{npm_registry,crates_io,pypi,go_modules}.rs), and the provider also
+// to the package registries (sources/{npm_registry,crates_io,pypi,go_modules}.rs,
+// switchable off and never for private names, registry_privacy.rs), and the
+// provider also
 // receives dependency names, project labels, git-derived topics, interests and
 // saved-item titles (analysis_rerank.rs build_rerank_context_summary,
 // briefing_prompt.rs). These tests pin the corrected copy in every locale.
@@ -50,12 +51,17 @@ describe('privacy claims in UI copy', () => {
     expect(locales).toHaveLength(13);
   });
 
-  it.each(locales)('%s: scan copy names OSV.dev instead of promising nothing leaves', (locale) => {
+  // Since #1130 advisory matching downloads public archives and sends nothing
+  // about the user's dependencies; only package names go to the registries.
+  // The copy names the registries and no longer claims OSV.dev receives
+  // names and versions.
+  it.each(locales)('%s: scan copy names the registries, not OSV.dev, and promises nothing absolute', (locale) => {
     const strings = ui(locale);
     for (const key of SCAN_KEYS) {
       const value = strings[key];
       expect(value, `${locale} ${key}`).toBeTruthy();
-      expect(value, `${locale} ${key}`).toContain('OSV.dev');
+      expect(value, `${locale} ${key}`).toContain('npm');
+      expect(value, `${locale} ${key}`).not.toContain('OSV.dev');
       expect(value, `${locale} ${key}`).not.toMatch(/100\s?%|%100/);
     }
   });
@@ -88,7 +94,8 @@ describe('privacy claims in UI copy', () => {
   it.each(locales)('%s: comparison page no longer claims opt-in crash reports or no plaintext keys', (locale) => {
     const strings = ui(locale);
     expect(strings['comp.privacy.desc']).toContain('NETWORK.md');
-    expect(strings['comp.privacy.desc']).toContain('OSV.dev');
+    expect(strings['comp.privacy.desc']).toContain('npm');
+    expect(strings['comp.privacy.desc']).not.toContain('OSV.dev');
     expect(strings['comp.privacy.desc']).toContain('4da.ai');
     expect(strings['comp.privacy.keysDetail']).toContain('settings.json');
   });

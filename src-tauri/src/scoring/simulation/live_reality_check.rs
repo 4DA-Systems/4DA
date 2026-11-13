@@ -30,7 +30,7 @@ struct FetchedStory {
 }
 
 async fn fetch_top_stories(count: usize) -> Vec<FetchedStory> {
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .timeout(std::time::Duration::from_secs(15))
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()

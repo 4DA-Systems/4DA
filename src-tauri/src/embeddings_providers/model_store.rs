@@ -226,7 +226,7 @@ pub(crate) fn ensure_model(
 ) -> Result<PathBuf, FourDaError> {
     std::fs::create_dir_all(dir)
         .map_err(|e| FourDaError::from(format!("model dir {}: {e}", dir.display())))?;
-    let client = reqwest::blocking::Client::builder()
+    let client = crate::http_client::outbound_blocking_builder()
         .connect_timeout(Duration::from_secs(30))
         .timeout(STALL_TIMEOUT)
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())

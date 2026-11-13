@@ -251,7 +251,7 @@ impl LLMClient {
         };
         Self {
             provider,
-            client: reqwest::Client::builder()
+            client: crate::http_client::outbound_builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .timeout(std::time::Duration::from_secs(timeout_secs))
                 // Local-aware: an Ollama/llama-server endpoint the user pointed
@@ -261,7 +261,7 @@ impl LLMClient {
                 .build()
                 .unwrap_or_else(|e| {
                     warn!("Failed to build HTTP client: {e}, using default");
-                    reqwest::Client::new()
+                    crate::http_client::default_client()
                 }),
             purpose,
         }

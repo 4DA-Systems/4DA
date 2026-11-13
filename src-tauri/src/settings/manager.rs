@@ -89,6 +89,8 @@ impl SettingsManager {
         // Every change to the privacy level is followed by a save, so this keeps
         // the lock-free mirror current (see `llm_egress`).
         crate::llm_egress::publish_content_level(&self.settings.privacy.llm_content_level);
+        crate::registry_privacy::publish_registry_lookups(self.settings.privacy.registry_lookups);
+        crate::http_client::publish_proxy(self.settings.network.proxy_url.as_deref());
 
         self.ensure_keys_hydrated();
         self.secret_posture = if self.keychain_enabled {

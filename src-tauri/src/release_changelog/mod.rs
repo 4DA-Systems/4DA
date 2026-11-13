@@ -203,6 +203,15 @@ pub(crate) async fn changelog_for(
     if let Ok(Some(hit)) = store::get(db, t.eco, &t.package, &t.to) {
         return Ok(hit);
     }
+    // Registry lookups off, or a private name: nothing is fetched, and the
+    // card says why (not cached, so turning lookups back on reads it).
+    if !crate::registry_privacy::may_look_up(t.eco.as_str(), &t.package) {
+        return Err(if crate::registry_privacy::registry_lookups_enabled() {
+            "not looked up: a private package is never sent to a public registry".to_string()
+        } else {
+            "not looked up: registry lookups are off (Settings → Privacy)".to_string()
+        });
+    }
     let record = match fetch::download_archive(t.eco, &t.package, &t.to).await {
         Ok(bytes) => tokio::task::spawn_blocking(move || record_from_archive(&bytes))
             .await

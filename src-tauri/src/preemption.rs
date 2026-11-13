@@ -2416,6 +2416,8 @@ mod tests {
             in_flight: false,
             skipped_temp: 0,
             not_covered: None,
+            registry_lookups_off: None,
+            private_not_looked_up: None,
         };
         let full = EvidenceFeed {
             tier_scope: Some(TierScope::Full),

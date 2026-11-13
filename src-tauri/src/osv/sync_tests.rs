@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use super::*;
+use fourda_depengine::osv::PackageRef;
 
 #[test]
 fn test_parse_osv_max_age() {

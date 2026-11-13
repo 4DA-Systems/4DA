@@ -33,7 +33,7 @@ const MANIFEST_TIMEOUT: Duration = Duration::from_secs(15);
 /// host, so a registry answer pointing elsewhere is never contacted (the
 /// shared client follows any public redirect).
 static ARCHIVE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
+    crate::http_client::outbound_builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(ARCHIVE_TIMEOUT)
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
@@ -46,7 +46,7 @@ static ARCHIVE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!(target: "4da::release_changelog", "archive client build failed: {e}; using default");
-            reqwest::Client::new()
+            crate::http_client::default_client()
         })
 });
 

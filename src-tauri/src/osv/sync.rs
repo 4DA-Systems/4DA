@@ -1,8 +1,17 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! OSV sync engine — downloads advisories from OSV API and stores locally.
+//! OSV sync engine — keeps the local advisory mirror current.
 //!
-//! Reads the user's dependencies from the DB, queries the OSV batch API
-//! for each ecosystem's packages, and stores the results in osv_advisories.
+//! Reads which ecosystems the user's dependencies are in, downloads each
+//! ecosystem's public advisory archive (`osv-vulnerabilities` bucket,
+//! `{ecosystem}/all.zip`) when OSV has published a newer one, and matches it
+//! against the dependencies on this machine, storing the advisories that name
+//! one of them in `osv_advisories`.
+//!
+//! Nothing about the user's dependencies is sent: the archive request is the
+//! same for every install. Until 2026-11-12 each pass first POSTed every
+//! dependency name to `api.osv.dev/v1/querybatch`, which returns ID stubs
+//! the mirror cannot store; it stored 0 advisories in 56 of 56 logged runs
+//! (audit P2), so it disclosed the dependency list for nothing.
 
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -10,34 +19,9 @@ use tracing::{info, warn};
 use crate::db::Database;
 use crate::error::{FourDaError, Result};
 
-use super::types::{
-    Affected, BatchQuery, BatchRequest, BatchResponse, PackageRef, SyncResult, Vulnerability,
-};
+use super::types::{Affected, SyncResult, Vulnerability};
 
-const OSV_BATCH_URL: &str = "https://api.osv.dev/v1/querybatch";
-const USER_AGENT: &str = "4DA/1.0 (local-osv-mirror)";
-const MAX_BATCH_SIZE: usize = 1000;
 pub(crate) const DEFAULT_SYNC_MAX_AGE_HOURS: i64 = 6;
-/// The batch API's rate-limit refusal. The pass matches this exact text: a
-/// bare "429" also appears in other errors (a port number in a URL).
-const RATE_LIMITED: &str = "Rate limited by OSV API (429)";
-
-/// The remote endpoints and the local archive store a sync pass uses.
-/// Production is [`SyncEndpoints::live`]; tests point both at a local
-/// stand-in, so the pass under test is the one that ships.
-pub(crate) struct SyncEndpoints {
-    pub(crate) batch_url: String,
-    pub(crate) mirror: super::cache::Mirror,
-}
-
-impl SyncEndpoints {
-    fn live() -> Self {
-        Self {
-            batch_url: OSV_BATCH_URL.to_string(),
-            mirror: super::cache::Mirror::live(),
-        }
-    }
-}
 
 /// Maximum advisory-mirror age (hours) before a sync is due. Read once from
 /// `FOURDA_OSV_MAX_AGE_HOURS`, falling back to [`DEFAULT_SYNC_MAX_AGE_HOURS`].
@@ -47,7 +31,7 @@ impl SyncEndpoints {
 /// keeps a tighter cadence cheap — a re-download only happens when OSV actually publishes a
 /// new export, so polling more often costs one HEAD request, not a full mirror pull. With the
 /// env var unset, desktop behavior is unchanged (6h). Clamped to a 1h floor so a misconfigured
-/// `0` can't force a sync every cycle against the rate-limited API fallback.
+/// `0` can't force a sync every cycle.
 pub(crate) fn osv_sync_max_age_hours() -> i64 {
     static MAX_AGE: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
     *MAX_AGE.get_or_init(|| parse_osv_max_age(std::env::var("FOURDA_OSV_MAX_AGE_HOURS").ok()))
@@ -288,7 +272,8 @@ pub(crate) fn needs_sync(db: &Database, max_age_hours: i64) -> Result<bool> {
     Ok(false)
 }
 
-/// Run a full sync: read deps → query OSV → store advisories → update status.
+/// Run a full sync: read deps → refresh each ecosystem's archive → match it
+/// locally → store advisories → update status.
 pub async fn sync(db: &Database) -> Result<SyncResult> {
     let start = std::time::Instant::now();
     let mut result = SyncResult {
@@ -306,23 +291,16 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
     }
     // D-4: the npm dependencies a vulnerable package's releases exact-pin or
     // narrowly range (read from the registry facts) have their advisories
-    // mirrored too, so a fix target is judged by what it installs. Public
-    // names from public registry documents of packages already sent here.
+    // mirrored too, so a fix target is judged by what it installs. They are
+    // matched in the downloaded npm archive like every other name.
     let held_names = with_held_names(
         &mut by_ecosystem,
         super::release_facts::held_names_to_sync(db),
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .timeout(std::time::Duration::from_secs(30))
-        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
-        .build()
-        .unwrap_or_default();
-
-    let endpoints = SyncEndpoints::live();
+    let mirror = super::cache::Mirror::live();
     for (ecosystem, packages) in &by_ecosystem {
-        let outcome = pass::sync_one_ecosystem(&client, db, &endpoints, ecosystem, packages).await;
+        let outcome = pass::sync_one_ecosystem(db, &mirror, ecosystem, packages).await;
         pass::record_outcome(db, ecosystem, outcome, &mut result);
     }
 
@@ -389,114 +367,6 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
     }
 
     Ok(result)
-}
-
-/// Sync a single ecosystem: batch-query OSV for all packages, store results.
-async fn sync_ecosystem(
-    client: &reqwest::Client,
-    db: &Database,
-    batch_url: &str,
-    ecosystem: &str,
-    packages: &[String],
-    sync_start: &str,
-) -> Result<usize> {
-    info!(
-        target: "4da::osv",
-        ecosystem = ecosystem,
-        packages = packages.len(),
-        "Syncing ecosystem"
-    );
-
-    let mut total_stored = 0usize;
-    let mut seen_ids = std::collections::HashSet::new();
-
-    // Process in batches of MAX_BATCH_SIZE
-    for chunk in packages.chunks(MAX_BATCH_SIZE) {
-        let queries: Vec<BatchQuery> = chunk
-            .iter()
-            .map(|name| BatchQuery {
-                package: PackageRef {
-                    name: name.clone(),
-                    ecosystem: ecosystem.to_string(),
-                },
-                version: None,
-            })
-            .collect();
-
-        let body = BatchRequest { queries };
-
-        let response = client
-            .post(batch_url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| FourDaError::Internal(format!("OSV batch request failed: {e}")))?;
-
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            warn!(target: "4da::osv", ecosystem = ecosystem, "Rate limited by OSV API");
-            return Err(FourDaError::Internal(RATE_LIMITED.into()));
-        }
-        if !status.is_success() {
-            return Err(FourDaError::Internal(format!(
-                "OSV API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
-
-        let batch: BatchResponse = response
-            .json()
-            .await
-            .map_err(|e| FourDaError::Internal(format!("Failed to parse OSV response: {e}")))?;
-
-        if let Some(results) = batch.results {
-            for query_result in results {
-                if let Some(vulns) = query_result.vulns {
-                    for vuln in vulns {
-                        total_stored += store_vulnerability(db, &vuln, &mut seen_ids)?;
-                    }
-                }
-            }
-        }
-
-        // Brief pause between batches to be respectful
-        if packages.len() > MAX_BATCH_SIZE {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
-    }
-
-    // Clean up advisories that were withdrawn (no longer returned by OSV) —
-    // but ONLY when we actually stored fresh advisories this pass. The OSV
-    // `/v1/querybatch` endpoint returns vulnerability *ID stubs* (`{id, modified}`)
-    // with no `affected` package data, so `store_vulnerability` can store nothing
-    // from the batch path (`total_stored == 0`). Pruning on a zero-store would
-    // treat the entire existing mirror as "withdrawn" and WIPE it — exactly the
-    // silent failure that left Preemption empty while real CVEs existed. When the
-    // batch path stores nothing, `sync()` repopulates from the cached ZIP mirror
-    // instead; leave the existing rows intact here.
-    if total_stored > 0 {
-        let deleted = db
-            .delete_stale_osv_advisories(ecosystem, sync_start)
-            .unwrap_or(0);
-        if deleted > 0 {
-            info!(
-                target: "4da::osv",
-                ecosystem = ecosystem,
-                deleted = deleted,
-                "Removed withdrawn advisories"
-            );
-            pass::forget_ingested_archives(db);
-        }
-    }
-
-    info!(
-        target: "4da::osv",
-        ecosystem = ecosystem,
-        stored = total_stored,
-        "Ecosystem sync complete"
-    );
-
-    Ok(total_stored)
 }
 
 /// Store a single vulnerability's affected packages into the DB.

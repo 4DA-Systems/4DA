@@ -558,17 +558,20 @@ pub async fn get_privacy_config() -> Result<serde_json::Value> {
         "cloud_llm_disclosure_accepted": settings.privacy.cloud_llm_disclosure_accepted,
         "activity_tracking_opt_in": settings.privacy.activity_tracking_opt_in,
         "github_release_notes": settings.privacy.github_release_notes,
+        "registry_lookups": settings.privacy.registry_lookups,
     }))
 }
 
 /// Update privacy settings (content level, cloud-LLM disclosure acceptance,
-/// activity-tracking opt-in, and/or the GitHub release-notes opt-in).
+/// activity-tracking opt-in, the GitHub release-notes opt-in, and/or the
+/// registry-lookups switch).
 #[tauri::command]
 pub async fn set_privacy_config(
     llm_content_level: Option<String>,
     cloud_llm_disclosure_accepted: Option<bool>,
     activity_tracking_opt_in: Option<bool>,
     github_release_notes: Option<bool>,
+    registry_lookups: Option<bool>,
 ) -> Result<()> {
     if let Some(ref level) = llm_content_level {
         validate_input_length(level, "llm_content_level", 20)?;
@@ -592,6 +595,11 @@ pub async fn set_privacy_config(
     }
     if let Some(opt_in) = github_release_notes {
         guard.get_mut().privacy.github_release_notes = opt_in;
+    }
+    if let Some(on) = registry_lookups {
+        // Takes effect at once: `save` publishes it, and every registry
+        // call site asks `registry_privacy::may_look_up` per request.
+        guard.get_mut().privacy.registry_lookups = on;
     }
     guard.save().map_err(|e| {
         crate::error::FourDaError::Config(format!("Failed to save privacy config: {e}"))

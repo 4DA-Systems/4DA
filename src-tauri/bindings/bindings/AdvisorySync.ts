@@ -36,4 +36,18 @@ skipped_temp: number,
  * (Maven, Gradle, NuGet ...): nothing in them was checked, so no state
  * here covers them (audit A2/E4). `None` when every file was read.
  */
-not_covered?: NotCovered, };
+not_covered?: NotCovered, 
+/**
+ * `Some(true)` when Settings → Privacy → Registry lookups is off: no
+ * registry was asked about new, yanked or deprecated releases, so those
+ * are not checked and fix versions come from the advisory data alone.
+ * The advisory matching this state describes is unaffected (it reads
+ * the downloaded archive). Absent while lookups are on.
+ */
+registry_lookups_off?: boolean, 
+/**
+ * How many inventory dependencies are never sent to a public registry
+ * because their names are private (`registry_privacy`): their releases
+ * are not checked. Absent when there are none.
+ */
+private_not_looked_up?: number, };

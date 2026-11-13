@@ -288,25 +288,6 @@ impl Database {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
-    /// Delete stale advisories not refreshed in the latest sync.
-    /// Call after a full ecosystem sync to remove advisories that OSV
-    /// no longer lists (i.e. withdrawn).
-    pub fn delete_stale_osv_advisories(
-        &self,
-        ecosystem: &str,
-        before_synced_at: &str,
-    ) -> SqliteResult<usize> {
-        self.invalidate_alias_grades();
-        let conn = self.conn.lock();
-        let count = conn.execute(
-            "DELETE FROM osv_advisories WHERE ecosystem = ?1 AND synced_at < ?2",
-            params![ecosystem, before_synced_at],
-        )?;
-        drop(conn);
-        self.invalidate_alias_grades();
-        Ok(count)
-    }
-
     /// Delete advisories for ecosystems the user has no auditable dependency in.
     /// Clears orphan rows left by an earlier broad cache ingestion (e.g. NuGet /
     /// Maven / PyPI advisories that can never match an npm + crates.io dependency

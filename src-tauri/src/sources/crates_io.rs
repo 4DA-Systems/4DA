@@ -133,7 +133,7 @@ impl CratesIoSource {
 
     /// Create a crates.io source with a custom crate list
     pub fn with_crates(crates: Vec<String>) -> Self {
-        let client = reqwest::Client::builder()
+        let client = crate::http_client::outbound_builder()
             .user_agent(USER_AGENT)
             .timeout(std::time::Duration::from_secs(30))
             .connect_timeout(std::time::Duration::from_secs(10))
@@ -141,7 +141,7 @@ impl CratesIoSource {
             .build()
             .unwrap_or_else(|e| {
                 warn!("Failed to build crates.io HTTP client: {e}, using default");
-                reqwest::Client::new()
+                crate::http_client::default_client()
             });
 
         Self {
@@ -322,9 +322,11 @@ impl Source for CratesIoSource {
         // safe only because the list was the 12-name `DEFAULT_CRATES` fallback;
         // now that the user's real deps reach this list, an unbounded loop would
         // time the source out and surface nothing.
+        // Never a private crate, and nothing while registry lookups are off.
+        let lookable = crate::registry_privacy::lookable("crates.io", &self.crates);
         let monitored = crate::source_fetching::rotating_window(
             "sources.crates_io.rotation_cursor",
-            &self.crates,
+            &lookable,
             self.config.max_items,
         );
         for name in &monitored {

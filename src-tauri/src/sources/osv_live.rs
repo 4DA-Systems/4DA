@@ -212,6 +212,12 @@ fn gather_versioned_auditable_deps(db: &crate::db::Database) -> Vec<(String, Str
         let Some(eco) = dep_ecosystem_to_osv(&dep.ecosystem) else {
             continue;
         };
+        // The live query sends names and versions to api.osv.dev: never a
+        // private name, and nothing while Registry lookups is off (the
+        // mirror path then answers instead).
+        if !crate::registry_privacy::may_look_up(eco, &dep.package_name) {
+            continue;
+        }
         let key = (
             eco.to_string(),
             dep.package_name.to_lowercase(),

@@ -276,6 +276,8 @@ impl SettingsManager {
         }
 
         crate::llm_egress::publish_content_level(&settings.privacy.llm_content_level);
+        crate::registry_privacy::publish_registry_lookups(settings.privacy.registry_lookups);
+        crate::http_client::publish_proxy(settings.network.proxy_url.as_deref());
 
         Self {
             settings,

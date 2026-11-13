@@ -114,7 +114,7 @@ fn is_url_allowed(url: &str) -> bool {
 /// Client for the toolkit probe: every redirect hop is re-checked against the
 /// same allowlist, so an allowed host cannot bounce the request elsewhere.
 static TOOLKIT_CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|| {
-    reqwest::Client::builder()
+    crate::http_client::outbound_builder()
         .user_agent("Mozilla/5.0 (compatible; desktop-app)")
         .timeout(std::time::Duration::from_secs(30))
         .connect_timeout(std::time::Duration::from_secs(10))
@@ -130,7 +130,7 @@ static TOOLKIT_CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLoc
         .build()
         .unwrap_or_else(|e| {
             warn!(target: "4da::toolkit", error = %e, "Failed to build toolkit client; redirects disabled");
-            reqwest::Client::builder()
+            crate::http_client::outbound_builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .unwrap_or_default()

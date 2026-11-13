@@ -126,13 +126,13 @@ pub fn start_sync_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<TeamSyncSt
     info!(target: "4da::team_sync", "Starting team sync scheduler");
 
     tauri::async_runtime::spawn(async move {
-        let http = reqwest::Client::builder()
+        let http = crate::http_client::outbound_builder()
             .user_agent("4DA-TeamSync/1.0")
             .timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(10))
             .redirect(crate::http_client::ssrf_guarded_redirect_policy())
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .unwrap_or_else(|_| crate::http_client::default_client());
 
         // Wait 10 seconds on startup before first sync attempt,
         // giving the app time to initialize settings and database.

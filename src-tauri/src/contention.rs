@@ -144,7 +144,7 @@ fn sample_nvidia() -> Option<(Vec<u32>, u64, u64)> {
 
 /// VRAM (MiB) Ollama's loaded models hold, per `/api/ps`; 0 when unreachable.
 async fn ollama_resident_mb() -> u64 {
-    let Ok(client) = reqwest::Client::builder()
+    let Ok(client) = crate::http_client::outbound_builder()
         .timeout(Duration::from_secs(3))
         .build()
     else {

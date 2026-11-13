@@ -90,6 +90,20 @@ pub struct AdvisorySync {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub not_covered: Option<NotCovered>,
+    /// `Some(true)` when Settings → Privacy → Registry lookups is off: no
+    /// registry was asked about new, yanked or deprecated releases, so those
+    /// are not checked and fix versions come from the advisory data alone.
+    /// The advisory matching this state describes is unaffected (it reads
+    /// the downloaded archive). Absent while lookups are on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub registry_lookups_off: Option<bool>,
+    /// How many inventory dependencies are never sent to a public registry
+    /// because their names are private (`registry_privacy`): their releases
+    /// are not checked. Absent when there are none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub private_not_looked_up: Option<u32>,
 }
 
 /// Everything the advisory check did NOT cover, with counts: the record a
@@ -213,6 +227,8 @@ pub(crate) fn classify(
         in_flight,
         skipped_temp: 0,
         not_covered: None,
+        registry_lookups_off: None,
+        private_not_looked_up: None,
     };
     if required.is_empty() {
         out.state = AdvisorySyncState::NoInventory;
@@ -310,6 +326,17 @@ pub(crate) fn advisory_sync(db: &Database) -> AdvisorySync {
             .map_or(0, crate::ace::lockfile::report::skipped_temp_count);
     }
     out.not_covered = not_covered_with(report.as_ref(), &coverage.unversioned);
+    with_lookup_status(out, crate::registry_privacy::lookup_status())
+}
+
+/// What the release lookups did not cover, on the readiness record (P1).
+pub(crate) fn with_lookup_status(
+    mut out: AdvisorySync,
+    status: crate::registry_privacy::LookupStatus,
+) -> AdvisorySync {
+    out.registry_lookups_off = status.off.then_some(true);
+    out.private_not_looked_up =
+        (!status.off && status.private_withheld > 0).then_some(status.private_withheld);
     out
 }
 
@@ -493,6 +520,8 @@ fn unreadable(in_flight: bool) -> AdvisorySync {
         in_flight,
         skipped_temp: 0,
         not_covered: None,
+        registry_lookups_off: None,
+        private_not_looked_up: None,
     }
 }
 

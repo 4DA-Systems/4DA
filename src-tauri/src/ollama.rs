@@ -108,14 +108,14 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
         }
     });
 
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::outbound_builder()
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_mins(2))
         .redirect(crate::http_client::local_aware_redirect_policy())
         .build()
         .unwrap_or_else(|e| {
             warn!("Failed to build HTTP client: {e}, using default");
-            reqwest::Client::new()
+            crate::http_client::default_client()
         });
 
     let result = client.post(&url).json(&body).send().await;
@@ -277,7 +277,7 @@ fn version_lt(a: (u32, u32, u32), b: (u32, u32, u32)) -> bool {
 pub(crate) async fn check_ollama_version(base_url: &str, app: &AppHandle) {
     let url = format!("{}/api/version", base_url.trim_end_matches('/'));
 
-    let client = match reqwest::Client::builder()
+    let client = match crate::http_client::outbound_builder()
         .connect_timeout(std::time::Duration::from_secs(3))
         .timeout(std::time::Duration::from_secs(5))
         .redirect(crate::http_client::local_aware_redirect_policy())

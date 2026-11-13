@@ -149,7 +149,7 @@ fn start_debug_frontend_readiness_gate(app_handle: tauri::AppHandle) {
     }
 
     tauri::async_runtime::spawn(async move {
-        let client = reqwest::Client::builder()
+        let client = crate::http_client::outbound_builder()
             .timeout(std::time::Duration::from_secs(2))
             .no_proxy()
             .redirect(crate::http_client::local_aware_redirect_policy())

@@ -15,7 +15,7 @@ templateEngineOverride: md
 
 | Category | Where | What it receives |
 |---|---|---|
-| Dependency checks | OSV.dev; npm, crates.io, PyPI and the Go module proxy | The package names and versions from your lockfiles (OSV.dev gets installed versions; registries get names). Go module paths are sent in full, so a private module path such as `github.com/yourco/internal-svc` names that repository. Never your code. |
+| Dependency checks | OSV's public archive storage (1.0.3 and earlier: OSV.dev); npm, crates.io, PyPI and the Go module proxy | From 1.0.4: advisories send nothing (the public archive is downloaded and matched on your machine); release checks send package names, never versions and never private names (`GOPRIVATE` modules, private registries and indexes, git and path sources), and Settings → Privacy → Registry lookups turns them off. 1.0.3 and earlier: package names and installed versions go to OSV.dev (`api.osv.dev`), names to the registries, Go module paths in full. Never your code. |
 | News sources | HN, GitHub, Reddit, arXiv, RSS and the others you enable | Plain requests for public content; Reddit and Stack Overflow see the subreddits and tags you follow |
 | AI provider | Anthropic / OpenAI / any OpenAI-compatible endpoint, or local Ollama | Only if you set one up with your own key: item titles and snippets plus a short context profile (dependency names, project labels, git-derived topics, interests). File paths are replaced with project labels; source code and commit messages are never sent |
 | Licence | Keygen (`api.keygen.sh`) and 4DA's own `4da.ai` | Paid licences only: the key, to validate it and, for subscriptions, to renew it near expiry. `4da.ai` also receives your email if you use "Recover License by Email" |
@@ -29,7 +29,7 @@ templateEngineOverride: md
 
 AI features are opt-in and run on compute you own:
 
-- **Local (fully private):** [Ollama](https://ollama.com/) or a downloaded model runs the AI features offline; nothing you ask it leaves the machine. The dependency checks above still go to OSV.dev and the registries (offline, 4DA shows cached data).
+- **Local (fully private):** [Ollama](https://ollama.com/) or a downloaded model runs the AI features offline; nothing you ask it leaves the machine. The dependency checks above still download advisory archives and, unless you turn Registry lookups off, ask the registries (1.0.3 and earlier: OSV.dev and the registries) (offline, 4DA shows cached data).
 - **Cloud (your key):** add an Anthropic or OpenAI key for AI-written briefings and deeper reranking.
 
 4DA never pays for your compute and never stores your keys on a remote server. Keys are held in your OS keychain, local to the device, and sent only to the provider they belong to.
