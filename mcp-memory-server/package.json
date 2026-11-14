@@ -17,11 +17,11 @@
   ],
   "dependencies": {
     "better-sqlite3": "^12.11.1",
-    "@modelcontextprotocol/server": "^2.3.0"
+    "@modelcontextprotocol/server": "^2.4.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
