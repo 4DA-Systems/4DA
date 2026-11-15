@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! `fix_target` lines with a `held` block (audit 6.2.5 D-4): a fix target is
-//! judged by what it exact-pins or narrowly ranges. Each line holds the
+//! judged by what it pins or ranges (amended 2026-11-15: wide ranges and npm
+//! aliases too). Each line holds the
 //! installed package, every advisory (`held.advisories`, the graph lines'
 //! shape), and the RAW npm abbreviated documents (`held.registry`). The
 //! runner stores them as the app would and runs the app's own pipeline:

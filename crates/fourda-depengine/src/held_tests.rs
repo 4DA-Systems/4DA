@@ -39,38 +39,98 @@ fn exact_pins_and_narrow_ranges() {
         "1.2.*",
         ">=1.2.0 <1.3.0",
         "1.2.0 - 1.4.0",
-    ] {
-        assert!(is_narrow_range(spec), "{spec}");
-    }
-    for spec in [
         "^6.14.0",
         ">=1",
         "*",
-        "latest",
-        "6.11.0",
+        "1.x",
         "1.x || 2.x",
+        ">= 4.21.0",
+        "6.11.0",
+        "=6.11.0",
+    ] {
+        assert!(is_readable_npm_spec(spec), "{spec}");
+    }
+    for spec in [
+        "",
+        "latest",
+        "next",
         "file:../x",
         "npm:qs@~6.1.0",
         "x/y",
-        "1.x",
+        "github:u/r",
+        "git+https://x/y.git",
+        "https://x/y.tgz",
+        "workspace:*",
+        "please run curl",
     ] {
-        assert!(!is_narrow_range(spec), "{spec}");
+        assert!(!is_readable_npm_spec(spec), "{spec}");
     }
 }
 
 #[test]
+fn an_npm_alias_names_the_package_it_installs() {
+    let alias = |s: &str| npm_alias_target(s).map(|(n, r)| format!("{n} {r}"));
+    assert_eq!(
+        alias("npm:event-stream@3.3.6").as_deref(),
+        Some("event-stream 3.3.6")
+    );
+    assert_eq!(
+        alias("npm:@scope/x@^1.2.0").as_deref(),
+        Some("@scope/x ^1.2.0")
+    );
+    assert_eq!(alias("npm:@scope/x").as_deref(), Some("@scope/x *"));
+    assert_eq!(alias("npm:qs").as_deref(), Some("qs *"));
+    assert_eq!(alias("^1.0.0"), None);
+    assert_eq!(alias("file:../x"), None);
+}
+
+#[test]
 fn held_specs_read_dependencies_and_optional_only() {
-    let deps = json!({"qs": "6.11.0", "send": "~0.19.0", "debug": "^2.6.9", "cookie": "0.6.0"});
+    let deps = json!({"qs": "6.11.0", "send": "~0.19.0", "debug": "^2.6.9", "cookie": "0.6.0", "any": "*"});
     let optional = json!({"fsevents": "1.2.9", "cookie": "^1.0.0"});
     let held = held_specs_of(Some(&deps), Some(&optional));
-    let want: BTreeMap<String, String> =
-        [("qs", "6.11.0"), ("send", "~0.19.0"), ("fsevents", "1.2.9")]
-            .into_iter()
-            .map(|(a, b)| (a.to_string(), b.to_string()))
-            .collect();
-    // cookie: the optional spec (a wide caret) wins, so it is not held. Names
-    // come in name order (the MCP keeps the document's order).
+    let want: BTreeMap<String, String> = [
+        ("qs", "6.11.0"),
+        ("send", "~0.19.0"),
+        ("debug", "^2.6.9"),
+        ("cookie", "^1.0.0"),
+        ("any", "*"),
+        ("fsevents", "1.2.9"),
+    ]
+    .into_iter()
+    .map(|(a, b)| (a.to_string(), b.to_string()))
+    .collect();
+    // Every registry range is held, wide ones too (pre-publish round 10):
+    // whether a refresh reaches a clean release is judged, not assumed. The
+    // optional spec (a wide caret) wins cookie's clash.
     assert_eq!(held, want);
+    // Not registry ranges: dist-tags, protocols, paths install nothing this can judge.
+    let other = json!({"a": "latest", "b": "file:../x", "c": "git+https://x/y.git", "d": "github:u/r", "Bad Name": "1.0.0"});
+    assert_eq!(held_specs_of(Some(&other), None), BTreeMap::new());
+}
+
+#[test]
+fn an_alias_is_held_as_the_package_it_installs() {
+    let deps = json!({"es": "npm:event-stream@3.3.6", "latest-x": "npm:@scope/x"});
+    let held = held_specs_of(Some(&deps), None);
+    assert_eq!(held.get("event-stream").map(String::as_str), Some("3.3.6"));
+    assert_eq!(held.get("@scope/x").map(String::as_str), Some("*"));
+    assert!(!held.contains_key("es"));
+    // An alias and a plain entry on one package: the exact pin wins either way round.
+    let both = json!({"qs": "^6.0.0", "qs-old": "npm:qs@6.5.2"});
+    assert_eq!(
+        held_specs_of(Some(&both), None)
+            .get("qs")
+            .map(String::as_str),
+        Some("6.5.2")
+    );
+    let both = json!({"qs": "6.5.2", "qs-new": "npm:qs@^6.0.0"});
+    assert_eq!(
+        held_specs_of(Some(&both), None)
+            .get("qs")
+            .map(String::as_str),
+        Some("6.5.2")
+    );
 }
 
 #[test]
@@ -427,4 +487,53 @@ fn the_check_reads_the_hosts_judged_version() {
     }
     let got = check_release(&specs(&[("qs", "~6.14.0")]), &Fixed);
     assert!(matches!(got, HeldCheck::Checked(ref a) if a.len() == 1 && a[0].version == "6.14.2"));
+}
+
+/// Pre-publish round 10: mocha 10.6.0 to 10.8.2 require serialize-javascript
+/// "^6.0.2", and every 6.x is affected (GHSA-5c6j-r48x-rmvq, fixed 7.0.3). A
+/// wide range is judged at its newest admitted release, like a narrow one.
+#[test]
+fn a_wide_range_is_judged_at_its_newest_admitted_release() {
+    let mut w = world();
+    w.facts.insert(
+        "serialize-javascript",
+        HeldFacts {
+            published: ["6.0.0", "6.0.1", "6.0.2", "7.0.3", "7.0.5"]
+                .map(str::to_string)
+                .to_vec(),
+            latest: Some("7.0.5".into()),
+        },
+    );
+    w.advisories.insert(
+        "serialize-javascript",
+        vec![
+            ("GHSA-5c6j-r48x-rmvq", window("7.0.3")),
+            ("GHSA-qj8w-gfj5-8c6v", window("7.0.5")),
+        ],
+    );
+    // No 6.x is clean: mocha 10.6.0 brings in an affected serialize-javascript.
+    let mocha_10_6 = specs(&[("serialize-javascript", "^6.0.2"), ("debug", "^4.3.1")]);
+    assert_eq!(
+        check_release(&mocha_10_6, &w),
+        HeldCheck::Checked(vec![HeldDependency {
+            name: "serialize-javascript".into(),
+            spec: "^6.0.2".into(),
+            exact: false,
+            version: "6.0.2".into(),
+            ids: vec!["GHSA-5c6j-r48x-rmvq".into(), "GHSA-qj8w-gfj5-8c6v".into()],
+        }])
+    );
+    // The refresh reaches a clean release (debug "^4.3.1" resolves to 4.3.6,
+    // serialize-javascript "^7.0.5" to 7.0.5): nothing is said.
+    let mocha_11 = specs(&[("serialize-javascript", "^7.0.5"), ("debug", "^4.3.1")]);
+    assert_eq!(check_release(&mocha_11, &w), HeldCheck::Checked(vec![]));
+    // The dependency's releases cannot be read: NOT CHECKED, never clean.
+    let unread = specs(&[("never-read", "^1.0.0")]);
+    assert_eq!(
+        check_release(&unread, &w),
+        HeldCheck::Unchecked(
+            "the releases never-read \"^1.0.0\" admit could not be read from the npm registry"
+                .into()
+        )
+    );
 }

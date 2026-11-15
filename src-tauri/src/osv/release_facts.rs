@@ -44,8 +44,8 @@
 //!
 //! The held-dependency rule (audit 6.2.5 D-4, `release_facts_held.rs`) reads
 //! the same document of a vulnerable npm package for what each release
-//! exact-pins or narrowly ranges, and, in a second round inside the same
-//! budget, the document of each dependency held through a narrow range.
+//! pins or ranges, and, in a second round inside the same budget, the
+//! document of each dependency held through a range (narrow or wide).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -312,7 +312,7 @@ pub(crate) async fn refresh(db: &Database) -> usize {
 /// One package to read, and what is wanted from it.
 type Due = ((String, String), Want);
 
-/// The npm dependencies held through a narrow range by a stored package
+/// The npm dependencies held through a range (narrow or wide) by a stored package
 /// (D-4), when the npm source is enabled: release lists only. A package
 /// round one already wanted is left out: re-read with a bare want, its
 /// stored held specs and parent requirements would be replaced by empty

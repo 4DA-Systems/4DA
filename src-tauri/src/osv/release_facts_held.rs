@@ -3,9 +3,11 @@
 //! D-4, `fourda_depengine::held`), read from the SAME npm abbreviated
 //! document `release_facts` already fetches for a vulnerable package: per
 //! stable release at or above the lowest installed copy, the dependencies it
-//! exact-pins or narrowly ranges (`dependencies` + `optionalDependencies`).
+//! holds (`dependencies` + `optionalDependencies`): exact pins and every
+//! registry range, wide ones too, an npm alias under the package it installs
+//! (pre-publish round 10).
 //!
-//! A narrow range is judged at its dependency's `latest` or highest admitted
+//! A range is judged at its dependency's `latest` or highest admitted
 //! release, so that dependency's own abbreviated document is read too (name
 //! only, the same host, request type, pacing and per-sync budget; NETWORK.md
 //! §2c). And its advisories must be in the local mirror: the OSV sync adds
@@ -26,6 +28,13 @@ use super::StoredPackage;
 /// sync included.
 const SYNCED_KEY: &str = "osv_held_synced_v1";
 
+/// The held-spec rule the stored specs were read under. 2 (pre-publish round
+/// 10): wide ranges and npm aliases are held. Specs stored under an older
+/// rule are unread, never "holds nothing": they lack the wide ranges, so
+/// mocha 10.6.0's serialize-javascript "^6.0.2" would read as clean. They are
+/// re-read on the next sync ([`HeldSpecs::covers`] is false).
+const HELD_RULE: u8 = 2;
+
 /// Per release, the held specs (name -> spec) of one npm package.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct HeldSpecs {
@@ -33,6 +42,9 @@ pub(crate) struct HeldSpecs {
     /// existed, or never read as a vulnerable package, was not).
     #[serde(default)]
     pub read: bool,
+    /// The rule they were read under ([`HELD_RULE`]; absent: an older one).
+    #[serde(default)]
+    pub rule: u8,
     /// The lowest release kept (the lowest installed copy when read).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
@@ -43,12 +55,12 @@ pub(crate) struct HeldSpecs {
 
 impl HeldSpecs {
     pub(super) fn is_unread(&self) -> bool {
-        !self.read
+        !self.read || self.rule < HELD_RULE
     }
 
     /// Read for `floor` or lower already.
     pub(crate) fn covers(&self, floor: &str) -> bool {
-        self.read
+        !self.is_unread()
             && match (
                 self.from.as_deref().and_then(parse_version),
                 parse_version(floor),
@@ -85,6 +97,7 @@ pub(super) fn parse_npm_held(doc: &serde_json::Value, floor: Option<&str>) -> He
         .collect();
     HeldSpecs {
         read: true,
+        rule: HELD_RULE,
         from: floor.map(str::to_string),
         specs,
     }
@@ -104,7 +117,7 @@ pub(super) fn exact_pins(held: &HeldSpecs, package: &str, version: &str) -> bool
 }
 
 /// Every name some stored npm package's releases hold, and (second) the
-/// subset held through a narrow range, whose own document is needed.
+/// subset held through a range (narrow or wide), whose own document is needed.
 pub(super) fn held_names(
     stored: &HashMap<(String, String), StoredPackage>,
 ) -> (BTreeSet<String>, BTreeSet<String>) {
