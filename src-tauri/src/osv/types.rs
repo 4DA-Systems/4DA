@@ -108,13 +108,20 @@ pub struct StoredAdvisory {
 }
 
 impl StoredAdvisory {
-    /// A malicious-package record (`fourda_depengine::is_malware`).
+    /// A malicious-package record (`fourda_depengine::is_malware_with`: its
+    /// id, aliases, CWE ids, summary and details, as the MCP's scan reads
+    /// the record). The mirror does not keep `database_specific`, so the
+    /// OpenSSF / RustSec malicious flags are not read here.
     pub fn is_malware(&self) -> bool {
-        fourda_depengine::is_malware(
+        fourda_depengine::is_malware_with(
             &self.advisory_id,
             &self.aliases,
             &self.cwe_ids,
             &self.summary,
+            &fourda_depengine::MalwareExtra {
+                details: self.details.as_deref().unwrap_or(""),
+                database_specific: &[],
+            },
         )
     }
 }
@@ -183,13 +190,17 @@ pub struct MatchedAdvisory {
 }
 
 impl MatchedAdvisory {
-    /// A malicious-package record (`fourda_depengine::is_malware`).
+    /// A malicious-package record: [`StoredAdvisory::is_malware`]'s rule.
     pub fn is_malware(&self) -> bool {
-        fourda_depengine::is_malware(
+        fourda_depengine::is_malware_with(
             &self.advisory_id,
             &self.aliases,
             &self.cwe_ids,
             &self.summary,
+            &fourda_depengine::MalwareExtra {
+                details: self.details.as_deref().unwrap_or(""),
+                database_specific: &[],
+            },
         )
     }
 }

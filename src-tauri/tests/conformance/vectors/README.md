@@ -19,6 +19,9 @@ Both engines run the same files:
   the corpus (pinned commit, sparse checkout of `src-tauri/tests/conformance`),
   with a vitest `describe.each` over the same files. That runner is a later
   task in the MCP repository.
+- **The engine crate alone:** `crates/fourda-depengine/tests/*_vectors.rs`
+  run the files the crate answers without the app (`version_order`,
+  `range_check`, `malware`) in CI's `Depengine` job.
 
 ## Files
 
@@ -36,6 +39,7 @@ specific enough to recheck).
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
 | `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-008: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); pr-009: index.crates.io sparse records and OSV, 2026-10-18 (the MCP terminal's line, verbatim; `tool: cargo`, Cargo requirement dialect); pr-010..pr-012, ft-069..ft-072 and fc-063: SYNTHETIC (marked in their source); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
 | `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`0.0.<n>-security`; a publisher's `1.0.0-security` prerelease is not one: ho-006): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
+| `malware.jsonl` | `{record, malware}`; a `record` is the OSV record as OSV gives it, cut to the fields the predicate reads: `{id, aliases?, summary?, details?, database_specific?, affected[]?: {package?, database_specific?}}` | api.osv.dev `/v1/vulns/<id>` on the date in `source` (mw-001..mw-015 and mw-049: the real records of `@4da/mcp-server`'s malware tests and RustSec's malicious crates); the rest are by-hand lines that carry each case of the MCP's malware tests (`final-audit-625`, `blind-audit-r4-verdicts`, `blind-audit-r8-verdicts`, `osv-malware-record`) with that test's expected value, never an engine's output. |
 | `severity.jsonl` | `{record \| records[], fixed_version?, aliases_available, expect: {severity, severity_from, urgency, notices?}}` (`notices`, optional: how many of the records read as maintenance notices after the alias-group rule); a `record` is `{id, summary, severity?, database_specific?: {severity?, cwe_ids?}, aliases[], affected[]?}` as OSV gives it; a record with `affected[]` is evaluated for the package of its FIRST affected entry (its `database_specific.informational` counts for the notice rule) | api.osv.dev `/v1/vulns/<id>` and the app's local mirror (`osv_advisories`, read-only), both read on the date in `source`; by-hand lines say so. `aliases_available` maps each GHSA id the mirror holds to its grade (`null`: held, no grade); an id absent from it cannot be read. |
 
 Field conventions:
@@ -395,8 +399,9 @@ Upgrade Plan and the alerts both give: the tier, `low` reading `watch`; a
 group still unknown is `medium`, a group of maintenance notices only (no fix,
 no CVSS, "unmaintained" / "deprecated" text) `watch`, and a malicious-package
 record on the installed version (`fourda_depengine::is_malware`: a `MAL-` id or
-alias, CWE-506 in `database_specific.cwe_ids`, or a summary starting "Malicious
-Package in " / "Malicious code in ") `critical` whatever else grades it
+alias, CWE-506 in `database_specific.cwe_ids`, or a summary that says the
+package is or carries malware, the title rule of `malware.jsonl`) `critical`
+whatever else grades it
 (malware is installed; npm's `0.0.<n>-security` holding placeholder is never
 matched, see `holding.jsonl`). The optional `fixed_version` is the copy's fix (none
 when absent), which tells a maintenance notice from a vulnerability.
@@ -408,6 +413,7 @@ when absent), which tells a maintenance notice from a vulnerability.
 - A record's own grade wins over a higher alias: sv-007 (GHSA-rjh8-p66p-jrh5, own high)
 - One alias group, most severe own grade: sv-008 (label LOW + CVSS 9.8), sv-009 (CVE-2026-4277: GHSA-pwjp-ccjc-ghwg LOW, PYSEC-2026-52 9.8), sv-012 (an own low beats an inherited critical)
 - Still unknown: Medium (sv-004, sv-005, sv-019: anyhow's unsoundness, which the alert path used to guess Watch), maintenance notices Watch (sv-011, sv-018), installed malware Critical (sv-010, sv-020 where the record grades itself low, sv-021: crossenv GHSA-c2m4-w5hm-vqjw, malware by CWE-506 alone, no MAL- alias, and sv-022: GHSA-28f8-hqmc-7ph8, malware by GitHub's "Malicious Package in" title alone)
+- Installed malware by the title rule alone (MCP blind audit round 4 and pre-publish round 8 B3, 2026-11-15): RUSTSEC-2025-0147 evm-units, "removed from crates.io for malicious code", ungraded (sv-028); real titles carried on a record that grades itself LOW, so only the malware rule makes them Critical: "Malware in ctx" (sv-029), "contains malware" (sv-030), "ships a backdoor" (sv-031). Its exclusions stay graded by their own label (LOW: Watch): a malware scanner (sv-032), a malware detector (sv-033), Babel's "specifically crafted malicious code" (sv-034)
 - A maintenance notice is not graded from an alias: sv-011
 - The notice predicate is the MCP's (review of #1008, B1): the summary says unmaintained / no longer maintained (or OSV's database_specific.informational is unmaintained / notice); a published fix does not stop it being a notice, and "deprecated" alone does not make one: sv-023 (ring RUSTSEC-2025-0010, fixed 0.17.0, alias SYNTHETIC)
 - OSV's flag counts where RustSec puts it, in `affected[].database_specific.informational`: sv-024 (tempdir RUSTSEC-2018-0017, per-affected unmaintained, summary only "deprecated": Watch); `unsound` there stays a vulnerability: sv-025 (smallvec RUSTSEC-2018-0018, per-affected unsound, fixed 0.6.13: Medium)
@@ -415,6 +421,56 @@ when absent), which tells a maintenance notice from a vulnerability.
 - An alias group is a notice only when EVERY record in it is: sv-027 (serde_yml GHSA-hhw4-xg65-fp2x, no class, summary "unsound and unmaintained", plus its alias RUSTSEC-2025-0068, class unsound: one vulnerability, `notices` 0, medium by the GHSA's own label)
 - The `nix` group (CVE-2021-45707: CVSS medium, label high, one unrated): high, its own: sv-014
 - A label that disagrees with the CVSS v3 band decides: sv-015 (label CRITICAL over 7.5), sv-016 (MODERATE under 7.3), sv-017 (LOW over 4.5)
+
+### Malware — one predicate (2026-11-15)
+
+`@4da/mcp-server` `src/live/malware.ts` (`isMalware` / `isMalwareRecord`,
+6.3.0) and `fourda_depengine::malware` (`is_malware`, and
+`osv::record_is_malware` over a whole record). A record is malware when ANY
+of these holds; each line is answered by the whole-record predicate:
+
+1. its id or an alias is a `MAL-` id, trimmed, any case: mw-003, mw-036,
+   mw-037; `MALWARE-NOTE` is not one: mw-039;
+2. CWE-506 in `database_specific.cwe_ids`, trimmed, any case: mw-001
+   (crossenv, by its CWE alone), mw-038; CWE-5060 is not it: mw-040;
+3. a `database_specific` block (the record's or any `affected[]` entry's)
+   carries RustSec's `categories: ["malicious"]` (mw-008 evm-units, mw-010
+   uniswap-utils) or the OpenSSF feed's `malicious-packages-origins`
+   (mw-041, mw-042); another block or category is not it: mw-043, mw-044;
+4. the summary, trimmed, lowercased and whitespace-collapsed, says the
+   package is or carries malware: it starts "(embedded) malware|malicious
+   <package|code|version|release|dependency|module|library|crate|gem|project>(s)
+   in|found in|introduced in|inserted in|published as " (mw-002, mw-005,
+   mw-006, mw-016, mw-019, mw-021, mw-022); it says contains, ships, bundles
+   or embeds (an) (hidden, obfuscated, embedded) malicious code, malware or a
+   backdoor (mw-004, mw-017, mw-018, mw-020), or "backdoored" (mw-047); or it was
+   removed from its registry for, because of, due to, over or as (containing)
+   malicious code, malware or being malicious (mw-009, the GHSA twin of
+   evm-units, by its title alone); or it contains, ships, bundles, embeds or
+   includes a (hidden, obfuscated, malicious, unauthorized) crypto-miner, or
+   names a "malicious crypto-miner" (mw-049 PYSEC-2024-154 ultralytics,
+   mw-050..mw-053; MCP pre-publish round 10, W14), but a bug in a mining tool,
+   an RCE "exploited to run crypto miners" or a miner detector is not
+   (mw-054..mw-058). `` is an ASCII word boundary.
+   NOT malware: a noun followed by scanner, scanning, scan, detection,
+   detector, analysis, analyser/analyzer, sandbox, signature(s), removal,
+   classifier or research is a tool (mw-023, mw-024, mw-025, mw-048); prose that
+   mentions malice (mw-012, mw-026..mw-029, mw-030, mw-035); the template is
+   anchored (mw-031, mw-034) and needs its space (mw-032); a bare "X is
+   malware" summary is not malware, the real crossenv record counts by its
+   CWE (mw-033, final-audit-625 decision 1);
+5. the details use a phrasing no ordinary advisory uses: "embedded malicious
+   code", "replaced with a malicious project|package|version|release",
+   "found|discovered|confirmed to contain|include|ship malicious code|malware|a
+   backdoor": mw-007 (PYSEC-2022-199, ctx, no summary), mw-045. Details that
+   say "inject malicious code" (mw-011) or a malicious payload are not.
+
+Real records that are not malware: mw-011..mw-015. The app's mirror
+(`osv_advisories`) keeps the id, aliases, CWE ids, summary and details, so
+`StoredAdvisory::is_malware` reads rules 1, 2, 4 and 5; rule 3 needs the
+record's `database_specific`, which the mirror does not store (of the 3,934
+pinned records only RUSTSEC-2026-0260, arrayref 0.3.10 "removed from
+crates.io due to a malicious dependency", is malware by rule 3 alone).
 
 ## `engines_skip.json` — the shrink-only gate
 
