@@ -289,8 +289,8 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         info!(target: "4da::osv", "No dependencies found — skipping OSV sync");
         return Ok(result);
     }
-    // D-4: the npm dependencies a vulnerable package's releases exact-pin or
-    // narrowly range (read from the registry facts) have their advisories
+    // D-4: the npm dependencies a vulnerable package's releases pin or range
+    // (read from the registry facts) have their advisories
     // mirrored too, so a fix target is judged by what it installs. They are
     // matched in the downloaded npm archive like every other name.
     let held_names = with_held_names(

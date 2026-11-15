@@ -185,7 +185,7 @@ fn a_raised_release_is_judged_for_what_it_holds() {
     let mut stored: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
     for p in stored.as_array_mut().into_iter().flatten() {
         if p["name"] == "express" {
-            p["held"] = json!({"read": true, "specs": {"4.22.3": {"cookie": "0.6.0"}}});
+            p["held"] = json!({"read": true, "rule": 2, "specs": {"4.22.3": {"cookie": "0.6.0"}}});
         }
     }
     db.set_kv("osv_registry_releases", &stored.to_string())

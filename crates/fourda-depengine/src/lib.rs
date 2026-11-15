@@ -29,8 +29,9 @@
 //! [`severity`]: the grade of an advisory its source never graded, read from
 //! its GHSA aliases (the rule `@4da/mcp-server` shares).
 //!
-//! [`held`]: an npm fix target judged by the dependencies it exact-pins or
-//! narrowly ranges (audit 6.2.5 D-4), over [`npm_range`]'s requirement reader.
+//! [`held`]: an npm fix target judged by the dependencies it pins or ranges,
+//! each range at its newest admitted release (audit 6.2.5 D-4, amended in
+//! pre-publish round 10), over [`npm_range`]'s requirement reader.
 //!
 //! C0.3 adds the lockfile readers, behind a host [`lockfile::FileSource`]:
 //! [`lockfile`] reads every dependency file of one directory (npm, pnpm,

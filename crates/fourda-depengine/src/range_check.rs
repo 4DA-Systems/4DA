@@ -23,8 +23,8 @@
 //!   release counts as affecting it (never read as clean) and is named in
 //!   `unconfirmed`.
 //! - The host's held-dependency verdicts (npm, audit 6.2.5 D-4: a release
-//!   whose exact-pinned or narrowly ranged dependency is affected, or could
-//!   not be judged) come in as `held_unsafe` and rule those releases out too.
+//!   whose exact-pinned or ranged dependency is affected at its newest
+//!   admitted release, or could not be judged) come in as `held_unsafe` and rule those releases out too.
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;

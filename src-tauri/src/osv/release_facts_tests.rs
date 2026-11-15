@@ -350,8 +350,9 @@ fn missing_facts_go_first_then_the_oldest_then_the_parents() {
 }
 
 /// Audit 6.2.5 D-4: a vulnerable npm package's document keeps what each
-/// stable release, from the lowest installed copy up, exact-pins or narrowly
-/// ranges; a lower copy installed since makes it due again.
+/// stable release, from the lowest installed copy up, holds (exact pins and
+/// every registry range, wide ones too since pre-publish round 10); a lower
+/// copy installed since makes it due again.
 #[test]
 fn npm_keeps_what_each_release_holds_from_the_installed_copy_up() {
     let doc = json!({"dist-tags": {"latest": "4.22.3"}, "versions": {
@@ -364,11 +365,17 @@ fn npm_keeps_what_each_release_holds_from_the_installed_copy_up() {
     assert!(held.read);
     assert_eq!(held.specs.keys().collect::<Vec<_>>(), ["4.20.0", "4.22.3"]);
     assert_eq!(
-        held.specs["4.20.0"].len(),
-        1,
-        "a wide caret and a dev dependency are not held"
+        held.specs["4.20.0"].keys().collect::<Vec<_>>(),
+        ["debug", "qs"],
+        "a wide caret is held; a dev dependency is not"
     );
     assert!(held.covers("4.20.0") && held.covers("4.22.0") && !held.covers("4.16.4"));
+    // Specs stored under the older rule lack the wide ranges: unread, so
+    // they are re-read rather than read as "holds nothing".
+    let old: HeldSpecs =
+        serde_json::from_value(json!({"read": true, "specs": {"4.20.0": {"qs": "6.11.0"}}}))
+            .unwrap_or_default();
+    assert!(old.read && old.is_unread() && !old.covers("4.20.0"));
 
     let now = Utc::now();
     let stored: HashMap<(String, String), StoredPackage> = [(
@@ -399,20 +406,24 @@ fn npm_keeps_what_each_release_holds_from_the_installed_copy_up() {
     );
 
     let (all, ranged) = held::held_names(&stored);
-    assert_eq!(all.into_iter().collect::<Vec<_>>(), ["qs"]);
+    assert_eq!(all.into_iter().collect::<Vec<_>>(), ["debug", "qs"]);
     assert_eq!(
         ranged.into_iter().collect::<Vec<_>>(),
-        ["qs"],
-        "qs ~6.16.0 is a narrow range"
+        ["debug", "qs"],
+        "debug ^2.6.9 (wide) and qs ~6.16.0 (narrow) are ranges: both documents are read"
     );
     assert!(
         held_wants(&stored, &Wants::new(), |_| false).is_empty(),
         "npm source off: no read"
     );
-    assert_eq!(held_wants(&stored, &Wants::new(), |_| true).len(), 1);
+    assert_eq!(held_wants(&stored, &Wants::new(), |_| true).len(), 2);
     // Review of #1039, S2: qs is also a vulnerable package round one wants
     // (held specs, parent requirements); round two must not re-read it bare.
     let mut first: Wants = BTreeMap::new();
     first.insert(("npm".into(), "QS".into()), floor("6.5.2"));
-    assert!(held_wants(&stored, &first, |_| true).is_empty());
+    let second: Vec<String> = held_wants(&stored, &first, |_| true)
+        .into_keys()
+        .map(|(_, name)| name)
+        .collect();
+    assert_eq!(second, ["debug"]);
 }

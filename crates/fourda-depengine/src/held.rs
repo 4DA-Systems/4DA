@@ -12,16 +12,27 @@
 //!
 //! So a release HOLDS a dependency (npm only; `dependencies` plus
 //! `optionalDependencies`, the optional spec winning a name clash; dev and
-//! peer dependencies are not read) when its spec is
+//! peer dependencies are not read) when its spec is a registry spec: a
+//! package name npm accepts and a plain version range ([`is_readable_npm_spec`];
+//! dist-tags, protocols, paths and URLs install nothing this can judge). It is
 //! - an exact pin: a bare version or `=version`, installed as written; or
-//! - a narrow range: one capped below the dependency's next major (`~1.2.3`,
-//!   `^0.1.2`, `1.2` / `1.2.x`, anything with a `<` bound, a hyphen range),
-//!   judged at the `latest` dist-tag when the range admits it, else at the
-//!   highest release it admits (withdrawn releases included, pre-releases only
-//!   when the spec names one).
+//! - a range, narrow (`~1.2.3`, `^0.1.2`) or wide (`^6.0.2`, `>=1`, `*`),
+//!   judged at its NEWEST ADMITTED release, what a fresh install or a lockfile
+//!   refresh resolves it to: the `latest` dist-tag when the range admits it,
+//!   else the highest release it admits (withdrawn releases included,
+//!   pre-releases only when the spec names one).
 //!
-//! A wide range (`^6.14.0`, `>=1`) is not held: a refresh can resolve it to
-//! the dependency's newest release on that major.
+//! An npm alias (`"es": "npm:event-stream@3.3.6"`) installs the aliased
+//! package and is judged as it (no spec after the name: `*`).
+//!
+//! Wide ranges were once left out (rule D-4, vector ft-086) on the premise
+//! that a refresh reaches a clean release. That holds only when one exists:
+//! mocha 10.6.0 to 10.8.2 require serialize-javascript `^6.0.2`, every 6.x is
+//! affected (GHSA-5c6j-r48x-rmvq, fixed 7.0.3), and 10.6.0 was named a clean
+//! target (pre-publish round 10). A wide range whose newest admitted release
+//! is clean brings nothing, so the old rule's intent stands wherever its
+//! premise does. A dependency whose releases cannot be read is NOT CHECKED,
+//! never clean.
 //!
 //! A held dependency is affected when any advisory that is not a maintenance
 //! notice covers its name at the judged version. The walk ([`judge_target`])
@@ -73,67 +84,98 @@ pub fn exact_pin_version(spec: &str) -> Option<String> {
         .map(|m| m.as_str().to_string())
 }
 
-/// A protocol (`npm:`, `git+https:`, `file:`), a path, an alias or a dist-tag:
-/// not a registry range this rule reads.
-fn not_a_range(s: &str) -> bool {
-    let mut chars = s.chars();
-    let first = chars.next();
-    let protocol = first.is_some_and(|c| c.is_ascii_alphabetic()) && {
-        let head: String = s
-            .chars()
-            .take_while(|c| c.is_ascii_alphabetic() || *c == '+')
-            .collect();
-        s[head.len()..].starts_with(':')
-    };
-    // A leading letter is a tag (`latest`, `next`), unless it is `v<digit>`.
-    let tag = first.is_some_and(|c| c.is_ascii_alphabetic())
-        && !(first.is_some_and(|c| c.eq_ignore_ascii_case(&'v'))
-            && chars.next().is_some_and(|c| c.is_ascii_digit()));
-    protocol || s.contains('/') || tag
+/// npm's package-name grammar (validate-npm-package-name, legacy capitals
+/// included), at most 214 characters: the MCP's `isNpmPackageName`.
+pub fn is_npm_package_name(name: &str) -> bool {
+    static NAME: OnceLock<Option<Regex>> = OnceLock::new();
+    !name.is_empty()
+        && name.len() <= 214
+        && matches(
+            &NAME,
+            r"(?i)^(?:@[a-z0-9~][a-z0-9._~-]*/)?[a-z0-9~][a-z0-9._~-]*$",
+            name,
+        )
 }
 
-/// Whether an npm range is capped below its dependency's next major: it
-/// starts with `~`; it is a caret or bare range on `0.`; it is `x.y`,
-/// `x.y.x` or `x.y.*`; it has a `<` bound; or it is a hyphen range. Never an
-/// exact pin, a union (`||`), a protocol, path, alias or tag.
-pub fn is_narrow_range(spec: &str) -> bool {
-    static ZERO: OnceLock<Option<Regex>> = OnceLock::new();
-    static MINOR: OnceLock<Option<Regex>> = OnceLock::new();
-    static HYPHEN: OnceLock<Option<Regex>> = OnceLock::new();
+/// Whether a spec is a plain npm version range (comparators, `-` and `||`
+/// only), at most 80 characters: the MCP's `isReadableNpmSpec`. A dist-tag,
+/// protocol, path, URL or prose names no range a registry install resolves.
+pub fn is_readable_npm_spec(spec: &str) -> bool {
+    static TOKEN: OnceLock<Option<Regex>> = OnceLock::new();
+    static OP_SPACE: OnceLock<Option<Regex>> = OnceLock::new();
     let s = spec.trim();
-    if s.is_empty() || s.contains("||") || exact_pin_version(s).is_some() || not_a_range(s) {
+    if s.is_empty() || s.len() > 80 {
         return false;
     }
-    s.starts_with('~')
-        || matches(&ZERO, r"^\^?\s*v?0\.", s)
-        || matches(&MINOR, r"^v?\d+\.\d+(?:\.[xX*])?$", s)
-        || s.contains('<')
-        || matches(&HYPHEN, r"^\S+\s+-\s+\S+$", s)
+    let Some(op_space) = pattern(&OP_SPACE, r"([<>=~^])\s+") else {
+        return false;
+    };
+    let joined = op_space.replace_all(s, "$1");
+    joined.split_whitespace().all(|t| {
+        t == "-"
+            || t == "||"
+            || matches(
+                &TOKEN,
+                r"^(?:[~^]|[<>]=?|=)?v?(?:\d+|[xX*])(?:\.(?:\d+|[xX*])){0,2}(?:-[0-9A-Za-z.-]{1,40})?(?:\+[0-9A-Za-z.-]{1,40})?$",
+                t,
+            )
+    })
 }
 
-/// A release's held specs: its exact pins and narrow ranges from
-/// `dependencies` and `optionalDependencies` (npm installs both; the optional
-/// spec wins a name clash, as npm reads it). Non-string specs are skipped.
+/// The package and spec an npm alias installs: `npm:event-stream@3.3.6` ->
+/// (`event-stream`, `3.3.6`), `npm:@scope/x` -> (`@scope/x`, `*`). `None`
+/// for anything that is not an alias (the MCP's `npmAliasTarget`).
+pub fn npm_alias_target(spec: &str) -> Option<(String, String)> {
+    static ALIAS: OnceLock<Option<Regex>> = OnceLock::new();
+    let re = pattern(&ALIAS, r"^npm:((?:@[^/@\s]+/)?[^/@\s]+)(?:@(.*))?$")?;
+    let c = re.captures(spec.trim())?;
+    let name = c.get(1)?.as_str().to_string();
+    let range = c.get(2).map(|m| m.as_str().trim()).unwrap_or_default();
+    Some((name, if range.is_empty() { "*" } else { range }.to_string()))
+}
+
+/// A release's held specs from `dependencies` and `optionalDependencies` (npm
+/// installs both; the optional spec wins a name clash, as npm reads it):
+/// every registry spec, exact or a range of any width, keyed by the package
+/// it installs (an alias by its target). Non-string specs, names npm would
+/// not accept and specs that are not plain ranges are skipped. An alias and a
+/// plain entry on one package both install: one spec is kept, an exact pin
+/// winning over a range (a pin is what a refresh can never move off an
+/// affected copy), else the first read (the MCP keeps the document's order;
+/// `serde_json` here reads keys in name order).
 pub fn held_specs_of(
     dependencies: Option<&serde_json::Value>,
     optional: Option<&serde_json::Value>,
 ) -> BTreeMap<String, String> {
-    let mut merged: BTreeMap<String, &serde_json::Value> = BTreeMap::new();
+    let mut merged: Vec<(&String, &serde_json::Value)> = Vec::new();
     for section in [dependencies, optional].into_iter().flatten() {
-        if let Some(map) = section.as_object() {
-            for (name, spec) in map {
-                merged.insert(name.clone(), spec);
+        for (key, spec) in section.as_object().into_iter().flatten() {
+            match merged.iter_mut().find(|(k, _)| *k == key) {
+                Some(slot) => slot.1 = spec,
+                None => merged.push((key, spec)),
             }
         }
     }
-    merged
-        .into_iter()
-        .filter_map(|(name, spec)| spec.as_str().map(|s| (name, s.trim().to_string())))
-        .filter(|(_, spec)| exact_pin_version(spec).is_some() || is_narrow_range(spec))
-        .collect()
+    let mut out: BTreeMap<String, String> = BTreeMap::new();
+    for (key, raw) in merged {
+        let Some(raw) = raw.as_str() else { continue };
+        let (name, spec) = npm_alias_target(raw).unwrap_or_else(|| (key.clone(), raw.to_string()));
+        if !is_npm_package_name(key) || !is_npm_package_name(&name) || !is_readable_npm_spec(&spec)
+        {
+            continue;
+        }
+        let spec = spec.trim().to_string();
+        let replace = out.get(&name).is_none_or(|have| {
+            exact_pin_version(&spec).is_some() && exact_pin_version(have).is_none()
+        });
+        if replace {
+            out.insert(name, spec);
+        }
+    }
+    out
 }
 
-/// What the registry says about a held dependency a narrow range names.
+/// What the registry says about a held dependency a range names.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HeldFacts {
     /// Every release the registry lists, withdrawn ones included.
@@ -154,8 +196,8 @@ fn compare(a: &str, b: &str) -> Option<Ordering> {
     npm_version(a)?.compare(&npm_version(b)?)
 }
 
-/// The release an install of `spec` gets: the pin, else (a narrow range,
-/// from `facts`) `latest` when the range admits it, else the highest release
+/// The release an install of `spec` gets: the pin, else (a range of any
+/// width, from `facts`) `latest` when the range admits it, else the highest release
 /// it admits (withdrawn included; pre-releases only when the spec has `-`).
 /// `None` when it cannot be said.
 pub fn judged_version(spec: &str, facts: Option<&HeldFacts>) -> Option<String> {
@@ -318,7 +360,7 @@ pub struct HeldDependency {
     pub name: String,
     /// The release's own spec for it, as published.
     pub spec: String,
-    /// An exact pin; `false` for a narrow range.
+    /// An exact pin; `false` for a range (narrow or wide).
     pub exact: bool,
     /// What an install of the release gets.
     pub version: String,
@@ -337,14 +379,14 @@ pub enum HeldCheck {
 
 /// What the host reads for the rule.
 pub trait HeldSources {
-    /// The registry facts of a dependency a narrow range names; `None` when
-    /// they were not read.
+    /// The registry facts of a dependency a range names; `None` when they
+    /// were not read.
     fn facts(&self, name: &str) -> Option<HeldFacts>;
     /// The advisories (one id per alias group, maintenance notices left out)
     /// that affect `name` at `version`; `None` when that package's advisories
     /// cannot be read.
     fn affected(&self, name: &str, version: &str) -> Option<Vec<String>>;
-    /// The release an install of the narrow range `spec` on `name` gets
+    /// The release an install of the range `spec` on `name` gets
     /// ([`judged_version`] over [`HeldSources::facts`]). A host judging many
     /// releases memoizes it per (name, spec).
     fn judged(&self, name: &str, spec: &str) -> Option<String> {
@@ -513,7 +555,7 @@ fn and(parts: &[String]) -> String {
 }
 
 /// "4.20.0 exact-pins qs 6.11.0 (GHSA-a) and cookie 0.6.0 (GHSA-c)", and for a
-/// narrow range "4.22.0 requires qs \"~6.14.0\", whose newest admitted release
+/// range "4.22.0 requires qs \"~6.14.0\", whose newest admitted release
 /// 6.14.2 is affected (GHSA-d)". At most three dependencies are named.
 pub fn held_text(release: &str, affected: &[HeldDependency]) -> String {
     let shown = &affected[..affected.len().min(3)];
