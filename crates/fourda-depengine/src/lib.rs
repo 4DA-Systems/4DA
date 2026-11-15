@@ -22,7 +22,9 @@
 //! - [`exposure`]: the same check for one advisory (the scorer's verdict);
 //! - [`lines`]: the per-project, per-release-line upgrade targets;
 //! - [`malware`]: whether an advisory is a malicious-package record (`MAL-`
-//!   id or alias, CWE-506, or GitHub's anchored malware title template);
+//!   id or alias, CWE-506, RustSec / OpenSSF malicious flags, or a title or
+//!   details that say so; the MCP's `isMalware`, held to the shared
+//!   `malware.jsonl` vectors);
 //! - [`registry`]: the registry's releases and the ones it withdrew (yanked
 //!   or deprecated), which no target may name.
 //!
@@ -80,7 +82,7 @@ pub mod registry;
 pub mod severity;
 pub mod version_order;
 
-pub use malware::is_malware;
+pub use malware::{is_malware, is_malware_with, says_malware, MalwareExtra};
 
 #[cfg(target_arch = "wasm32")]
 mod wasm;

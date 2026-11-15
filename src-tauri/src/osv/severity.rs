@@ -456,8 +456,9 @@ pub fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
 /// discounts for vulnerabilities. Malware is the ONE shared predicate,
 /// `fourda_depengine::is_malware` (via `MatchedAdvisory::is_malware`): a
 /// `MAL-` id or alias, CWE-506 in `database_specific.cwe_ids` (crossenv
-/// GHSA-c2m4-w5hm-vqjw has no MAL alias), or GitHub's malware title
-/// ("Malicious Package in …", GHSA-28f8-hqmc-7ph8).
+/// GHSA-c2m4-w5hm-vqjw has no MAL alias), or a title or details that say the
+/// package is or carries malware ("Malicious Package in …",
+/// GHSA-28f8-hqmc-7ph8; "Malware in ctx", GHSA-4g82-3jcr-q52w).
 pub fn contains_malware(group: &[&MatchedAdvisory]) -> bool {
     group.iter().any(|m| m.is_malware())
 }

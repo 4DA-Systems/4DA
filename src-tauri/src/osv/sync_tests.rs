@@ -279,3 +279,52 @@ fn a_pre_migration_row_gets_its_cwe_ids_on_the_next_sync() {
     assert_eq!(stored()[0].cwe_ids, ["CWE-506"]);
     assert!(stored()[0].is_malware());
 }
+
+/// A mirror row reads as malware by the rules `@4da/mcp-server`'s scan
+/// applies to the same record (`fourda_depengine::is_malware_with`;
+/// vectors mw-005, mw-007, mw-011): GHSA-4g82-3jcr-q52w by its title
+/// ("Malware in ctx": CWE-912, no `MAL-` id), PYSEC-2022-199 by its details
+/// alone (no summary). An XSS advisory whose details say "inject malicious
+/// code" is not malware. Records as api.osv.dev served them on 2026-11-14,
+/// details cut to the sentence the rule reads.
+#[test]
+fn a_stored_row_reads_as_malware_by_its_title_or_details() {
+    let db = crate::test_utils::test_db();
+    let window = serde_json::json!([{"type": "ECOSYSTEM", "events": [{"introduced": "0"}]}]);
+    let records = [
+        serde_json::json!({
+            "id": "GHSA-4g82-3jcr-q52w",
+            "summary": "Malware in ctx",
+            "details": "The `ctx` hosted project on PyPI was taken over via user account compromise.",
+            "affected": [{"package": {"ecosystem": "PyPI", "name": "ctx"}, "ranges": window}],
+            "database_specific": {"cwe_ids": ["CWE-912"], "severity": "CRITICAL"}
+        }),
+        serde_json::json!({
+            "id": "PYSEC-2022-199",
+            "details": "The ctx hosted project on PyPI was taken over via user account compromise and replaced with a malicious project which contained runtime code which collected the content of os.environ.items() when instantiating Ctx objects.",
+            "aliases": ["GSD-2022-1002521"],
+            "affected": [{"package": {"ecosystem": "PyPI", "name": "ctx"}, "ranges": window}]
+        }),
+        serde_json::json!({
+            "id": "GHSA-76p7-773f-r4q5",
+            "summary": "Cross-site Scripting (XSS) in serialize-javascript",
+            "details": "This can allow an attacker to inject malicious code into the serialized output.",
+            "aliases": ["CVE-2024-11831"],
+            "affected": [{"package": {"ecosystem": "npm", "name": "serialize-javascript"}, "ranges": window}],
+            "database_specific": {"cwe_ids": ["CWE-79"], "severity": "MODERATE"}
+        }),
+    ];
+    let mut seen = std::collections::HashSet::new();
+    for record in records {
+        let vuln: Vulnerability = serde_json::from_value(record).unwrap();
+        store_vulnerability(&db, &vuln, &mut seen).unwrap();
+    }
+    let ctx = db.get_osv_advisories_for_package("ctx", "PyPI").unwrap();
+    assert_eq!(ctx.len(), 2);
+    assert!(ctx.iter().all(|row| row.is_malware()), "{ctx:?}");
+    let xss = db
+        .get_osv_advisories_for_package("serialize-javascript", "npm")
+        .unwrap();
+    assert_eq!(xss.len(), 1);
+    assert!(!xss[0].is_malware());
+}

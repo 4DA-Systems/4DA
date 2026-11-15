@@ -47,7 +47,7 @@ use super::types::{MatchedAdvisory, StoredAdvisory, Vulnerability};
 /// same change that removes entries; it may never rise.
 const RUST_SKIP_BASELINE: usize = 0;
 
-const FILES: [&str; 9] = [
+const FILES: [&str; 10] = [
     "version_order",
     "osv_range",
     "fix_target",
@@ -57,6 +57,7 @@ const FILES: [&str; 9] = [
     "holding",
     "parent_release",
     "severity",
+    "malware",
 ];
 
 fn conformance_dir() -> PathBuf {
@@ -687,6 +688,26 @@ fn check_severity(v: &Value) -> Result<(), String> {
     }
 }
 
+/// `malware`: whether one OSV record is a malicious-package record, by the
+/// engine's whole-record predicate (`fourda_depengine::osv::record_is_malware`,
+/// the MCP's `isMalwareRecord`). The mirror's rows read the same rule minus
+/// the `database_specific` flags (`StoredAdvisory::is_malware`).
+fn check_malware(v: &Value) -> Result<(), String> {
+    let want = v
+        .get("malware")
+        .and_then(Value::as_bool)
+        .ok_or("no boolean `malware`")?;
+    let record: fourda_depengine::osv::OsvRecord =
+        serde_json::from_value(v.get("record").cloned().unwrap_or_default())
+            .map_err(|e| format!("record: {e}"))?;
+    let got = fourda_depengine::osv::record_is_malware(&record);
+    if got == want {
+        Ok(())
+    } else {
+        Err(format!("malware: got {got}, want {want}"))
+    }
+}
+
 /// The MCP's `range_check` (`dependency_check` given a constraint), now the
 /// engine's (`fourda_depengine::range_check`, C0.5): the line's pinned
 /// records stored as the mirror stores them, the package's rows, and the
@@ -767,6 +788,7 @@ fn rule_vectors_hold_and_the_skip_list_only_shrinks() {
                 "osv_range" => check_osv_range(v, &mut records),
                 "holding" => check_holding(v),
                 "severity" => check_severity(v),
+                "malware" => check_malware(v),
                 "fix_target" => check_fix_target(v, &mut records),
                 "refresh_verdict" => check_refresh_verdict(v),
                 "fix_command" => check_fix_command(v),

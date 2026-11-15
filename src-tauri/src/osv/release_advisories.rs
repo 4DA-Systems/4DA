@@ -61,8 +61,9 @@ pub(crate) struct AdvisoryWindow {
 
 impl AdvisoryWindow {
     /// A malicious-package record (`fourda_depengine::is_malware`: an OSV
-    /// `MAL-` id or alias, CWE-506, or GitHub's anchored malware title
-    /// template "Malicious Package in " / "Malicious code in ").
+    /// `MAL-` id or alias, CWE-506, or a summary that says the package is or
+    /// carries malware: "Malicious Package in ", "Malware in ", "contains
+    /// malware", "removed from crates.io for malicious code", ...).
     pub(crate) fn is_malware(&self) -> bool {
         fourda_depengine::is_malware(
             &self.advisory_id,

@@ -116,6 +116,9 @@ pub struct OsvRecord {
     /// For the malware and maintenance-notice classifications only.
     #[serde(default)]
     pub summary: Option<String>,
+    /// For the malware classification only ([`record_is_malware`]).
+    #[serde(default)]
+    pub details: Option<String>,
     #[serde(default)]
     pub database_specific: Option<serde_json::Value>,
     #[serde(default)]
@@ -138,7 +141,7 @@ pub struct AdvisoryRecord {
     /// Every `fixed` event, as a stored JSON array ([`fixed_versions_json`]).
     #[serde(default)]
     pub fixed_versions: Option<String>,
-    /// A malicious-package record ([`crate::is_malware`]): a release it
+    /// A malicious-package record ([`record_is_malware`]): a release it
     /// affects is never a fix target.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub malware: bool,
@@ -277,8 +280,11 @@ pub fn stored_records(record: &OsvRecord) -> Vec<AdvisoryRecord> {
         .collect()
 }
 
-/// [`crate::is_malware`] over a verbatim record.
-fn record_is_malware(record: &OsvRecord) -> bool {
+/// THE malware predicate over a verbatim record
+/// ([`crate::malware::is_malware_with`], the MCP's `isMalwareRecord`): its
+/// id, aliases, `database_specific.cwe_ids`, summary and details, and the
+/// `database_specific` flags of the record and of every `affected[]` entry.
+pub fn record_is_malware(record: &OsvRecord) -> bool {
     let cwe_ids: Vec<String> = record
         .database_specific
         .as_ref()
@@ -288,11 +294,26 @@ fn record_is_malware(record: &OsvRecord) -> bool {
         .flatten()
         .filter_map(|c| c.as_str().map(str::to_string))
         .collect();
-    crate::is_malware(
+    let blocks: Vec<&serde_json::Value> = record
+        .database_specific
+        .iter()
+        .chain(
+            record
+                .affected
+                .iter()
+                .flatten()
+                .filter_map(|a| a.database_specific.as_ref()),
+        )
+        .collect();
+    crate::malware::is_malware_with(
         &record.id,
         record.aliases.as_deref().unwrap_or(&[]),
         &cwe_ids,
         record.summary.as_deref().unwrap_or(""),
+        &crate::malware::MalwareExtra {
+            details: record.details.as_deref().unwrap_or(""),
+            database_specific: &blocks,
+        },
     )
 }
 
