@@ -176,9 +176,9 @@ fn batch_ids(parsed: OsvBatchResponse, queries: usize) -> SourceResult<Vec<Vec<S
         .into_iter()
         .enumerate()
         .map(|(index, result)| match result.vulns {
-            None => Ok(Vec::new()),
-            Some(Some(vulns)) => Ok(vulns.into_iter().map(|v| v.id).collect()),
-            Some(None) => Err(SourceError::Parse(format!(
+            BatchVulns::Absent => Ok(Vec::new()),
+            BatchVulns::Listed(vulns) => Ok(vulns.into_iter().map(|v| v.id).collect()),
+            BatchVulns::Null => Err(SourceError::Parse(format!(
                 "OSV querybatch: result {index} carries `vulns: null`"
             ))),
         })

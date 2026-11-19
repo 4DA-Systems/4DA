@@ -26,6 +26,8 @@ pub(super) struct OsvPackage {
     pub ecosystem: String,
 }
 
+/// `/v1/query`'s answer; only the parsing tests read it.
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 pub(super) struct OsvQueryResponse {
     pub vulns: Option<Vec<OsvVulnerability>>,
@@ -36,23 +38,36 @@ pub(super) struct OsvBatchResponse {
     pub results: Option<Vec<OsvBatchResult>>,
 }
 
-/// One result of `/v1/querybatch`, in query order. OSV leaves `vulns` out
-/// when no advisory affects that query; a `vulns` that is present and `null`
-/// is not that answer (`Some(None)` here), and is read as malformed.
+/// One result of `/v1/querybatch`, in query order.
 #[derive(Debug, Deserialize)]
 pub(super) struct OsvBatchResult {
-    #[serde(default, deserialize_with = "present_or_null")]
-    pub vulns: Option<Option<Vec<OsvVulnerability>>>,
+    #[serde(default, deserialize_with = "batch_vulns")]
+    pub vulns: BatchVulns,
 }
 
-/// A field that is present (`Some`), with its value or `null` (`Some(None)`);
-/// `#[serde(default)]` makes an absent one `None`.
-fn present_or_null<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+/// What one querybatch result says. OSV leaves `vulns` out when no advisory
+/// affects that query ([`BatchVulns::Absent`]); a `vulns` that is present
+/// and `null` is not that answer, and is read as malformed.
+#[derive(Debug, Default)]
+pub(super) enum BatchVulns {
+    #[default]
+    Absent,
+    Null,
+    Listed(Vec<OsvVulnerability>),
+}
+
+/// A present `vulns` field: its list, or `null` (an absent one is
+/// [`BatchVulns::Absent`] through `#[serde(default)]`).
+fn batch_vulns<'de, D>(deserializer: D) -> Result<BatchVulns, D::Error>
 where
     D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
 {
-    Option::<T>::deserialize(deserializer).map(Some)
+    Ok(
+        match Option::<Vec<OsvVulnerability>>::deserialize(deserializer)? {
+            Some(list) => BatchVulns::Listed(list),
+            None => BatchVulns::Null,
+        },
+    )
 }
 
 #[derive(Debug, Deserialize)]

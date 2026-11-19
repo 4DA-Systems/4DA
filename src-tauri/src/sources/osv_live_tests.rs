@@ -61,7 +61,7 @@ fn a_batch_answer_that_cannot_be_attributed_is_an_error_not_clean() {
     for short in [
         r#"{"results":[{"vulns":[{"id":"A"}]},{}]}"#,
         r#"{"results":[]}"#,
-        r#"{}"#,
+        "{}",
     ] {
         assert!(batch_ids(batch(short), 3).is_err(), "{short}");
     }
