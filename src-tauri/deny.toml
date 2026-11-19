@@ -103,6 +103,16 @@ ignore = [
     { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() symlink escape: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-12
     { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() permissions via symlink: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-12
     { id = "RUSTSEC-2026-0429", reason = "zip <9 extract() abort on a large symlink entry: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-12
+    # Four more zip <9 advisories (added to RustSec 2026-11-17), same single copy:
+    # docx-rs 0.4.22 (newest release) requires zip ^8.6 with only the `deflate`
+    # feature and reads entries with ZipArchive::new + by_name. Checked 2026-11-19
+    # against docx-rs 0.4.22's source and src-tauri/Cargo.lock (zip 8.6.0 links no
+    # aes/hmac/pbkdf2 and no bitstream-io, so neither feature below is compiled).
+    # Full note in .cargo/audit.toml. REVISIT: drop when docx-rs moves to zip >=9.0.5.
+    { id = "RUSTSEC-2026-0545", reason = "zip <9 AES auth code skipped: needs the aes-crypto feature and a password read; zip 8.6 under docx-rs is built without aes-crypto and docx-rs reads with by_name" }, # REVISIT BY 2027-02-19
+    { id = "RUSTSEC-2026-0546", reason = "zip <9 extract() chained symlink escape: docx-rs (zip 8.6) never calls extract()" }, # REVISIT BY 2027-02-19
+    { id = "RUSTSEC-2026-0547", reason = "zip <9 legacy Shrink/Reduce/Implode preallocation: needs the legacy-zip feature, which zip 8.6 under docx-rs is built without" }, # REVISIT BY 2027-02-19
+    { id = "RUSTSEC-2026-0548", reason = "zip <9.0.5 ZipStreamReader local-header names: docx-rs (zip 8.6) reads through ZipArchive only, never ZipStreamReader" }, # REVISIT BY 2027-02-19
     # crypto-bigint 0.5.5 (no fix): full note in .cargo/audit.toml. REVISIT when jsonwebtoken moves to p256 0.14.
     { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing: only via optional enterprise jsonwebtoken, used to verify public ES256/ES384 signatures; 0.7 copy bumped to 0.7.10" }, # REVISIT BY 2027-02-12
 
@@ -154,6 +164,20 @@ ignore = [
     # font/glyph handling (render/OCR), no network input; maintenance flag only.
     # -----------------------------------------------------------------------
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained; local font/glyph parsing only, no network input" }, # REVISIT BY 2027-05-12
+
+    # -----------------------------------------------------------------------
+    # chrono unmaintained (RUSTSEC-2026-0543, added to RustSec 2026-11-17).
+    # A maintenance flag, not a vulnerability: every version is "affected" and
+    # there is no release to move to ("No safe upgrade is available"). It is an
+    # error here only because chrono is a direct dependency (unmaintained =
+    # "workspace"). Leaving it is not a one-PR change: the app uses chrono for its
+    # timestamps throughout, and lopdf, rmcp, schemars and victauri pull it in
+    # transitively too, so dropping the direct dependency would not remove it.
+    # cargo audit reports it as a warning only, so .cargo/audit.toml needs no entry.
+    # REVISIT: migrate to jiff or time (the advisory's suggested replacements),
+    # then drop this entry; transitive copies are covered by "workspace" scope.
+    # -----------------------------------------------------------------------
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no maintained release exists; direct dependency used throughout the app and also pulled by lopdf/rmcp/schemars/victauri; maintenance flag, no known vulnerability" }, # REVISIT BY 2027-05-19
 ]
 
 # ============================================================================
