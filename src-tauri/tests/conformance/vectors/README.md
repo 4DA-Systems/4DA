@@ -429,6 +429,8 @@ when absent), which tells a maintenance notice from a vulnerability.
 - An alias group is a notice only when EVERY record in it is: sv-027 (serde_yml GHSA-hhw4-xg65-fp2x, no class, summary "unsound and unmaintained", plus its alias RUSTSEC-2025-0068, class unsound: one vulnerability, `notices` 0, medium by the GHSA's own label)
 - The `nix` group (CVE-2021-45707: CVSS medium, label high, one unrated): high, its own: sv-014
 - A label that disagrees with the CVSS v3 band decides: sv-015 (label CRITICAL over 7.5), sv-016 (MODERATE under 7.3), sv-017 (LOW over 4.5)
+- With no label, the HIGHEST valid CVSS score among every severity entry grades the record (audit 2026-11-19, S2; `fourda_depengine::severity::highest_cvss`, the MCP's `extractCvssScore`): a v3 vector that scores 0.0 never hides a v4 vector that scores, sv-035 (PYSEC-2026-1943, starlette: v3 0.0 beside v4 8.7, high; the app graded it low); nor does an unreadable one, sv-036; a v4 9.3 beats a v3 7.5, sv-037; 0.0 alone is no grade (Medium, never low), sv-038; the label still decides first, sv-039; an entry with no score string is passed over, the record still read, sv-040
+- The CVSS v3.1 rating scale's edges, both engines (`cvss_tier`; the MCP mutant S05 read 9.0 as high): 9.0 critical, 8.9 high, 7.0 high, 6.9 medium, 4.0 medium, 3.9 low: sv-041..sv-046
 
 ### Malware — one predicate (2026-11-15)
 

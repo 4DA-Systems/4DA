@@ -52,6 +52,8 @@ pub(super) struct OsvVulnerability {
 pub(super) struct OsvSeverity {
     #[serde(rename = "type")]
     pub severity_type: String,
+    /// Empty when the entry carries none (passed over, the record still read).
+    #[serde(default)]
     pub score: String,
 }
 

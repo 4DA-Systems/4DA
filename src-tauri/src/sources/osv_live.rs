@@ -368,25 +368,20 @@ fn fixed_version_for(vuln: &OsvVulnerability, package: &str, ecosystem: &str) ->
     None
 }
 
-/// Prefer CVSS_V3 severity, then CVSS_V4 (Y6); return (severity_type,
-/// numeric_score). The score is usually a VECTOR, so it goes through the one
-/// parser (a bare `parse::<f64>` read every vector as no score).
+/// (severity_type, numeric_score) of a live record, by the mirror's rule
+/// (`osv::types::Vulnerability::best_cvss`): the HIGHEST valid score among
+/// its severity entries, never the v3 entry because it comes first. The
+/// score is usually a VECTOR, so it goes through the one parser (a bare
+/// `parse::<f64>` read every vector as no score).
 fn best_severity(vuln: &OsvVulnerability) -> (Option<String>, Option<f64>) {
-    let Some(severities) = &vuln.severity else {
-        return (None, None);
-    };
-    let chosen = severities
-        .iter()
-        .find(|s| s.severity_type == "CVSS_V3")
-        .or_else(|| severities.iter().find(|s| s.severity_type == "CVSS_V4"))
-        .or_else(|| severities.first());
-    match chosen {
-        Some(s) => (
-            Some(s.severity_type.clone()),
+    let entries = vuln.severity.iter().flatten().map(|s| {
+        (
+            s.severity_type.as_str(),
             crate::scoring::cvss::parse_cvss_score(&s.score),
-        ),
-        None => (None, None),
-    }
+        )
+    });
+    let (kind, score) = fourda_depengine::severity::highest_cvss(entries);
+    (kind.map(str::to_string), score)
 }
 
 /// Merge an advisory's affected ranges by (package, ecosystem). An advisory can list the SAME
@@ -521,6 +516,48 @@ mod tests {
                 serde_json::json!({ "fixed": fixed }),
             ]),
         }
+    }
+
+    /// The live path grades as the mirror does: the highest valid CVSS
+    /// score (PYSEC-2026-1943's v3 0.0 beside a v4 8.7; a v3 7.5 beside a v4
+    /// 9.3), not the v3 entry because it comes first.
+    #[test]
+    fn best_severity_is_the_highest_valid_score() {
+        let with = |entries: &[(&str, &str)]| {
+            let mut v = vuln_with(Vec::new());
+            v.severity = Some(
+                entries
+                    .iter()
+                    .map(|(kind, score)| OsvSeverity {
+                        severity_type: (*kind).to_string(),
+                        score: (*score).to_string(),
+                    })
+                    .collect(),
+            );
+            best_severity(&v)
+        };
+        let v3_none = ("CVSS_V3", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N");
+        let v4_high = (
+            "CVSS_V4",
+            "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+        );
+        let (kind, score) = with(&[v3_none, v4_high]);
+        assert_eq!(kind.as_deref(), Some("CVSS_V4"));
+        assert!(score.is_some_and(|s| (s - 8.7).abs() < 1e-9), "{score:?}");
+        let (kind, score) = with(&[
+            ("CVSS_V3", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"),
+            (
+                "CVSS_V4",
+                "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+            ),
+        ]);
+        assert_eq!(kind.as_deref(), Some("CVSS_V4"));
+        assert!(score.is_some_and(|s| (s - 9.3).abs() < 1e-9), "{score:?}");
+        // A record whose entry has no score string still parses.
+        let parsed: OsvVulnerability =
+            serde_json::from_str(r#"{"id":"PYSEC-2099-3","severity":[{"type":"CVSS_V3"}]}"#)
+                .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(best_severity(&parsed), (Some("CVSS_V3".to_string()), None));
     }
 
     #[test]
