@@ -102,7 +102,8 @@ dirs = "7"
 async-trait = "0.1"
 
 # Email delivery (digest emails via user's SMTP)
-lettre = { version = "0.11.22", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport", "hostname"] }
+# >=0.11.24: RUSTSEC-2026-0560..0565 (STARTTLS reply injection, SMTP dot-stuffing, panics, unbounded reply buffer)
+lettre = { version = "0.11.24", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport", "hostname"] }
 
 # Base64 encoding/decoding (for GitHub README)
 base64 = "0.23"
