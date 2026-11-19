@@ -95,9 +95,19 @@ fn go_range(constraint: &str) -> String {
 /// PEP 440 version specifiers: comma-separated clauses of `==`, `!=` (both
 /// with an optional `.*` prefix match), `>=`, `<=`, `>`, `<`, `~=` and
 /// `===`, all of which must hold. `None` when a clause or the version is
-/// unreadable. Local labels take no part in a comparison.
+/// unreadable. A candidate's local label takes no part in a comparison,
+/// except against an `==` / `!=` specifier that carries one (then it is
+/// exact) and in `>V`, which never admits a local version of V.
+///
+/// The exclusive comparisons are pip's (pypa/packaging `Specifier`): `>V`
+/// leaves out a post-release of V unless V is itself one (`>2023.3` does
+/// not admit 2023.3.post1), and `<V` leaves out a pre-release of V unless V
+/// is itself one (`<2.0` does not admit 2.0rc1). Read as plain comparisons,
+/// `>2023.3,<2023.4` on pytz named 2023.3.post1 its safe release, where pip
+/// admits nothing (the `@4da/mcp-server` audit of 2026-11-19, R6).
 pub fn pep440_spec_admits(spec: &str, version: &str) -> Option<bool> {
-    let v = without_local(parse_pep440(version)?);
+    let full = parse_pep440(version)?;
+    let v = without_local(full.clone());
     let clauses: Vec<&str> = spec
         .split(',')
         .map(str::trim)
@@ -108,14 +118,28 @@ pub fn pep440_spec_admits(spec: &str, version: &str) -> Option<bool> {
     }
     let mut admitted = true;
     for clause in clauses {
-        admitted &= clause_admits(clause, &v, version)?;
+        admitted &= clause_admits(clause, &v, &full, version)?;
     }
     Some(admitted)
 }
 
+/// The same epoch and release numbers (missing parts read as 0): packaging's
+/// `base_version` equality.
+fn same_base(a: &Pep440, b: &Pep440) -> bool {
+    let len = a.release.len().max(b.release.len());
+    let part = |v: &Pep440, i: usize| v.release.get(i).copied().unwrap_or(0);
+    a.epoch == b.epoch && (0..len).all(|i| part(a, i) == part(b, i))
+}
+
+/// A pre-release in packaging's sense: a pre or a dev segment.
+fn is_pre(v: &Pep440) -> bool {
+    v.pre.is_some() || v.dev.is_some()
+}
+
 /// One specifier clause. Every clause is read even after one fails, so an
-/// unreadable clause anywhere makes the whole specifier unreadable.
-fn clause_admits(clause: &str, v: &Pep440, raw_version: &str) -> Option<bool> {
+/// unreadable clause anywhere makes the whole specifier unreadable. `v` is
+/// the candidate without its local label, `full` with it.
+fn clause_admits(clause: &str, v: &Pep440, full: &Pep440, raw_version: &str) -> Option<bool> {
     let op_len = clause
         .find(|c: char| !matches!(c, '=' | '!' | '~' | '<' | '>'))
         .unwrap_or(clause.len());
@@ -130,7 +154,8 @@ fn clause_admits(clause: &str, v: &Pep440, raw_version: &str) -> Option<bool> {
         Some(t) => (t, true),
         None => (target, false),
     };
-    let t = without_local(parse_pep440(target)?);
+    let target_full = parse_pep440(target)?;
+    let t = without_local(target_full.clone());
     if prefix {
         return match op {
             "==" => Some(matches_prefix(v, &t)),
@@ -138,7 +163,21 @@ fn clause_admits(clause: &str, v: &Pep440, raw_version: &str) -> Option<bool> {
             _ => None,
         };
     }
+    // `==V+local` is exact: the candidate's own label must match.
+    if matches!(op, "==" | "!=") && !target_full.local.is_empty() {
+        let equal = cmp_pep440(full, &target_full) == Ordering::Equal;
+        return Some(if op == "==" { equal } else { !equal });
+    }
     let order = cmp_pep440(v, &t);
+    if op == ">" {
+        let post_of_v = t.post.is_none() && v.post.is_some() && same_base(v, &t);
+        let local_of_v = !full.local.is_empty() && same_base(v, &t);
+        return Some(order.is_gt() && !post_of_v && !local_of_v);
+    }
+    if op == "<" {
+        let pre_of_v = !is_pre(&t) && is_pre(v) && same_base(v, &t);
+        return Some(order.is_lt() && !pre_of_v);
+    }
     Some(match op {
         "~=" => {
             if t.release.len() < 2 {
@@ -157,8 +196,6 @@ fn clause_admits(clause: &str, v: &Pep440, raw_version: &str) -> Option<bool> {
         "!=" => order != Ordering::Equal,
         ">=" => order.is_ge(),
         "<=" => order.is_le(),
-        ">" => order.is_gt(),
-        "<" => order.is_lt(),
         _ => return None,
     })
 }
@@ -246,7 +283,9 @@ mod tests {
             "local labels do not compare"
         );
         assert_eq!(admits("===3.1.6", "3.1.6"), Some(true));
-        assert_eq!(admits(">3.1", "3.1.post1"), Some(true));
+        // PEP 440: `>V` leaves out V's post-releases (this line pinned the
+        // opposite before audit R6, 2026-11-19).
+        assert_eq!(admits(">3.1", "3.1.post1"), Some(false));
         assert_eq!(
             admits(">=3.0,nope", "3.1"),
             None,
@@ -254,6 +293,182 @@ mod tests {
         );
         assert_eq!(admits(">=3.0", "not a version"), None);
         assert_eq!(admits(">=3.0", "1!1.0"), Some(true), "epoch");
+    }
+
+    fn admits_each(spec: &str, cases: &[(&str, bool)]) {
+        for (version, want) in cases {
+            assert_eq!(
+                pep440_spec_admits(spec, version),
+                Some(*want),
+                "{spec} admits {version}"
+            );
+        }
+    }
+
+    /// PEP 440's exclusive comparisons, as pip (pypa/packaging) reads them
+    /// (the `@4da/mcp-server` audit of 2026-11-19, R6): `>V` leaves out a
+    /// post-release or a local version of V unless V is itself a
+    /// post-release; `>2023.3,<2023.4` on pytz admits nothing, and
+    /// 2023.3.post1 was named the safe release in it.
+    #[test]
+    fn greater_than_leaves_out_post_releases_and_local_versions_of_v() {
+        admits_each(
+            ">1.7",
+            &[
+                ("1.7", false),
+                ("1.7.0", false),
+                ("1.7.post1", false),
+                ("1.7.0.post3", false),
+                ("1.7+abc", false),
+                ("1.7.1", true),
+                ("1.8.post1", true),
+                ("1.8+abc", true),
+                ("1.7.1.dev1", true),
+            ],
+        );
+        admits_each(
+            ">1.7.post2",
+            &[
+                ("1.7", false),
+                ("1.7.post1", false),
+                ("1.7.post2", false),
+                ("1.7.0.post3", true),
+                ("1.7.1", true),
+            ],
+        );
+        admits_each(
+            ">=1.7",
+            &[
+                ("1.7", true),
+                ("1.7.post1", true),
+                ("1.7+abc", true),
+                ("1.6.9", false),
+            ],
+        );
+        admits_each(
+            ">2023.3,<2023.4",
+            &[
+                ("2023.3", false),
+                ("2023.3.post1", false),
+                ("2023.4", false),
+            ],
+        );
+    }
+
+    /// `<V` leaves out a pre-release of V unless V is itself a pre-release.
+    #[test]
+    fn less_than_leaves_out_pre_releases_of_v() {
+        admits_each(
+            "<2.0",
+            &[
+                ("2.0", false),
+                ("2.0rc1", false),
+                ("2.0a1", false),
+                ("2.0.0b2", false),
+                ("2.0.dev1", false),
+                ("1.9", true),
+                ("1.9.9rc1", true),
+                ("1.9.post1", true),
+            ],
+        );
+        admits_each(
+            "<2.0rc2",
+            &[
+                ("2.0rc1", true),
+                ("2.0b1", true),
+                ("2.0.dev1", true),
+                ("2.0rc2", false),
+                ("2.0", false),
+            ],
+        );
+        admits_each("<2.0.dev3", &[("2.0.dev2", true), ("2.0.dev3", false)]);
+        admits_each(
+            "<=2.0",
+            &[
+                ("2.0", true),
+                ("2.0rc1", true),
+                ("2.0+abc", true),
+                ("2.0.post1", false),
+            ],
+        );
+    }
+
+    /// A local label in an `==` / `!=` specifier is exact; without one the
+    /// candidate's label is ignored.
+    #[test]
+    fn a_local_label_in_the_specifier_is_exact() {
+        admits_each(
+            "==1.0+abc",
+            &[
+                ("1.0", false),
+                ("1.0+abc", true),
+                ("1.0+ABC", true),
+                ("1.0.0+abc", true),
+                ("1.0+abc.1", false),
+                ("1.0+xyz", false),
+            ],
+        );
+        admits_each(
+            "!=1.0+abc",
+            &[("1.0", true), ("1.0+abc", false), ("1.0+xyz", true)],
+        );
+        admits_each(
+            "==1.0",
+            &[
+                ("1.0", true),
+                ("1.0.0", true),
+                ("1.0+abc", true),
+                ("1.0.post1", false),
+            ],
+        );
+        admits_each(
+            "!=1.0",
+            &[("1.0", false), ("1.0+abc", false), ("1.1", true)],
+        );
+        admits_each("==3.1.6", &[("3.1.6+ubuntu.1", true)]);
+    }
+
+    /// Cargo wildcards are the line they write out (`semver::VersionReq`, the
+    /// parser Cargo itself uses), and an `x` inside a pre-release is an
+    /// identifier, not a wildcard (audit R4 and K6, 2026-11-19; the
+    /// TypeScript engine read `1.0.*` as `^1.0` and `1.0.0-alpha.x` as a
+    /// wildcard).
+    #[test]
+    fn cargo_wildcards_are_the_line_they_write_out() {
+        let admitted = |req: &str| -> Vec<&str> {
+            [
+                "0.9.9", "1.0.0", "1.0.7", "1.1.0", "1.6.1", "1.16.5", "2.0.0",
+            ]
+            .into_iter()
+            .filter(|v| constraint_admits("crates.io", req, v) == Some(true))
+            .collect()
+        };
+        for req in ["1.0.*", "1.0.x", "1.0.X", "=1.0.*"] {
+            assert_eq!(admitted(req), ["1.0.0", "1.0.7"], "{req}");
+        }
+        for req in ["1.*", "1.x", "1.X"] {
+            assert_eq!(
+                admitted(req),
+                ["1.0.0", "1.0.7", "1.1.0", "1.6.1", "1.16.5"],
+                "{req}"
+            );
+        }
+        assert_eq!(admitted("*").len(), 7);
+        assert_eq!(
+            admitted("1.0"),
+            ["1.0.0", "1.0.7", "1.1.0", "1.6.1", "1.16.5"]
+        );
+        assert_eq!(admitted(">=1.0.5, 1.0.*"), ["1.0.7"]);
+        assert_eq!(
+            constraint_admits("crates.io", "1.0.*", "1.1.0-rc.1"),
+            Some(false)
+        );
+        // `1.0.0-alpha.x` is `^1.0.0-alpha.x`.
+        let alpha = |v: &str| constraint_admits("crates.io", "1.0.0-alpha.x", v);
+        assert_eq!(alpha("1.2.0"), Some(true));
+        assert_eq!(alpha("1.0.0"), Some(true));
+        assert_eq!(alpha("2.0.0"), Some(false));
+        assert_eq!(alpha("1.0.0-alpha.w"), Some(false));
     }
 
     #[test]

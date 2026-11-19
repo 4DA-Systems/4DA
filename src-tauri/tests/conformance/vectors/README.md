@@ -319,6 +319,17 @@ form.
 - ws (npm), including "pin ws 7.x" -> 7.5.11 / 7.5.13 and the line with no safe release: rc-001..rc-012
 - Jinja2 (PyPI), including `3.1.*` -> 3.1.6 with 6 vulnerable: rc-013..rc-022
 - golang.org/x/net (Go), including `v0` -> v0.60.0 / v0.61.0: rc-023..rc-028
+- Cargo wildcards are the line they write out (audit 2026-11-19, R4 and K6;
+  the TypeScript engine read `1.0.*` as `^1.0` and named smallvec 1.6.1 safe
+  in it): `1.0.*` and `1.0.x` admit only 1.0.0, rc-029, rc-030; `1.*` the 1
+  major, rc-031; an `x` inside a pre-release is an identifier, so
+  `1.0.0-alpha.x` is `^1.0.0-alpha.x`, rc-032 (smallvec's real releases and
+  OSV.dev's per-release answers, 2026-11-19)
+- PEP 440 exclusive comparisons as pip reads them (audit 2026-11-19, R6): `>V`
+  admits no post-release of V, rc-033; `<V` no pre-release of V, rc-034;
+  `==V+local` is exact, rc-035 (requests; the `.post1` / pre-release
+  spellings are SYNTHETIC, and each line admits nothing, so no OSV answer is
+  needed)
 
 The release-age hold and withdrawn or deprecated releases are not part of
 these `range_check` vectors. They depend on the clock and on registry
