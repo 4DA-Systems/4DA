@@ -93,6 +93,27 @@ ignore = [
     "RUSTSEC-2026-0369", # zip permissions through symlinks on extract (REVISIT BY 2027-02-12)
     "RUSTSEC-2026-0429", # zip abort on a large symlink entry on extract (REVISIT BY 2027-02-12)
     # -----------------------------------------------------------------------
+    # zip <9 (RUSTSEC-2026-0545 / -0546 / -0547, patched >=9.0.0) and zip <9.0.5
+    # (RUSTSEC-2026-0548), all added to RustSec 2026-11-17. Same single copy:
+    # zip 8.6.0 under docx-rs 0.4.22, still the newest docx-rs (2026-07-21), which
+    # requires zip ^8.6.0 with default-features off and only `deflate`. 4DA's own
+    # zip and calamine/tauri-plugin-updater are on 9.1.3, which none of the four
+    # affect. Checked 2026-11-19 against docx-rs 0.4.22's source and Cargo.lock:
+    # - -0545 (AES auth code skipped on short/empty entries) needs the `aes-crypto`
+    #   feature and a password read (by_name_decrypt). zip 8.6.0 here links no
+    #   aes/hmac/pbkdf2, so that code is not compiled; docx-rs reads with by_name.
+    # - -0546 (chained symlink escape) is in ZipArchive::extract and
+    #   extract_unwrapped_root_dir. docx-rs calls neither.
+    # - -0547 (legacy Shrink/Reduce/Implode preallocation) needs the `legacy-zip`
+    #   feature. zip 8.6.0 here links no bitstream-io, so it is not compiled.
+    # - -0548 (local-header names) is in ZipStreamReader / read_zipfile_from_stream.
+    #   docx-rs only uses ZipArchive::new + by_name, which uses central-directory names.
+    # REVISIT: drop all four when docx-rs moves to zip >=9.0.5.
+    "RUSTSEC-2026-0545", # zip AES auth code, aes-crypto not compiled for docx-rs's copy (REVISIT BY 2027-02-19)
+    "RUSTSEC-2026-0546", # zip chained symlink escape on extract (REVISIT BY 2027-02-19)
+    "RUSTSEC-2026-0547", # zip legacy decoders, legacy-zip not compiled for docx-rs's copy (REVISIT BY 2027-02-19)
+    "RUSTSEC-2026-0548", # zip ZipStreamReader local-header names, docx-rs uses ZipArchive (REVISIT BY 2027-02-19)
+    # -----------------------------------------------------------------------
     # crypto-bigint <0.7.6 timing variability (RUSTSEC-2026-0387). The 0.7
     # copy is bumped to 0.7.10. The remaining 0.5.5 copy has no fix (patched
     # >=0.7.6 only) and comes from jsonwebtoken 11.1 (newest) -> p256/p384 0.13
