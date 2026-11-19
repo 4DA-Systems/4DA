@@ -204,6 +204,14 @@ own evaluation of the pinned record at that exact version.
 - A package named by several `affected` entries: or-042..or-049
 - `introduced: "0"`: or-050..or-057
 - Plain `introduced <= v < fixed`: or-058..or-067
+- Events are sorted by version before they pair, as the schema's evaluation
+  sorts them (audit 2026-11-19, ranges R2): npm derby's GHSA-82jv-9wjw-pqh6
+  lists `introduced 4.0.0-beta1, fixed 4.0.0-beta.11`, and semver orders the
+  fix below its own start, so the range is open from 4.0.0-beta1. Paired in
+  listed order it was empty and derby 4.x read "not affected": or-068..or-074
+  (truth: api.osv.dev `/v1/query` per version, 2026-11-19; the record is not
+  in any case's inventory, so `scripts/conformance-corpus.mjs` keeps every
+  `record_id` an `osv_range` line names on a re-pin).
 
 `version` is the version as the lockfile spelled it, which is what OSV was
 queried with (`3.3.0`, `v3.0.3`). The corpus inventory key is the normalised
