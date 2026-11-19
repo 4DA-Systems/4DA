@@ -165,9 +165,19 @@ fn test_osv_batch_response_parsing() {
     let response: OsvBatchResponse = serde_json::from_str(json).unwrap();
     let results = response.results.unwrap();
     assert_eq!(results.len(), 3);
-    assert_eq!(results[0].vulns.as_ref().unwrap().len(), 1);
-    assert_eq!(results[1].vulns.as_ref().unwrap().len(), 2);
-    assert!(results[2].vulns.is_none());
+    assert_eq!(
+        results[0].vulns.as_ref().unwrap().as_ref().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        results[1].vulns.as_ref().unwrap().as_ref().unwrap().len(),
+        2
+    );
+    // Present and null is kept apart from absent (OSV's "no advisory"),
+    // which the strict path reads as malformed.
+    assert!(matches!(results[2].vulns, Some(None)));
+    let absent: OsvBatchResponse = serde_json::from_str(r#"{"results":[{}]}"#).unwrap();
+    assert!(absent.results.unwrap()[0].vulns.is_none());
 }
 
 #[test]

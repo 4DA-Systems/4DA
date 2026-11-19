@@ -33,7 +33,26 @@ pub(super) struct OsvQueryResponse {
 
 #[derive(Debug, Deserialize)]
 pub(super) struct OsvBatchResponse {
-    pub results: Option<Vec<OsvQueryResponse>>,
+    pub results: Option<Vec<OsvBatchResult>>,
+}
+
+/// One result of `/v1/querybatch`, in query order. OSV leaves `vulns` out
+/// when no advisory affects that query; a `vulns` that is present and `null`
+/// is not that answer (`Some(None)` here), and is read as malformed.
+#[derive(Debug, Deserialize)]
+pub(super) struct OsvBatchResult {
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub vulns: Option<Option<Vec<OsvVulnerability>>>,
+}
+
+/// A field that is present (`Some`), with its value or `null` (`Some(None)`);
+/// `#[serde(default)]` makes an absent one `None`.
+fn present_or_null<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Deserialize)]

@@ -95,17 +95,7 @@ async fn query_live_version_matched(
             .json()
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
-        // Results are returned in query order; pad any short tail with empties so the per-dep
-        // alignment below never panics.
-        let mut results = parsed.results.unwrap_or_default().into_iter();
-        for _ in 0..chunk.len() {
-            let ids = results
-                .next()
-                .and_then(|r| r.vulns)
-                .map(|vulns| vulns.into_iter().map(|v| v.id).collect())
-                .unwrap_or_default();
-            per_dep_ids.push(ids);
-        }
+        per_dep_ids.extend(batch_ids(parsed, chunk.len())?);
         if deps.len() > MAX_BATCH {
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }
@@ -163,6 +153,36 @@ async fn query_live_version_matched(
         }
     }
     Ok(items)
+}
+
+/// The advisory ids of one querybatch answer, one list per query in query
+/// order (OSV.dev returns results in query order; a result with no `vulns`
+/// is its "no advisory" answer). An answer that is not exactly one result per
+/// query cannot be attributed, and a `vulns` that is present and `null` is
+/// not an answer: either is an error, so the caller falls back to the mirror.
+/// Padding a short tail with empty lists read every unanswered dependency
+/// as clean.
+fn batch_ids(parsed: OsvBatchResponse, queries: usize) -> SourceResult<Vec<Vec<String>>> {
+    let results = parsed
+        .results
+        .ok_or_else(|| SourceError::Parse("OSV querybatch: the answer has no results".into()))?;
+    if results.len() != queries {
+        return Err(SourceError::Parse(format!(
+            "OSV querybatch: {} results for {queries} queries",
+            results.len()
+        )));
+    }
+    results
+        .into_iter()
+        .enumerate()
+        .map(|(index, result)| match result.vulns {
+            None => Ok(Vec::new()),
+            Some(Some(vulns)) => Ok(vulns.into_iter().map(|v| v.id).collect()),
+            Some(None) => Err(SourceError::Parse(format!(
+                "OSV querybatch: result {index} carries `vulns: null`"
+            ))),
+        })
+        .collect()
 }
 
 /// Fetch one advisory's full record from OSV (`/v1/vulns/{id}`). `Ok(None)` = not found.
@@ -481,203 +501,5 @@ fn upsert_hydrated_advisory(db: &crate::db::Database, vuln: &OsvVulnerability) {
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn vuln_with(affected: Vec<OsvAffected>) -> OsvVulnerability {
-        OsvVulnerability {
-            id: "GHSA-test".to_string(),
-            summary: Some("s".to_string()),
-            details: None,
-            severity: Some(vec![OsvSeverity {
-                severity_type: "CVSS_V3".to_string(),
-                score: "5.3".to_string(),
-            }]),
-            affected: Some(affected),
-            references: Some(vec![OsvReference {
-                ref_type: "ADVISORY".to_string(),
-                url: "https://example.com/a".to_string(),
-            }]),
-            published: Some("2026-06-15T00:00:00Z".to_string()),
-            modified: None,
-        }
-    }
-    fn pkg(name: &str, eco: &str) -> OsvPackage {
-        OsvPackage {
-            name: name.to_string(),
-            ecosystem: eco.to_string(),
-        }
-    }
-    fn semver(intro: &str, fixed: &str) -> OsvRange {
-        OsvRange {
-            range_type: "SEMVER".to_string(),
-            events: Some(vec![
-                serde_json::json!({ "introduced": intro }),
-                serde_json::json!({ "fixed": fixed }),
-            ]),
-        }
-    }
-
-    /// The live path grades as the mirror does: the highest valid CVSS
-    /// score (PYSEC-2026-1943's v3 0.0 beside a v4 8.7; a v3 7.5 beside a v4
-    /// 9.3), not the v3 entry because it comes first.
-    #[test]
-    fn best_severity_is_the_highest_valid_score() {
-        let with = |entries: &[(&str, &str)]| {
-            let mut v = vuln_with(Vec::new());
-            v.severity = Some(
-                entries
-                    .iter()
-                    .map(|(kind, score)| OsvSeverity {
-                        severity_type: (*kind).to_string(),
-                        score: (*score).to_string(),
-                    })
-                    .collect(),
-            );
-            best_severity(&v)
-        };
-        let v3_none = ("CVSS_V3", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N");
-        let v4_high = (
-            "CVSS_V4",
-            "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
-        );
-        let (kind, score) = with(&[v3_none, v4_high]);
-        assert_eq!(kind.as_deref(), Some("CVSS_V4"));
-        assert!(score.is_some_and(|s| (s - 8.7).abs() < 1e-9), "{score:?}");
-        let (kind, score) = with(&[
-            ("CVSS_V3", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"),
-            (
-                "CVSS_V4",
-                "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
-            ),
-        ]);
-        assert_eq!(kind.as_deref(), Some("CVSS_V4"));
-        assert!(score.is_some_and(|s| (s - 9.3).abs() < 1e-9), "{score:?}");
-        // A record whose entry has no score string still parses.
-        let parsed: OsvVulnerability =
-            serde_json::from_str(r#"{"id":"PYSEC-2099-3","severity":[{"type":"CVSS_V3"}]}"#)
-                .unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(best_severity(&parsed), (Some("CVSS_V3".to_string()), None));
-    }
-
-    #[test]
-    fn test_merged_ranges_union_multi_branch() {
-        // Real shape of GHSA-vfv6 (next): affected in TWO branches as separate entries. The merged
-        // row must carry BOTH ranges so the ledger can match a pin in EITHER (the live-cycle gap).
-        let v = vuln_with(vec![
-            OsvAffected {
-                package: Some(pkg("next", "npm")),
-                ranges: Some(vec![semver("13.4.6", "15.5.16")]),
-            },
-            OsvAffected {
-                package: Some(pkg("next", "npm")),
-                ranges: Some(vec![semver("16.0.0", "16.2.5")]),
-            },
-        ]);
-        let merged = merged_ranges_by_package(&v);
-        assert_eq!(merged.len(), 1, "one merged row for (next, npm)");
-        let (name, eco, ranges_json, fixed_json) = &merged[0];
-        assert_eq!(name, "next");
-        assert_eq!(eco, "npm");
-        let rj = ranges_json.as_ref().unwrap();
-        assert!(
-            rj.contains("13.4.6") && rj.contains("16.0.0"),
-            "BOTH branches present: {rj}"
-        );
-        let fj = fixed_json.as_ref().unwrap();
-        assert!(
-            fj.contains("15.5.16") && fj.contains("16.2.5"),
-            "both fixes present: {fj}"
-        );
-    }
-
-    /// FX-H5: "Fixed in: 4.18.0" for lodash, a release npm deprecated.
-    #[test]
-    fn a_withdrawn_fixed_in_release_is_annotated() {
-        let v = vuln_with(vec![OsvAffected {
-            package: Some(pkg("lodash", "npm")),
-            ranges: Some(vec![semver("0", "4.18.0")]),
-        }]);
-        let facts = fourda_depengine::registry::RegistryReleases {
-            published: vec!["4.18.0".into(), "4.18.1".into()],
-            excluded: vec!["4.18.0".into()],
-        };
-        assert_eq!(
-            withdrawn_note(&v, "lodash", "npm", Some(&facts)).as_deref(),
-            Some(" (withdrawn by the registry; use 4.18.1)")
-        );
-        let only = fourda_depengine::registry::RegistryReleases {
-            published: vec!["4.18.0".into()],
-            excluded: vec!["4.18.0".into()],
-        };
-        assert!(withdrawn_note(&v, "lodash", "npm", Some(&only))
-            .is_some_and(|n| n.contains("no later release")));
-        let live = fourda_depengine::registry::RegistryReleases::default();
-        assert_eq!(withdrawn_note(&v, "lodash", "npm", Some(&live)), None);
-        assert_eq!(withdrawn_note(&v, "lodash", "npm", None), None);
-    }
-
-    #[test]
-    fn test_live_vuln_to_grounded_item_title_and_fields() {
-        let v = vuln_with(vec![OsvAffected {
-            package: Some(pkg("js-yaml", "npm")),
-            ranges: Some(vec![semver("0", "4.2.0")]),
-        }]);
-        let item = live_vuln_to_grounded_item(&v, "js-yaml", "npm", "4.1.1");
-        assert_eq!(item.source_type, "osv");
-        assert_eq!(item.source_id, "GHSA-test");
-        assert_eq!(item.title, "[GHSA-test] js-yaml: s");
-        let after_id = item
-            .title
-            .trim_start_matches('[')
-            .splitn(2, ']')
-            .nth(1)
-            .unwrap()
-            .trim();
-        assert_eq!(after_id.split([' ', ':']).next().unwrap(), "js-yaml");
-        assert!(item.content.contains("js-yaml (npm)"));
-        assert!(item.content.contains("Installed: 4.1.1"));
-        assert!(item.content.contains("Fixed in: 4.2.0"));
-        let md = item.metadata.unwrap();
-        assert_eq!(md["fixed_version"], "4.2.0");
-        assert_eq!(md["cvss_score"], 5.3);
-        assert_eq!(md["manifest_grounded"], true);
-    }
-
-    #[test]
-    fn test_fixed_version_skips_git_and_na() {
-        let v = vuln_with(vec![OsvAffected {
-            package: Some(pkg("torch", "PyPI")),
-            ranges: Some(vec![
-                OsvRange {
-                    range_type: "GIT".to_string(),
-                    events: Some(vec![serde_json::json!({"fixed": "7c35874deadbeef"})]),
-                },
-                semver("0", "2.2.0"),
-            ]),
-        }]);
-        assert_eq!(
-            fixed_version_for(&v, "torch", "PyPI").as_deref(),
-            Some("2.2.0")
-        );
-    }
-
-    #[test]
-    fn test_dep_ecosystem_to_osv() {
-        assert_eq!(dep_ecosystem_to_osv("rust"), Some("crates.io"));
-        assert_eq!(dep_ecosystem_to_osv("npm"), Some("npm"));
-        assert_eq!(dep_ecosystem_to_osv("typescript"), Some("npm"));
-        assert_eq!(dep_ecosystem_to_osv("pypi"), Some("PyPI"));
-        assert_eq!(dep_ecosystem_to_osv("go"), Some("Go"));
-        // Language-name keys must resolve (ACE tags scanned deps by language) — regression guard
-        // for the gap that surfaced ZERO C#/PHP/Dart advisories in strict mode.
-        assert_eq!(dep_ecosystem_to_osv("csharp"), Some("NuGet"));
-        assert_eq!(dep_ecosystem_to_osv("nuget"), Some("NuGet"));
-        assert_eq!(dep_ecosystem_to_osv("php"), Some("Packagist"));
-        assert_eq!(dep_ecosystem_to_osv("packagist"), Some("Packagist"));
-        assert_eq!(dep_ecosystem_to_osv("dart"), Some("Pub"));
-        assert_eq!(dep_ecosystem_to_osv("flutter"), Some("Pub"));
-        assert_eq!(dep_ecosystem_to_osv("pub"), Some("Pub"));
-        assert_eq!(dep_ecosystem_to_osv("cocoapods"), None);
-    }
-}
+#[path = "osv_live_tests.rs"]
+mod tests;
