@@ -15,9 +15,9 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 818 Rust crates, 41 npm packages.
+Totals: 822 Rust crates, 41 npm packages.
 
-Rust Crates (818)
+Rust Crates (822)
 -----------------
 
 adler2 2.0.1 - 0BSD OR MIT OR Apache-2.0 - https://github.com/oyvindln/adler2
@@ -352,6 +352,7 @@ linux-keyutils 0.2.5 - Apache-2.0 OR MIT - https://github.com/landhb/linux-keyut
 linux-raw-sys 0.12.1 - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT - https://github.com/sunfishcode/linux-raw-sys
 litemap 0.8.3 - Unicode-3.0 - https://github.com/unicode-org/icu4x
 lock_api 0.4.14 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
+lock_api 0.5.0 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
 log 0.4.34 - MIT OR Apache-2.0 - https://github.com/rust-lang/log
 loop9 0.1.5 - MIT - https://gitlab.com/kornelski/loop9.git
 lopdf 0.42.0 - MIT - https://github.com/J-F-Liu/lopdf.git
@@ -442,7 +443,9 @@ pango 0.18.3 - MIT - https://github.com/gtk-rs/gtk-rs-core
 pango-sys 0.18.0 - MIT - https://github.com/gtk-rs/gtk-rs-core
 parking 2.2.1 - Apache-2.0 OR MIT - https://github.com/smol-rs/parking
 parking_lot 0.12.5 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
+parking_lot 0.13.0 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
 parking_lot_core 0.9.12 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
+parking_lot_core 0.10.0 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
 paste 1.0.15 - MIT OR Apache-2.0 - https://github.com/dtolnay/paste
 pastey 0.1.1 - MIT OR Apache-2.0 - https://github.com/as1100k/pastey
 pastey 0.2.3 - MIT OR Apache-2.0 - https://github.com/as1100k/pastey
@@ -513,6 +516,7 @@ rayon-cond 0.4.0 - Apache-2.0/MIT - https://github.com/cuviper/rayon-cond
 rayon-core 1.13.0 - MIT OR Apache-2.0 - https://github.com/rayon-rs/rayon
 reborrow 0.5.5 - MIT - https://github.com/sarah-ek/reborrow/
 redox_syscall 0.5.18 - MIT - https://gitlab.redox-os.org/redox-os/syscall
+redox_syscall 0.9.5 - MIT - https://gitlab.redox-os.org/redox-os/kernel
 redox_users 0.5.3 - MIT - https://gitlab.redox-os.org/redox-os/users
 ref-cast 1.0.27 - MIT OR Apache-2.0 - https://github.com/dtolnay/ref-cast
 ref-cast-impl 1.0.27 - MIT OR Apache-2.0 - https://github.com/dtolnay/ref-cast
@@ -584,7 +588,7 @@ simd-adler32 0.3.10 - MIT - https://github.com/mcountryman/simd-adler32
 simdutf8 0.1.5 - MIT OR Apache-2.0 - https://github.com/rusticstuff/simdutf8
 siphasher 1.0.3 - MIT/Apache-2.0 - https://github.com/jedisct1/rust-siphash
 slab 0.4.12 - MIT - https://github.com/tokio-rs/slab
-smallvec 1.15.1 - MIT OR Apache-2.0 - https://github.com/servo/rust-smallvec
+smallvec 1.16.5 - MIT OR Apache-2.0 - https://github.com/servo/rust-smallvec
 smappservice-rs 0.1.3 - MIT - https://github.com/gethopp/smappservice-rs
 socket2 0.6.5 - MIT OR Apache-2.0 - https://github.com/rust-lang/socket2
 softbuffer 0.4.8 - MIT OR Apache-2.0 - https://github.com/rust-windowing/softbuffer
