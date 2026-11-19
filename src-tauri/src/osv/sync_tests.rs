@@ -328,3 +328,35 @@ fn a_stored_row_reads_as_malware_by_its_title_or_details() {
     assert_eq!(xss.len(), 1);
     assert!(!xss[0].is_malware());
 }
+
+/// PYSEC-2026-1943 (starlette) as pinned in the conformance corpus: a v3.1
+/// vector with no impact (0.0) beside a v4.0 vector that scores 8.7, and no
+/// curated label. The mirror stores the highest valid score and its band; the
+/// v3 entry was taken first, and its 0.0 banded as "low".
+#[test]
+fn the_highest_valid_cvss_score_is_stored_and_banded() {
+    let pinned = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/conformance/osv/PYSEC-2026-1943.json");
+    let text = std::fs::read_to_string(&pinned).unwrap_or_else(|e| panic!("{e}"));
+    let vuln: super::super::types::Vulnerability =
+        serde_json::from_str(&text).unwrap_or_else(|e| panic!("{e}"));
+    let (kind, score) = vuln.best_cvss();
+    assert_eq!(kind.as_deref(), Some("CVSS_V4"));
+    assert!(score.is_some_and(|s| (s - 8.7).abs() < 1e-9), "{score:?}");
+    assert_eq!(vuln.severity_label().as_deref(), Some("high"));
+
+    // Only a 0.0 vector: a score of 0.0 and no grade, never "low".
+    let none: super::super::types::Vulnerability = serde_json::from_str(
+        r#"{"id":"PYSEC-2099-1","severity":[{"type":"CVSS_V3","score":"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N"}]}"#,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(none.best_cvss().1, Some(0.0));
+    assert_eq!(none.severity_label(), None);
+
+    // A severity entry with no score string is passed over; the record is read.
+    let scoreless: super::super::types::Vulnerability = serde_json::from_str(
+        r#"{"id":"PYSEC-2099-2","severity":[{"type":"CVSS_V3"},{"type":"CVSS_V4","score":"CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"}]}"#,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(scoreless.severity_label().as_deref(), Some("critical"));
+}

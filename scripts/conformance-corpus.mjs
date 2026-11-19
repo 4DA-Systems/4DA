@@ -552,7 +552,7 @@ function engineInventory(id) {
   return readJson(join(ENGINE_DUMP, `${id}.json`), { inventory: [] }).inventory;
 }
 
-/** Every live (non-SYNT-) record id a rule vector names in `record_ids`. */
+/** Every live (non-SYNT-) record id a rule vector names in `record_ids` or (osv_range) `record_id`. */
 function vectorRecordIds() {
   const dir = join(CORPUS, "vectors");
   if (!existsSync(dir)) return [];
@@ -560,7 +560,9 @@ function vectorRecordIds() {
   for (const f of readdirSync(dir).filter((n) => n.endsWith(".jsonl"))) {
     for (const line of readFileSync(join(dir, f), "utf8").split(/\r?\n/)) {
       if (!line.trim()) continue;
-      for (const id of JSON.parse(line).record_ids ?? []) if (!id.startsWith("SYNT-")) out.push(id);
+      const v = JSON.parse(line);
+      const ids = [...(v.record_ids ?? []), ...(typeof v.record_id === "string" ? [v.record_id] : [])];
+      for (const id of ids) if (!id.startsWith("SYNT-")) out.push(id);
     }
   }
   return out;

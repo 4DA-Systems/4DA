@@ -16,69 +16,23 @@
 use std::cmp::Ordering;
 
 use crate::range::{
-    check_version_affected, is_unknown_bound, parse_version, Range, ENUMERATED_RANGE,
+    check_version_affected, is_unknown_bound, parse_version, range_spans, Range, Span,
+    ENUMERATED_RANGE,
 };
 use crate::registry::{is_listed, RegistryReleases};
-use crate::version_order::{in_window, Lower, OrderedVersion, Upper};
+use crate::version_order::OrderedVersion;
 
-/// One affected window of a SEMVER/ECOSYSTEM range: from `lower` up to
-/// `end` (`fixed` exclusive, `last_affected` inclusive), or open-ended.
-struct Window {
-    lower: Lower,
-    /// `(bound, as written, is_fixed)`; `None` for an open-ended window.
-    end: Option<(OrderedVersion, String, bool)>,
-}
-
-impl Window {
-    fn contains(&self, user: &OrderedVersion) -> Option<bool> {
-        let upper = self.end.as_ref().map(|(version, _, fixed)| Upper {
-            version,
-            inclusive: !fixed,
-        });
-        in_window(user, &self.lower, upper)
-    }
-}
-
-/// The readable windows of one advisory's ranges. A window whose end is an
-/// unknown ("-NA") or unreadable bound is left out, as the matcher leaves it.
-fn windows(ecosystem: &str, ranges: &[Range]) -> Vec<Window> {
-    let mut out = Vec::new();
-    for range in ranges {
-        if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
-            continue;
-        }
-        let mut lower: Option<Lower> = None;
-        for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
-            if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-                lower = Lower::parse_in(&crate::range::coerce_bound(intro, ecosystem), ecosystem);
-            }
-            let bound = obj
-                .get("fixed")
-                .or_else(|| obj.get("last_affected"))
-                .and_then(|v| v.as_str());
-            if let Some(bound) = bound {
-                let end = OrderedVersion::parse_in(
-                    &crate::range::coerce_bound(bound, ecosystem),
-                    ecosystem,
-                )
-                .filter(|_| !is_unknown_bound(bound));
-                if let (Some(low), Some(end)) = (lower.take(), end) {
-                    let fixed = obj.contains_key("fixed");
-                    out.push(Window {
-                        lower: low,
-                        end: Some((end, bound.trim().to_string(), fixed)),
-                    });
-                }
-            }
-        }
-        if let Some(low) = lower {
-            out.push(Window {
-                lower: low,
-                end: None,
-            });
-        }
-    }
-    out
+/// The readable windows of one advisory's ranges, read exactly as the matcher
+/// reads them ([`range_spans`]: events sorted as the OSV schema's evaluation
+/// sorts them). A window whose bound cannot be read is left out; the walk
+/// never steps across it, because the matcher calls a version it would hold
+/// undecided and the walk stops there.
+fn windows(ecosystem: &str, ranges: &[Range]) -> Vec<Span> {
+    ranges
+        .iter()
+        .filter(|r| r.range_type == "SEMVER" || r.range_type == "ECOSYSTEM")
+        .flat_map(|r| range_spans(ecosystem, r).spans)
+        .collect()
 }
 
 /// The fix for the release line a version is on: the `fixed` bound of the

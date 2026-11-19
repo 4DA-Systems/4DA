@@ -53,6 +53,62 @@ fn has_word(text: &str, phrase: &str) -> bool {
     })
 }
 
+/// The tier of a CVSS base score, by the CVSS v3.1 qualitative rating scale
+/// (§5; v4.0 keeps the same bands): critical from 9.0, high from 7.0, medium
+/// from 4.0, low above 0.0. `None` for 0.0 (the scale's "None": no grade,
+/// never "low") and for anything that is not a base score.
+#[must_use]
+pub fn cvss_tier(score: f64) -> Option<&'static str> {
+    if !(score > 0.0 && score <= 10.0) {
+        return None;
+    }
+    Some(if score >= 9.0 {
+        "critical"
+    } else if score >= 7.0 {
+        "high"
+    } else if score >= 4.0 {
+        "medium"
+    } else {
+        "low"
+    })
+}
+
+/// One record's CVSS evidence, both engines' rule (the MCP's
+/// `extractCvssScore`): the HIGHEST valid score among every severity entry it
+/// carries (`type`, and the score the host's reader computed from the entry,
+/// `None` when it could not read it), with the type of the entry that gave
+/// it. A 0.0 or an unreadable entry never hides one that scores:
+/// PYSEC-2026-1943 (starlette) carries a v3.1 vector with no impact (0.0)
+/// beside a v4.0 vector that scores 8.7, and taking the v3 entry first graded
+/// it as if it had no score. A tie keeps the CVSS_V3 entry (the score most
+/// tools quote), then CVSS_V4, then the order listed. With no valid score the
+/// type is the entry that order puts first, and the score is `None`.
+pub fn highest_cvss<'a>(
+    entries: impl IntoIterator<Item = (&'a str, Option<f64>)>,
+) -> (Option<&'a str>, Option<f64>) {
+    let mut entries: Vec<(&str, Option<f64>)> = entries.into_iter().collect();
+    let preference = |kind: &str| match kind {
+        "CVSS_V3" => 0u8,
+        "CVSS_V4" => 1,
+        _ => 2,
+    };
+    // Stable: equal preference keeps the order listed.
+    entries.sort_by_key(|(kind, _)| preference(kind));
+    let mut best: Option<(&str, f64)> = None;
+    for (kind, score) in &entries {
+        let Some(score) = score.filter(|s| (0.0..=10.0).contains(s)) else {
+            continue;
+        };
+        if best.is_none_or(|(_, b)| score > b) {
+            best = Some((kind, score));
+        }
+    }
+    match best {
+        Some((kind, score)) => (Some(kind), Some(score)),
+        None => (entries.first().map(|(kind, _)| *kind), None),
+    }
+}
+
 /// The four tiers, most severe first rank highest.
 #[must_use]
 pub fn tier_rank(tier: &str) -> u8 {
@@ -124,6 +180,88 @@ pub fn grade_from_aliases<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The CVSS v3.1 qualitative rating scale (§5), at every edge: the
+    /// `@4da/mcp-server` audit's surviving mutant S05 was `>= 9.0` read as
+    /// `> 9.0`. 0.0 is "None": no grade, never low.
+    #[test]
+    fn cvss_tiers_follow_the_rating_scale_at_every_edge() {
+        let cases = [
+            (10.0, Some("critical")),
+            (9.0, Some("critical")),
+            (8.9, Some("high")),
+            (7.0, Some("high")),
+            (6.9, Some("medium")),
+            (4.0, Some("medium")),
+            (3.9, Some("low")),
+            (0.1, Some("low")),
+            (0.0, None),
+            (-1.0, None),
+            (10.1, None),
+            (f64::NAN, None),
+        ];
+        for (score, want) in cases {
+            assert_eq!(cvss_tier(score), want, "{score}");
+        }
+    }
+
+    /// PYSEC-2026-1943 (starlette) as OSV serves it: a v3.1 vector with no
+    /// impact (0.0) beside a v4.0 vector that scores 8.7. The grade comes
+    /// from the highest valid score, whichever entry comes first; a 0.0 or an
+    /// unreadable entry never hides a readable one.
+    #[test]
+    fn the_highest_valid_score_grades_whatever_its_place() {
+        let v3_none = ("CVSS_V3", Some(0.0));
+        let v4_high = ("CVSS_V4", Some(8.7));
+        assert_eq!(
+            highest_cvss([v3_none, v4_high]),
+            (Some("CVSS_V4"), Some(8.7))
+        );
+        assert_eq!(
+            highest_cvss([v4_high, v3_none]),
+            (Some("CVSS_V4"), Some(8.7))
+        );
+        assert_eq!(
+            highest_cvss([("CVSS_V3", None), v4_high]),
+            (Some("CVSS_V4"), Some(8.7)),
+            "an unreadable v3 vector"
+        );
+        // Both score: the higher one, v3 or v4.
+        assert_eq!(
+            highest_cvss([("CVSS_V3", Some(7.5)), ("CVSS_V4", Some(9.3))]),
+            (Some("CVSS_V4"), Some(9.3))
+        );
+        assert_eq!(
+            highest_cvss([("CVSS_V4", Some(8.7)), ("CVSS_V3", Some(9.8))]),
+            (Some("CVSS_V3"), Some(9.8))
+        );
+        // A tie keeps the v3 entry, the score most tools quote.
+        assert_eq!(
+            highest_cvss([("CVSS_V4", Some(7.5)), ("CVSS_V3", Some(7.5))]),
+            (Some("CVSS_V3"), Some(7.5))
+        );
+    }
+
+    /// Only 0.0 scores: the score is 0.0 and [`cvss_tier`] grades nothing.
+    /// Nothing readable: no score, and the entry the old rule would have
+    /// named (v3, else v4, else the first) still names the type.
+    #[test]
+    fn no_valid_score_is_no_grade() {
+        assert_eq!(
+            highest_cvss([("CVSS_V3", Some(0.0)), ("CVSS_V4", Some(0.0))]),
+            (Some("CVSS_V3"), Some(0.0))
+        );
+        assert_eq!(
+            highest_cvss([("CVSS_V2", None), ("CVSS_V3", None)]),
+            (Some("CVSS_V3"), None)
+        );
+        assert_eq!(
+            highest_cvss([("CVSS_V3", Some(11.0)), ("CVSS_V3", Some(f64::NAN))]),
+            (Some("CVSS_V3"), None),
+            "not a score"
+        );
+        assert_eq!(highest_cvss(std::iter::empty()), (None, None));
+    }
 
     #[test]
     fn a_notice_is_the_mcps_rule() {

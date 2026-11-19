@@ -322,7 +322,14 @@ pub fn probe(fs: &dyn FileSource, dir: &str) -> Option<String> {
 /// read becomes a [`LockfileOutcome::Failed`].
 pub fn read_dir(fs: &dyn FileSource, dir: &str) -> Vec<LockfileOutcome> {
     let mut out = Vec::new();
+    // npm installs from `npm-shrinkwrap.json` when it is present and ignores
+    // `package-lock.json` (npm docs): read both, and a stale package-lock's
+    // copies, which npm never installs, joined the inventory.
+    let shrinkwrap = fs.is_file(&fs.join(dir, "npm-shrinkwrap.json"));
     for (name, format) in READERS {
+        if shrinkwrap && *format == LockFormat::NpmLock {
+            continue;
+        }
         let path = fs.join(dir, name);
         if fs.is_file(&path) {
             out.push(read_file(fs, path, *format));

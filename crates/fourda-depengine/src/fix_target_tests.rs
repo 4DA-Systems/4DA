@@ -229,6 +229,43 @@ fn malware_is_named_as_malware_and_a_notice_never_blocks() {
     assert!(out.introduces.is_empty() && out.malware.is_empty());
 }
 
+/// A malicious-package record that covers every release, the newest
+/// included, leaves no target, even beside a benign advisory with a fix: the
+/// fix lands inside the malware, which has no way out (the twin of the
+/// `@4da/mcp-server` audit's surviving mutant R07, 2026-11-19, which read
+/// malware on the newest release as merely "unfixable"). Both shapes: open
+/// from the beginning, and `last_affected` at the newest release.
+#[test]
+fn malware_on_every_release_leaves_no_target() {
+    let registry = RegistryReleases {
+        published: vec!["1.0.0".into(), "1.2.0".into(), "2.0.0".into()],
+        excluded: Vec::new(),
+    };
+    let kinds = [
+        AdvisoryKind::default(),
+        AdvisoryKind {
+            malware: true,
+            informational: false,
+        },
+    ];
+    for malware in [
+        ranges(r#"[{"introduced":"0"}]"#),
+        ranges(r#"[{"introduced":"0"},{"last_affected":"2.0.0"}]"#),
+    ] {
+        let all = [ranges(r#"[{"introduced":"0"},{"fixed":"1.2.0"}]"#), malware];
+        let refs: Vec<&Option<String>> = all.iter().collect();
+        let out = walk_target_kinds("crates.io", "1.0.0", &refs, &kinds, &registry);
+        assert_eq!(out.target, None, "{:?}", all[1]);
+        assert_eq!(out.malware, [1], "{:?}", all[1]);
+        assert!(out.introduces.is_empty());
+        // The malware alone: no target either.
+        let only = [all[1].clone()];
+        let refs: Vec<&Option<String>> = only.iter().collect();
+        let out = walk_target_kinds("crates.io", "1.0.0", &refs, &kinds[1..], &registry);
+        assert_eq!(out.target, None, "{:?}", all[1]);
+    }
+}
+
 /// Audit A-1 (node-ipc): GHSA-97m3-w2cp-4xx6 is "fixed" at 10.1.3, a version
 /// npm does not serve (10.1.0, then 11.0.0); GHSA-3mpp-xfvh-qh37 holds
 /// 11.0.0..12.0.0. With the registry's list the target is 12.0.0, and the

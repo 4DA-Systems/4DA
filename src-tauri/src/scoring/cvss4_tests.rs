@@ -314,7 +314,7 @@ fn rejects_what_is_not_a_full_v4_base_vector() {
 fn the_score_parser_grades_a_v4_vector() {
     let v = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N";
     assert_eq!(crate::scoring::cvss::parse_cvss_score(v), Some(9.3));
-    assert_eq!(crate::osv::types::cvss_band(9.3), "critical");
+    assert_eq!(fourda_depengine::severity::cvss_tier(9.3), Some("critical"));
 }
 
 /// The vectors the MCP server's port is tested on (4da-mcp-server
@@ -431,7 +431,7 @@ fn scores_match_the_mcp_servers_vectors() {
     }
     let rustsec_0459 = "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N";
     let score = cvss4_base_score(rustsec_0459).unwrap();
-    assert_eq!(crate::osv::types::cvss_band(score), "medium");
+    assert_eq!(fourda_depengine::severity::cvss_tier(score), Some("medium"));
 }
 
 #[test]

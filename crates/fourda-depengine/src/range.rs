@@ -165,55 +165,224 @@ fn enumerated_contains(ecosystem: &str, user: &OrderedVersion, raw: &str, range:
 /// `Some(false)` outside all of them, `None` when a window could not be
 /// decided (an unreadable bound, or one no ordering compares with `user`).
 fn range_contains(ecosystem: &str, user: &OrderedVersion, range: &Range) -> Option<bool> {
-    let mut undecided = false;
-    let mut lower: Option<Lower> = None;
-    let mut note = |verdict: Option<bool>| match verdict {
-        Some(true) => true,
-        Some(false) => false,
-        None => {
-            undecided = true;
-            false
-        }
-    };
-    for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
-        if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-            lower = Lower::parse_in(&coerce_bound(intro, ecosystem), ecosystem);
-            if lower.is_none() && note(None) {
-                return Some(true);
-            }
-        }
-        let upper = obj
-            .get("fixed")
-            .map(|v| (v, false))
-            .or_else(|| obj.get("last_affected").map(|v| (v, true)));
-        if let Some((bound, inclusive)) = upper {
-            let bound = bound.as_str().unwrap_or("");
-            if let (Some(low), false) = (lower.as_ref(), is_unknown_bound(bound)) {
-                let bound = coerce_bound(bound, ecosystem);
-                let verdict = OrderedVersion::parse_in(&bound, ecosystem).and_then(|version| {
-                    in_window(
-                        user,
-                        low,
-                        Some(Upper {
-                            version: &version,
-                            inclusive,
-                        }),
-                    )
-                });
-                if note(verdict) {
-                    return Some(true);
-                }
-            }
-            lower = None;
-        }
-    }
-    // introduced with no fix → every version from introduced onward
-    if let Some(low) = lower.as_ref() {
-        if note(in_window(user, low, None)) {
-            return Some(true);
+    let read = range_spans(ecosystem, range);
+    let mut undecided = read.unread;
+    for span in &read.spans {
+        match span.contains(user) {
+            Some(true) => return Some(true),
+            Some(false) => {}
+            None => undecided = true,
         }
     }
     (!undecided).then_some(false)
+}
+
+/// One affected span of a SEMVER/ECOSYSTEM range: from `lower` up to `end`
+/// (`fixed` exclusive, `last_affected` inclusive), or open-ended.
+pub(crate) struct Span {
+    pub(crate) lower: Lower,
+    /// `(bound, as written, is_fixed)`; `None` for an open-ended span.
+    pub(crate) end: Option<(OrderedVersion, String, bool)>,
+}
+
+impl Span {
+    /// Whether `user` lies in the span; `None` when an edge cannot be
+    /// compared with it.
+    pub(crate) fn contains(&self, user: &OrderedVersion) -> Option<bool> {
+        let upper = self.end.as_ref().map(|(version, _, fixed)| Upper {
+            version,
+            inclusive: !fixed,
+        });
+        in_window(user, &self.lower, upper)
+    }
+}
+
+/// The spans one range reads as, and whether a window of it could not be read
+/// (an unreadable bound): that window decides nothing, so a version no
+/// readable span holds is undecided, never "not affected".
+pub(crate) struct RangeSpans {
+    pub(crate) spans: Vec<Span>,
+    pub(crate) unread: bool,
+}
+
+/// One range event, read.
+enum Event {
+    /// `introduced`.
+    Open(Lower),
+    /// `fixed` (`true`) or `last_affected`, with the bound as written.
+    Close(OrderedVersion, String, bool),
+}
+
+/// One event as written: `introduced` and the closing bound of one event
+/// object, in that order (a hand-written object may carry both).
+fn raw_events(obj: &serde_json::Map<String, serde_json::Value>) -> Vec<(&str, Option<bool>)> {
+    let mut out = Vec::new();
+    if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
+        out.push((intro, None));
+    }
+    let close = obj
+        .get("fixed")
+        .map(|v| (v, true))
+        .or_else(|| obj.get("last_affected").map(|v| (v, false)));
+    if let Some((bound, fixed)) = close {
+        out.push((bound.as_str().unwrap_or(""), Some(fixed)));
+    }
+    out
+}
+
+/// THE reading of one SEMVER/ECOSYSTEM range, for the matcher and the
+/// fix-target walk alike: the OSV schema's evaluation. Its events sorted by
+/// version (`introduced: "0"` first, equal versions in listed order), a
+/// version is affected from an `introduced` at or below it until a `fixed` at
+/// or below it or a `last_affected` below it. So an `introduced` inside an
+/// open span changes nothing, and a closing event with no span open closes
+/// nothing (api.osv.dev 2026-11-19: lunasvg 3.0.1 is clear of PYSEC-2025-128,
+/// `introduced 0, last_affected 3.0.0, last_affected 3.1.0`).
+///
+/// Paired in listed order instead, npm derby's GHSA-82jv-9wjw-pqh6 range
+/// `introduced 4.0.0-beta1, fixed 4.0.0-beta.11` (the fix sorts BELOW its
+/// own start) was an empty window, and derby 4.0.0 and 4.2.3 read "not
+/// affected" where OSV.dev reports both affected.
+///
+/// A range with a bound that cannot be read, or OSV's `-NA` ("boundary not
+/// available") sentinel, cannot be put in order, so it is read in listed
+/// order as before: the window an unreadable bound touches decides nothing
+/// (`unread`), and a `-NA` bound closes its window without making any version
+/// affected, which is OSV.dev's own answer for such records (PYSEC-2024-266,
+/// `last_affected: "2.10.0-NA"`, is returned for no apache-airflow version
+/// asked, 2026-11-19; see [`is_unknown_bound`]).
+pub(crate) fn range_spans(ecosystem: &str, range: &Range) -> RangeSpans {
+    let objects: Vec<&serde_json::Map<String, serde_json::Value>> = range
+        .events
+        .iter()
+        .flatten()
+        .filter_map(|e| e.as_object())
+        .collect();
+    let mut events = Vec::new();
+    let mut readable = true;
+    for (raw, close) in objects.iter().flat_map(|o| raw_events(o)) {
+        let event = match close {
+            None => Lower::parse_in(&coerce_bound(raw, ecosystem), ecosystem).map(Event::Open),
+            Some(_) if is_unknown_bound(raw) => None,
+            Some(fixed) => OrderedVersion::parse_in(&coerce_bound(raw, ecosystem), ecosystem)
+                .map(|v| Event::Close(v, raw.trim().to_string(), fixed)),
+        };
+        match event {
+            Some(e) => events.push(e),
+            None => readable = false,
+        }
+    }
+    if readable && sort_events(&mut events) {
+        return RangeSpans {
+            spans: sorted_spans(events),
+            unread: false,
+        };
+    }
+    listed_spans(ecosystem, &objects)
+}
+
+/// An event's version; `None` for `introduced: "0"`, below every version.
+fn event_version(event: &Event) -> Option<&OrderedVersion> {
+    match event {
+        Event::Open(Lower::Unbounded) => None,
+        Event::Open(Lower::At(v)) | Event::Close(v, _, _) => Some(v),
+    }
+}
+
+/// The order of two events' versions.
+fn event_order(a: &Event, b: &Event) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
+    match (event_version(a), event_version(b)) {
+        (None, None) => Some(Ordering::Equal),
+        (None, Some(_)) => Some(Ordering::Less),
+        (Some(_), None) => Some(Ordering::Greater),
+        (Some(x), Some(y)) => x.compare(y),
+    }
+}
+
+/// Sorts `events` by version, keeping equal versions in listed order (an
+/// insertion sort: ranges hold a handful of events). `false` when a pair it
+/// had to order cannot be ordered.
+fn sort_events(events: &mut [Event]) -> bool {
+    for i in 1..events.len() {
+        let mut j = i;
+        while j > 0 {
+            match event_order(&events[j - 1], &events[j]) {
+                Some(std::cmp::Ordering::Greater) => {
+                    events.swap(j - 1, j);
+                    j -= 1;
+                }
+                Some(_) => break,
+                None => return false,
+            }
+        }
+    }
+    true
+}
+
+/// Sorted events as spans: each `introduced` with nothing open opens one, the
+/// next closing event ends it, and a closing event with nothing open is no-op.
+fn sorted_spans(events: Vec<Event>) -> Vec<Span> {
+    let mut spans = Vec::new();
+    let mut open: Option<Lower> = None;
+    for event in events {
+        match event {
+            Event::Open(lower) => {
+                if open.is_none() {
+                    open = Some(lower);
+                }
+            }
+            Event::Close(version, raw, fixed) => {
+                if let Some(lower) = open.take() {
+                    spans.push(Span {
+                        lower,
+                        end: Some((version, raw, fixed)),
+                    });
+                }
+            }
+        }
+    }
+    if let Some(lower) = open {
+        spans.push(Span { lower, end: None });
+    }
+    spans
+}
+
+/// A range that cannot be sorted, read in listed order: each `introduced`
+/// starts a window that the next closing event ends. A window whose bound
+/// cannot be read is left out and marks the range `unread`; one a `-NA`
+/// bound ends is left out (it holds no version, see [`range_spans`]).
+fn listed_spans(
+    ecosystem: &str,
+    objects: &[&serde_json::Map<String, serde_json::Value>],
+) -> RangeSpans {
+    let mut spans = Vec::new();
+    let mut unread = false;
+    let mut lower: Option<Lower> = None;
+    for (raw, close) in objects.iter().flat_map(|o| raw_events(o)) {
+        let Some(fixed) = close else {
+            lower = Lower::parse_in(&coerce_bound(raw, ecosystem), ecosystem);
+            unread |= lower.is_none();
+            continue;
+        };
+        let Some(low) = lower.take() else {
+            continue;
+        };
+        if is_unknown_bound(raw) {
+            continue;
+        }
+        match OrderedVersion::parse_in(&coerce_bound(raw, ecosystem), ecosystem) {
+            Some(version) => spans.push(Span {
+                lower: low,
+                end: Some((version, raw.trim().to_string(), fixed)),
+            }),
+            None => unread = true,
+        }
+    }
+    if let Some(lower) = lower {
+        spans.push(Span { lower, end: None });
+    }
+    RangeSpans { spans, unread }
 }
 
 /// A range bound as OSV.dev evaluates it, for the semver ecosystems (npm,
@@ -333,3 +502,7 @@ pub fn parse_version(ver: &str) -> Option<Version> {
 #[cfg(test)]
 #[path = "range_bound_tests.rs"]
 mod bound_tests;
+
+#[cfg(test)]
+#[path = "range_order_tests.rs"]
+mod order_tests;

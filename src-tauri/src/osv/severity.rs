@@ -24,7 +24,7 @@ use fourda_depengine::severity::{ghsa_aliases, grade_from_aliases};
 
 use crate::evidence::Urgency;
 
-use super::types::{cvss_band, MatchedAdvisory, StoredAdvisory};
+use super::types::{MatchedAdvisory, StoredAdvisory};
 
 pub use fourda_depengine::severity::tier_rank;
 
@@ -42,7 +42,8 @@ pub(crate) fn canonical_tier(label: &str) -> Option<&'static str> {
 /// One record's own grade, the ONE per-record rule every grader reads: the
 /// source's curated label first (`database_specific.severity`, which the
 /// mirror stores as `severity_label`), else the band of a scorable CVSS
-/// score. `None` when it has neither.
+/// score (`fourda_depengine::severity::cvss_tier`: 0.0 grades nothing).
+/// `None` when it has neither.
 ///
 /// Label first because GitHub's label follows the CVSS v4 score that neither
 /// engine computes: 123 of the 3,923 pinned conformance records carry a label
@@ -51,7 +52,7 @@ pub(crate) fn canonical_tier(label: &str) -> Option<&'static str> {
 pub(crate) fn row_grade(cvss_score: Option<f64>, label: Option<&str>) -> Option<&'static str> {
     label
         .and_then(canonical_tier)
-        .or_else(|| cvss_score.filter(|s| *s > 0.0).map(cvss_band))
+        .or_else(|| cvss_score.and_then(fourda_depengine::severity::cvss_tier))
 }
 
 /// The summary half of the maintenance-notice predicate

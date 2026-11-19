@@ -41,6 +41,9 @@ pub(crate) struct Vulnerability {
 pub(crate) struct Severity {
     #[serde(rename = "type")]
     pub severity_type: String,
+    /// Empty when the entry carries none: the entry is passed over, the
+    /// record is still read (a missing `score` used to fail the whole record).
+    #[serde(default)]
     pub score: String,
 }
 
@@ -217,19 +220,6 @@ pub fn normalize_severity_label(raw: &str) -> Option<String> {
     }
 }
 
-/// CVSS base score → the same four-tier label (NVD bands).
-pub fn cvss_band(score: f64) -> &'static str {
-    if score >= 9.0 {
-        "critical"
-    } else if score >= 7.0 {
-        "high"
-    } else if score >= 4.0 {
-        "medium"
-    } else {
-        "low"
-    }
-}
-
 // One installed copy an advisory affects, with that copy's own fix targets:
 // produced by the engine crate's `match_inventory` (single-engine C0.2).
 pub use fourda_depengine::matching::MatchedDependency;
@@ -279,27 +269,31 @@ pub struct CacheUpdateResult {
 // ============================================================================
 
 impl Vulnerability {
+    /// The record's CVSS score and the type of the entry that gave it: the
+    /// HIGHEST valid score among every severity entry (v3.x and v4.0 vectors,
+    /// or a bare number), the rule both engines share
+    /// (`fourda_depengine::severity::highest_cvss`). OSV usually stores the
+    /// VECTOR in `score`, so each entry goes through the one parser. A 0.0 or
+    /// unreadable entry never hides one that scores: PYSEC-2026-1943's v3
+    /// vector scores 0.0 beside a v4 vector that scores 8.7, and taking the
+    /// v3 entry first graded it "low".
     pub(crate) fn best_cvss(&self) -> (Option<String>, Option<f64>) {
-        // v3 first (the score most tools quote), then v4 (Y6: RustSec's
-        // newer records publish only a v4.0 vector), then whatever is there.
-        let sev = self.severity.as_ref().and_then(|s| {
-            s.iter()
-                .find(|sv| sv.severity_type == "CVSS_V3")
-                .or_else(|| s.iter().find(|sv| sv.severity_type == "CVSS_V4"))
-                .or_else(|| s.first())
+        let entries = self.severity.iter().flatten().map(|s| {
+            (
+                s.severity_type.as_str(),
+                crate::scoring::cvss::parse_cvss_score(&s.score),
+            )
         });
-        let sev_type = sev.map(|s| s.severity_type.clone());
-        // OSV usually stores the CVSS VECTOR in `score` (not a bare number); compute the base score
-        // per the CVSS v3.1 spec so severity isn't silently dropped for the common case.
-        let score = sev.and_then(|s| crate::scoring::cvss::parse_cvss_score(&s.score));
-        (sev_type, score)
+        let (kind, score) = fourda_depengine::severity::highest_cvss(entries);
+        (kind.map(str::to_string), score)
     }
 
     /// The severity label the mirror stores: the source's curated label
     /// (`database_specific.severity`, GitHub-reviewed advisories) first —
     /// it is authoritative even when the CVSS block is a v4
-    /// vector — then the band of the best CVSS score. `None` when the
-    /// source gives neither.
+    /// vector — then the tier of the best CVSS score. `None` when the
+    /// source gives neither, and for a score of 0.0 (CVSS "None": no grade,
+    /// never "low").
     pub(crate) fn severity_label(&self) -> Option<String> {
         let curated = self
             .database_specific
@@ -307,7 +301,12 @@ impl Vulnerability {
             .and_then(|d| d.get("severity"))
             .and_then(|v| v.as_str())
             .and_then(normalize_severity_label);
-        curated.or_else(|| self.best_cvss().1.map(|s| cvss_band(s).to_string()))
+        curated.or_else(|| {
+            self.best_cvss()
+                .1
+                .and_then(fourda_depengine::severity::cvss_tier)
+                .map(str::to_string)
+        })
     }
 
     /// JSON array of `database_specific.cwe_ids`, or `None` when the source

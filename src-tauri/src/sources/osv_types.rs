@@ -26,6 +26,8 @@ pub(super) struct OsvPackage {
     pub ecosystem: String,
 }
 
+/// `/v1/query`'s answer; only the parsing tests read it.
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 pub(super) struct OsvQueryResponse {
     pub vulns: Option<Vec<OsvVulnerability>>,
@@ -33,7 +35,39 @@ pub(super) struct OsvQueryResponse {
 
 #[derive(Debug, Deserialize)]
 pub(super) struct OsvBatchResponse {
-    pub results: Option<Vec<OsvQueryResponse>>,
+    pub results: Option<Vec<OsvBatchResult>>,
+}
+
+/// One result of `/v1/querybatch`, in query order.
+#[derive(Debug, Deserialize)]
+pub(super) struct OsvBatchResult {
+    #[serde(default, deserialize_with = "batch_vulns")]
+    pub vulns: BatchVulns,
+}
+
+/// What one querybatch result says. OSV leaves `vulns` out when no advisory
+/// affects that query ([`BatchVulns::Absent`]); a `vulns` that is present
+/// and `null` is not that answer, and is read as malformed.
+#[derive(Debug, Default)]
+pub(super) enum BatchVulns {
+    #[default]
+    Absent,
+    Null,
+    Listed(Vec<OsvVulnerability>),
+}
+
+/// A present `vulns` field: its list, or `null` (an absent one is
+/// [`BatchVulns::Absent`] through `#[serde(default)]`).
+fn batch_vulns<'de, D>(deserializer: D) -> Result<BatchVulns, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(
+        match Option::<Vec<OsvVulnerability>>::deserialize(deserializer)? {
+            Some(list) => BatchVulns::Listed(list),
+            None => BatchVulns::Null,
+        },
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +86,8 @@ pub(super) struct OsvVulnerability {
 pub(super) struct OsvSeverity {
     #[serde(rename = "type")]
     pub severity_type: String,
+    /// Empty when the entry carries none (passed over, the record still read).
+    #[serde(default)]
     pub score: String,
 }
 

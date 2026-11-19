@@ -300,8 +300,7 @@ pub(crate) fn content_severity_tier(content: &str) -> Option<&'static str> {
             }
         }
     }
-    let score = score.filter(|s| *s > 0.0 && *s <= 10.0);
-    label.or_else(|| score.map(crate::osv::types::cvss_band))
+    label.or_else(|| score.and_then(fourda_depengine::severity::cvss_tier))
 }
 
 /// The `Affected range:` entries the cve source writes for ONE package —
