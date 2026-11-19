@@ -868,3 +868,34 @@ category = "main"
     assert_eq!(ids(&read_poetry), ["private@1.0.0", "requests@2.31.0"]);
     assert_eq!(read_poetry.non_registry_entries, 1);
 }
+
+/// npm reads `npm-shrinkwrap.json` in preference to `package-lock.json` and
+/// ignores the package-lock when both are present (npm docs,
+/// "npm-shrinkwrap.json" and "package-lock.json"). Read together, a stale
+/// package-lock added copies npm never installs, and the store merged both
+/// (twin of the `@4da/mcp-server` audit of 2026-11-19, reader survey).
+#[test]
+fn npm_shrinkwrap_is_read_in_preference_to_package_lock() {
+    let lock = |version: &str| {
+        format!(
+            r#"{{"name":"app","lockfileVersion":3,"packages":{{"":{{"name":"app"}},"node_modules/a":{{"version":"{version}"}}}}}}"#
+        )
+    };
+    let fs = MemFs::new()
+        .with("/p/package-lock.json", &lock("1.0.0"))
+        .with("/p/npm-shrinkwrap.json", &lock("1.1.0"));
+    let reads: Vec<String> = read_dir(&fs, "/p")
+        .iter()
+        .filter_map(|o| match o {
+            LockfileOutcome::Read(r) => Some(format!("{} {:?}", r.path, ids(r))),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reads, [r#"/p/npm-shrinkwrap.json ["a@1.1.0"]"#]);
+    // Alone, a package-lock is read as before.
+    let alone = MemFs::new().with("/q/package-lock.json", &lock("1.0.0"));
+    assert!(matches!(
+        read_dir(&alone, "/q").as_slice(),
+        [LockfileOutcome::Read(r)] if r.path == "/q/package-lock.json"
+    ));
+}
