@@ -294,6 +294,7 @@ mod ipc_rate_limit;
 mod judge_gate;
 mod knowledge_decay;
 pub(crate) mod language_detect;
+mod launch_mode;
 mod llm;
 pub(crate) mod llm_capability;
 mod llm_egress;
@@ -847,9 +848,11 @@ pub fn run() {
     }
 
     let app = builder
+        // The entry carries `--autostart` so a sign-in launch can stay in the
+        // tray instead of opening a window nobody asked for (launch_mode.rs).
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec![launch_mode::AUTOSTART_ARG]),
         ))
         .plugin({
             let commands: Vec<victauri_plugin::CommandInfo> =

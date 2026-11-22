@@ -73,6 +73,8 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
 
   const isLoading = state.loading;
   const isComplete = state.analysisComplete && !isLoading;
+  // The same condition that shows the "brief is on its way" status line below.
+  const briefInProgress = Boolean(aiBriefing.pending) && !aiBriefing.error;
 
   const freshness = {
     lastCycleAt: monitoring?.last_cycle_at ?? null,
@@ -101,12 +103,16 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         {/* Left: VoidEngine + status */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="w-9 h-9 flex items-center justify-center rounded-lg overflow-hidden" aria-hidden="true">
-            {/* Moves only while 4DA is working: a foreground analysis, or a
-                background source fetch the heartbeat reports via a FRESH pulse. */}
+            {/* Moves only while 4DA is working: a foreground analysis, a
+                background source fetch the heartbeat reports via a FRESH
+                pulse, or the brief being prepared (the projects rescan it
+                waits for, then the writing). The last was missing until
+                2026-11-22: the bar said "your projects are being rescanned"
+                with its own spinner turning while the mark sat still. */}
             <BrandMark
               signal={voidSignal}
               size={36}
-              active={isLoading || backgroundWork}
+              active={isLoading || backgroundWork || briefInProgress}
             />
           </div>
           <div className="flex items-center gap-2">

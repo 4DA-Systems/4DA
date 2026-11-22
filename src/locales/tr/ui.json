@@ -1987,6 +1987,8 @@
   "settings.monitoring.checking": "kontrol ediliyor...",
   "settings.monitoring.closeToTray": "Arka planda çalışmaya devam et",
   "settings.monitoring.closeToTrayDescription": "Kapatmak yerine pencereyi sistem tepsisine küçült",
+  "settings.monitoring.launchAtStartup": "Başlangıçta çalıştır",
+  "settings.monitoring.launchAtStartupDescription": "“Arka planda çalışmaya devam et” açıkken, oturum açtığınızda pencere açmadan sistem tepsisinde başlar.",
   "settings.monitoring.backgroundRefresh": "4DA kapalıyken yenile",
   "settings.monitoring.backgroundRefreshDescription": "4DA açık değilken bile beslemenizi izleme aralığınızda güncel tutan bir arka plan sistem görevi çalıştırır.",
   "settings.monitoring.backgroundRefreshActive": "Açık — bir sistem görevi, 4DA kapalıyken bile beslemenizi yaklaşık her {{minutes}} dakikada bir yeniler.",

@@ -1,0 +1,9 @@
+{
+  "starting": "4DA wird gestartet",
+  "slow": "Der Start läuft noch. Das dauert länger als üblich.",
+  "verySlow": "Direkt nach dem Hochfahren des Computers laden auch andere Programme, daher kann das einige Minuten dauern.",
+  "reload": "Neu laden",
+  "failed": "4DA konnte die Oberfläche nicht laden.",
+  "failedHint": "Versuchen Sie es erneut. Wenn es weiterhin passiert, starten Sie 4DA neu.",
+  "retry": "Erneut versuchen"
+}

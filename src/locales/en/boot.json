@@ -1,0 +1,9 @@
+{
+  "starting": "Starting 4DA",
+  "slow": "Still starting. This is taking longer than usual.",
+  "verySlow": "Right after your computer starts, other apps are loading too, so this can take a few minutes.",
+  "reload": "Reload",
+  "failed": "4DA could not load the interface.",
+  "failedHint": "Try again. If it keeps happening, restart 4DA.",
+  "retry": "Try again"
+}

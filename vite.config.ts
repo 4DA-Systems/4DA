@@ -56,6 +56,16 @@ export default defineConfig(async () => ({
           port: 4445,
         }
       : undefined,
+    // Compile the app's module graph when the server starts, not when the
+    // window first asks for it. The window otherwise waits on its boot screen
+    // while ~450 source files are transformed on request. Measured 2026-11-22
+    // on a settled machine, 15 s after a server restart: 2.2 s to serve the
+    // graph without this, 0.8 s with it. (The same load took 3 minutes when
+    // the server started alongside everything else at sign-in; that is the
+    // machine being busy, which warmup shortens but cannot remove.)
+    warmup: {
+      clientFiles: ["./src/main.tsx", "./src/App.tsx"],
+    },
     watch: {
       // Only source files (src/, public/, index.html) should trigger HMR.
       // Any dir with runtime writes MUST be listed here or it creates an

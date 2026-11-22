@@ -2024,6 +2024,8 @@
   "settings.monitoring.checking": "verificando...",
   "settings.monitoring.closeToTray": "Continuar executando em segundo plano",
   "settings.monitoring.closeToTrayDescription": "Ocultar janela na bandeja do sistema em vez de encerrar",
+  "settings.monitoring.launchAtStartup": "Iniciar com o sistema",
+  "settings.monitoring.launchAtStartupDescription": "Inicia na bandeja do sistema quando você entra, sem abrir janela, enquanto “Continuar executando em segundo plano” estiver ativado.",
   "settings.monitoring.backgroundRefresh": "Atualizar enquanto o 4DA está fechado",
   "settings.monitoring.backgroundRefreshDescription": "Executa uma tarefa do sistema em segundo plano que mantém seu feed atualizado no seu intervalo de monitoramento, mesmo quando o 4DA não está aberto.",
   "settings.monitoring.backgroundRefreshActive": "Ativado — uma tarefa do sistema atualiza seu feed cerca de a cada {{minutes}} min, mesmo quando o 4DA está fechado.",

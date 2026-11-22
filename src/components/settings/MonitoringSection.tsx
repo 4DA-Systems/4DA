@@ -79,8 +79,8 @@ function LaunchAtStartupToggle() {
   return (
     <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
       <div>
-        <span className="text-sm text-text-primary">{t('settings.monitoring.launchAtStartup', 'Launch at startup')}</span>
-        <p className="text-xs text-text-muted">{t('settings.monitoring.launchAtStartupDescription', 'Start 4DA automatically when you log in')}</p>
+        <span className="text-sm text-text-primary">{t('settings.monitoring.launchAtStartup')}</span>
+        <p className="text-xs text-text-muted">{t('settings.monitoring.launchAtStartupDescription')}</p>
         {regFailed && (
           <p className="text-xs text-red-400 mt-1">
             {t('settings.monitoring.autostartFailed', 'Could not register with the operating system. Check permissions or desktop environment support.')}

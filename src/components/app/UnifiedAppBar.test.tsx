@@ -182,4 +182,22 @@ describe('UnifiedAppBar — the brand mark moves only while 4DA is working', () 
     expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'true');
     backgroundWork.current = false;
   });
+
+  it('animates while the brief is being prepared (projects rescan, or the writing)', () => {
+    backgroundWork.current = false;
+    renderBar({
+      state: { loading: false, analysisComplete: true },
+      aiBriefing: { error: null, pending: 'Your projects are being rescanned.' },
+    });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'true');
+  });
+
+  it('rests once the brief has failed: an error is not work in progress', () => {
+    backgroundWork.current = false;
+    renderBar({
+      state: { loading: false, analysisComplete: true },
+      aiBriefing: { error: 'The model call failed', pending: 'stale pending text' },
+    });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'false');
+  });
 });

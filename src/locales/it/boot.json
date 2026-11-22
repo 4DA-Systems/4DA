@@ -1,0 +1,9 @@
+{
+  "starting": "Avvio di 4DA",
+  "slow": "L'avvio è ancora in corso. Sta richiedendo più tempo del solito.",
+  "verySlow": "Subito dopo l'accensione del computer si caricano anche altre app, quindi possono volerci alcuni minuti.",
+  "reload": "Ricarica",
+  "failed": "4DA non è riuscito a caricare l'interfaccia.",
+  "failedHint": "Riprova. Se il problema continua, riavvia 4DA.",
+  "retry": "Riprova"
+}

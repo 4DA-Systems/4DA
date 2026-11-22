@@ -441,6 +441,30 @@ pub async fn set_launch_at_startup(
     }))
 }
 
+/// Re-register an ENABLED launch-at-login entry so it carries the current
+/// arguments. Call only when the entry reads as enabled.
+///
+/// Entries written before `--autostart` existed have no flag, so 4DA could
+/// not tell a sign-in launch from a click and opened its window at every
+/// sign-in. Registration is idempotent. An entry the person switched off (in
+/// Settings, or in the operating system's own startup list) reads as not
+/// enabled, so the caller never reaches this and their choice stands.
+///
+/// Debug builds never register (see `set_launch_at_startup`): the entry they
+/// can see belongs to an installed release build and must keep pointing at it.
+pub(crate) fn refresh_launch_at_startup_entry(app: &tauri::AppHandle) {
+    #[cfg(debug_assertions)]
+    let _ = app;
+
+    #[cfg(not(debug_assertions))]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        if let Err(e) = app.autolaunch().enable() {
+            warn!(target: "4da::settings", error = %e, "Could not refresh the launch-at-login entry");
+        }
+    }
+}
+
 /// Get current autostart state.
 #[tauri::command]
 pub async fn get_launch_at_startup(app: tauri::AppHandle) -> Result<bool> {

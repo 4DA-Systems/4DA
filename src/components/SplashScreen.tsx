@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import sunLogo from '../assets/sun-logo.webp';
 import sunLogoLight from '../assets/sun-logo-light.webp';
 import { useTheme } from '../lib/theme';
 import { useAppVersion } from '../hooks/use-app-version';
+import { useBootElapsedSeconds } from '../boot/boot-clock';
+import { bootStrings } from '../boot/boot-strings';
+import { SlowStartNotice } from '../boot/SlowStartNotice';
 import {
   type InitStage,
   stageKeys,
@@ -35,13 +38,15 @@ export function SplashScreen({
   backendReady = true,
   minimumDisplayTime = 800,
 }: SplashScreenProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { isLight } = useTheme();
   const appVersion = useAppVersion();
   const [fadeOut, setFadeOut] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
   const stage: InitStage = backendReady ? 'ready' : 'database';
+  const elapsedSeconds = useBootElapsedSeconds();
+  const startStrings = useMemo(() => bootStrings(i18n.language), [i18n.language]);
 
   // Minimum display time
   useEffect(() => {
@@ -187,6 +192,15 @@ export function SplashScreen({
           />
         ))}
       </div>
+
+      {/* Once the wait stops being ordinary: say so, with a running count.
+          Same notice and same clock as the boot screen before this one. */}
+      <SlowStartNotice
+        elapsedSeconds={stage === 'ready' ? 0 : elapsedSeconds}
+        strings={startStrings}
+        devBuild={import.meta.env.DEV}
+        showReload={false}
+      />
       </div>
 
       {/* Version */}
