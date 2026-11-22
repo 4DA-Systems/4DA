@@ -127,16 +127,23 @@ pub(crate) fn fix_clause_for(package: &str, installed: Option<&str>, path: &FixP
             proven,
             route,
         } => {
+            // When the parent itself moves by a refresh (`route_refreshes`),
+            // only the copy's own refresh falls short.
+            let refresh =
+                if crate::evidence::route_refreshes(&route.standing, route.through.as_ref()) {
+                    format!("refreshing {package} alone")
+                } else {
+                    "a lockfile refresh".to_string()
+                };
             let why = if *by_requirement {
                 format!(
                     "{parent} {parent_version} requires a {package} line that excludes the fix \
-                     ({package} >= {to}), so a lockfile refresh will NOT fix it"
+                     ({package} >= {to}), so {refresh} will NOT fix it"
                 )
             } else {
                 format!(
                     "{parent} {parent_version} stays on an older {package} line, and the fix \
-                     ({package} >= {to}) is a semver-incompatible jump, so a lockfile refresh will \
-                     NOT fix it"
+                     ({package} >= {to}) is a semver-incompatible jump, so {refresh} will NOT fix it"
                 )
             };
             // A release proven on this machine is the move; otherwise only

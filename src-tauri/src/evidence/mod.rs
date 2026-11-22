@@ -66,7 +66,7 @@ pub(crate) use upgrade_parent::{parent_move, transitive_route_note};
 
 // Y5: the one blocked-upstream sentence and its predicate, shared with the
 // Brief's fix clause.
-pub(crate) use upgrade_blocked::{standing_blocked, BlockedCopy};
+pub(crate) use upgrade_blocked::{route_refreshes, standing_blocked, BlockedCopy};
 
 // Preemption LIST transport (AD-036): the single visibility filter (returned
 // counts == rendered cards) plus the list-payload trim, applied only in

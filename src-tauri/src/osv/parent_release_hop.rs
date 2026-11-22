@@ -126,6 +126,45 @@ fn lever_hop(
     }
 }
 
+/// The parent release the INSTALLED lever's requirement resolves to, when
+/// that release is above the installed parent, clear of the parent's own
+/// advisories, and admits a clean copy: then refreshing the parent in the
+/// lockfile is the whole move (navcal 2026-11-22: tailwindcss 3.4.18 already
+/// requires sucrase `^3.35.0`, and sucrase 3.35.1 drops the vulnerable glob).
+/// The lever's own advisories do not enter: they are its own row's business,
+/// and a refresh of the parent does not touch it.
+fn installed_brings(
+    hop: &HopCtx<'_>,
+    through: &Through,
+    lever_history: &RequirementHistory,
+    parent: &ParentFacts<'_>,
+) -> Option<String> {
+    let parent_clean = |v: &str| {
+        parent
+            .own
+            .usable(v, parent.newest.as_deref(), Some(&hop.parent.1))
+    };
+    let clean = hop.child.clean();
+    let child = hop.child.child(clean.as_ref());
+    let hp = HopParent {
+        installed: &hop.parent.1,
+        releases: &parent.releases,
+        history: parent.history,
+        own_clean: &parent_clean,
+    };
+    match hop_at(
+        &child,
+        &hp,
+        lever_history,
+        &|_| true,
+        &through.version,
+        Dialect::Npm,
+    )? {
+        Hop::Found { brings, .. } => Some(brings),
+        _ => None,
+    }
+}
+
 /// The advisories the lever releases that would bring a fixed parent in
 /// bring in, when only advisories the installed lever lacks (fixed or not)
 /// block them: sorted, deduped, unioned over every such release (review of
@@ -193,6 +232,14 @@ impl HopCtx<'_> {
             };
             return;
         }
+        // The installed lever already brings in a parent release that admits
+        // a clean copy: the parent moves by a lockfile refresh and the lever
+        // stays, so no lever release is named (the search below starts above
+        // the installed one).
+        if let Some(brings) = installed_brings(self, through, lever_history, &facts) {
+            through.standing = ParentStanding::Admits(Box::new(self.stays(through, brings)));
+            return;
+        }
         let (hop, smallest) = lever_hop(self, through, lever_history, &facts);
         through.standing = match hop {
             Hop::Found {
@@ -219,6 +266,21 @@ impl HopCtx<'_> {
                 }
             }
         };
+    }
+
+    /// The installed lever as its own release ([`installed_brings`]): `to` is
+    /// its installed version, `brings` the parent release a refresh resolves
+    /// to, and `refresh` the command that moves the parent there.
+    fn stays(&self, through: &Through, brings: String) -> ParentRelease {
+        let (parent, parent_version) = self.parent;
+        ParentRelease {
+            to: through.version.clone(),
+            floor: (brings != self.parent_to).then(|| self.parent_to.to_string()),
+            refresh: refresh_command(self.dir, parent, parent_version, &brings),
+            kept: Some(parent_version.clone()),
+            brings: Some(brings),
+            ..ParentRelease::default()
+        }
     }
 
     /// The lever's release; `smallest` when it was lifted to its own row.

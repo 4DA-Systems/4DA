@@ -189,6 +189,9 @@ impl ParentStanding {
 /// move to, read from the registry's own per-release requirements (audit H1).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ParentRelease {
+    /// The release to move to. For a lever, its own installed version when
+    /// that release already brings in `brings`: the lever stays, and the
+    /// parent moves by `refresh`.
     pub to: String,
     /// This package's smallest release that does the job (admits a clean
     /// copy; for a lever, brings in a parent that does), when `to` is higher

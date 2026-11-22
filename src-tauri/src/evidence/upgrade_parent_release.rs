@@ -138,6 +138,11 @@ pub(super) fn admits_move(
             keeps(package, r)
         );
     };
+    // Every lever already admits a fixed parent as installed
+    // (`upgrade_blocked::route_refreshes`): the parent's refresh is the move.
+    if t.more == 0 && t.all().all(super::upgrade_blocked::in_range) {
+        return format!("{why}. {}{}", refresh_move(parent, t), keeps(package, r));
+    }
     let levers: Vec<String> = t.all().map(|l| lever_move(parent, to, l, force)).collect();
     let more = match t.more {
         0 => String::new(),
@@ -178,10 +183,64 @@ fn arrives(parent: &str, t: &Through) -> String {
     }
 }
 
+/// "sucrase arrives through tailwindcss 3.4.18, a direct dependency whose
+/// installed release already admits sucrase 3.35.1, so refreshing sucrase in
+/// the lockfile is enough and nothing this project declares has to be
+/// upgraded: `npm update sucrase`". The release named is the lowest any lever
+/// resolves to (what one refresh reaches through all of them).
+fn refresh_move(parent: &str, t: &Through) -> String {
+    let stays = || {
+        t.all().filter_map(|l| match &l.standing {
+            ParentStanding::Admits(r) => Some(r),
+            _ => None,
+        })
+    };
+    let brings = stays()
+        .filter_map(|r| r.brings.as_deref())
+        .min_by(|a, b| {
+            crate::osv::parent_release::compare(a, b, "npm").unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .unwrap_or_default();
+    let names: Vec<String> = t
+        .all()
+        .map(|l| format!("{} {}", l.name, l.version))
+        .collect();
+    let through = match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!(
+            "{} and {last}, direct dependencies whose installed releases already admit",
+            rest.join(", ")
+        ),
+        _ => format!(
+            "{}, a direct dependency whose installed release already admits",
+            names.concat()
+        ),
+    };
+    let run = stays()
+        .find_map(|r| r.refresh.as_deref())
+        .map_or_else(String::new, |c| format!(": `{c}`"));
+    format!(
+        "{parent} arrives through {through} {parent} {brings}, so refreshing {parent} in the \
+         lockfile is enough and nothing this project declares has to be upgraded{run}"
+    )
+}
+
 /// What one declared dependency the parent arrives through can do.
 fn lever_move(parent: &str, to: &str, l: &Through, force: &str) -> String {
     let lever = &l.name;
     match &l.standing {
+        // It already admits a fixed parent as installed (`in_range`): it stays.
+        ParentStanding::Admits(h) if h.to == l.version => {
+            let brings = h.brings.as_deref().unwrap_or(to);
+            let run = h
+                .refresh
+                .as_deref()
+                .map_or_else(String::new, |c| format!(" (`{c}`)"));
+            format!(
+                "{lever} {} already admits {parent} {brings} as installed, so {lever} stays and \
+                 {parent} moves by a lockfile refresh{run}",
+                l.version
+            )
+        }
         ParentStanding::Admits(h) => {
             let brings = h.brings.as_deref().unwrap_or(to);
             let floor = h
