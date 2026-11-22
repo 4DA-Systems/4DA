@@ -2981,7 +2981,7 @@
       "item_id": "upgrade-plan:npm:@babel/core",
       "package": "@babel/core",
       "ecosystem": "npm",
-      "mechanism": "mixed",
+      "mechanism": "lockfile_refresh",
       "advisory_ids": [
         "GHSA-4x5r-pxfx-6jf8"
       ],
