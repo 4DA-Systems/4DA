@@ -402,7 +402,12 @@ check(
 );
 check(
   'get_context_files runs recursive file reads on a blocking worker',
-  /spawn_blocking/.test(contextCommandsRs) && /collect_context_files/.test(contextCommandsRs),
+  // The recursive walk (collect_context_paths) and the per-file metadata reads
+  // must each sit inside spawn_blocking. The walk's helper was once named
+  // collect_context_files; matching that name alone kept this check red after
+  // the rename while the behaviour it guards was intact.
+  /spawn_blocking\(move \|\| \{[\s\S]{0,160}collect_context_paths\(/.test(contextCommandsRs) &&
+    /pub async fn get_context_files\([\s\S]{0,500}spawn_blocking\(move \|\| \{[\s\S]{0,120}context_file_meta\(/.test(contextCommandsRs),
   'recursive project file reads must not occupy the async runtime used by IPC'
 );
 check(
@@ -636,7 +641,10 @@ check(
   'startup health is cached before frontend mount',
   /initialize_startup_health_cache\(\)/.test(appSetupRs) &&
     /pub\(crate\) fn initialize_startup_health_cache/.test(startupHealthRs) &&
-    /pub\(crate\) fn get_startup_health\(\) -> Vec<HealthIssue>[\s\S]{0,180}initialize_startup_health_cache\(\)/.test(startupHealthRs),
+    // The command is async and runs off the UI thread; the cached read is in
+    // its blocking half. (The check predates that split and stayed red.)
+    /pub\(crate\) async fn get_startup_health\(\)[\s\S]{0,260}get_startup_health_blocking\(\)/.test(startupHealthRs) &&
+    /fn get_startup_health_blocking\(\) -> Vec<HealthIssue> \{[\s\S]{0,120}initialize_startup_health_cache\(\)/.test(startupHealthRs),
   'HealthBanner must not recompute startup health, keychain, or DB probes after the webview mounts'
 );
 check(
