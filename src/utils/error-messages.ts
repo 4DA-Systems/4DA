@@ -240,6 +240,21 @@ export function inventoryRefreshingMessage(): string {
   );
 }
 
+/**
+ * The rescan the user was told to wait for finished and the earlier brief was
+ * kept. Live 2026-11-22: the "being rescanned" line vanished with nothing in
+ * its place and the brief still read "3h ago", so a finished scan (19
+ * lockfiles re-read) looked the same as a message that had been dropped.
+ * Carries the time, so the line stays true for as long as it is shown.
+ */
+export function rescanFinishedMessage(at: Date): string {
+  return t(
+    'errors:errorMsg.rescanFinishedBriefKept',
+    'Your projects were rescanned at {{time}}. Nothing new to act on, so the earlier brief stands.',
+    { time: at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) },
+  );
+}
+
 /** The brief is still being written after the IPC wait ran out: progress, not an error. */
 export function briefStillWritingMessage(): string {
   return t(
