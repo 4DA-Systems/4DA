@@ -359,7 +359,14 @@ pub async fn set_close_to_tray(enabled: bool) -> Result<serde_json::Value> {
 
     Ok(serde_json::json!({
         "close_to_tray": enabled,
-        "message": if enabled { "Window will hide to tray on close" } else { "Window will quit on close" }
+        // Either way 4DA keeps running in the tray: closing never quits it
+        // (the helper windows and the exit guard, #501, keep the process).
+        // Until 2026-11-22 the "off" message said "Window will quit on close".
+        "message": if enabled {
+            "The window stays loaded when closed; 4DA keeps running in the tray"
+        } else {
+            "The window is closed and reloads when reopened; 4DA keeps running in the tray"
+        }
     }))
 }
 
