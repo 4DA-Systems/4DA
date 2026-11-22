@@ -137,7 +137,7 @@
   "settings.monitoring.closeToTray": "Continuer en arrière-plan",
   "settings.monitoring.closeToTrayDescription": "Masquer la fenêtre dans la zone de notification au lieu de quitter",
   "settings.monitoring.launchAtStartup": "Lancer au démarrage",
-  "settings.monitoring.launchAtStartupDescription": "Démarre dans la zone de notification à l'ouverture de session, sans ouvrir de fenêtre, tant que « Continuer en arrière-plan » est activé.",
+  "settings.monitoring.launchAtStartupDescription": "Démarre dans la zone de notification à l'ouverture de session, sans ouvrir de fenêtre. Sur un bureau sans zone de notification, la fenêtre s'ouvre.",
   "settings.monitoring.backgroundRefresh": "Actualiser lorsque 4DA est fermé",
   "settings.monitoring.backgroundRefreshDescription": "Exécute une tâche système en arrière-plan qui garde votre flux à jour selon votre intervalle de surveillance, même lorsque 4DA n'est pas ouvert.",
   "settings.monitoring.backgroundRefreshActive": "Activé — une tâche système actualise votre flux environ toutes les {{minutes}} min, même lorsque 4DA est fermé.",

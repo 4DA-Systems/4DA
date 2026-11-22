@@ -12,10 +12,16 @@
 //! asks for it: the tray icon, the tray menu, or launching 4DA again (the
 //! single-instance handler shows it).
 //!
-//! The window stays hidden only where the person can bring it back, which is
-//! the test closing the window already uses: "keep running in background" is
-//! on and a tray icon exists. Anywhere else a sign-in launch opens the window
-//! exactly as a click does.
+//! The window stays hidden wherever a tray icon is there to bring it back.
+//! It does NOT depend on "keep running in background". The first version did
+//! (hidden only when that setting was on), and the first live run showed why
+//! that was wrong: on the operator machine the setting is off, so the window
+//! still opened at sign-in. With a tray, 4DA keeps running after its window is
+//! closed whichever way the setting points: the setting picks hide over
+//! destroy, and the helper windows and the exit guard (#501) keep the process.
+//! So a window at sign-in changed nothing about where 4DA ends up; it was only
+//! one more window to dismiss. Without a visible tray icon the window opens,
+//! exactly as a click does, because nothing else could reopen it.
 
 use std::sync::OnceLock;
 
@@ -66,7 +72,28 @@ pub(crate) fn starts_in_tray(
     close_to_tray_pref: Option<bool>,
     tray_available: bool,
 ) -> bool {
-    launched_at_sign_in && hides_to_tray(close_to_tray_pref, tray_available)
+    starts_in_tray_on(
+        launched_at_sign_in,
+        close_to_tray_pref,
+        tray_available,
+        tray_resident_by_default(),
+    )
+}
+
+/// [`starts_in_tray`] for a stated desktop. `desktop_shows_tray`: the desktop
+/// draws tray icons without an extension (everything but GNOME, Pantheon and
+/// Unity). On those three a tray icon can be created and still be invisible,
+/// so only a person who switched "keep running in background" ON, which says
+/// they have a working tray, gets the quiet start there.
+fn starts_in_tray_on(
+    launched_at_sign_in: bool,
+    close_to_tray_pref: Option<bool>,
+    tray_available: bool,
+    desktop_shows_tray: bool,
+) -> bool {
+    launched_at_sign_in
+        && tray_available
+        && (desktop_shows_tray || close_to_tray_pref == Some(true))
 }
 
 #[cfg(test)]
@@ -93,34 +120,67 @@ mod tests {
         assert!(!has_autostart_arg(args(&["C:\\x\\--autostart\\y"])));
     }
 
+    // Arguments of starts_in_tray_on: launched at sign-in, the "keep running
+    // in background" setting, a tray icon was created, the desktop draws tray
+    // icons without an extension.
+
     #[test]
-    fn a_sign_in_launch_stays_in_the_tray_when_the_tray_can_reopen_it() {
-        assert!(starts_in_tray(true, Some(true), true));
+    fn a_sign_in_launch_stays_in_the_tray_wherever_the_tray_is_visible() {
+        assert!(starts_in_tray_on(true, Some(true), true, true));
+        assert!(starts_in_tray_on(true, None, true, true));
+    }
+
+    #[test]
+    fn background_running_switched_off_still_starts_in_the_tray() {
+        // The operator machine, 2026-11-22: the setting was off and the first
+        // version opened the window at sign-in because of it. 4DA stays in
+        // the tray after its window is closed either way, so the window at
+        // sign-in bought nothing.
+        assert!(starts_in_tray_on(true, Some(false), true, true));
     }
 
     #[test]
     fn a_click_always_opens_the_window() {
+        assert!(!starts_in_tray_on(false, Some(true), true, true));
+        assert!(!starts_in_tray_on(false, None, true, true));
         assert!(!starts_in_tray(false, Some(true), true));
-        assert!(!starts_in_tray(false, None, true));
     }
 
     #[test]
     fn no_tray_icon_means_the_window_opens() {
+        assert!(!starts_in_tray_on(true, Some(true), false, true));
+        assert!(!starts_in_tray_on(true, None, false, true));
         assert!(!starts_in_tray(true, Some(true), false));
         assert!(!hides_to_tray(Some(true), false));
     }
 
     #[test]
-    fn background_running_switched_off_means_the_window_opens() {
-        // Closing the window quits 4DA for this person, so a start they
-        // cannot see would be a process they never asked to keep.
-        assert!(!starts_in_tray(true, Some(false), true));
+    fn a_desktop_that_hides_tray_icons_opens_the_window_unless_the_person_has_a_tray() {
+        // GNOME, Pantheon, Unity: the icon exists but nothing draws it.
+        assert!(!starts_in_tray_on(true, None, true, false));
+        assert!(!starts_in_tray_on(true, Some(false), true, false));
+        // "Keep running in background" switched ON there says a tray extension is installed.
+        assert!(starts_in_tray_on(true, Some(true), true, false));
     }
 
     #[test]
-    fn an_unset_preference_follows_the_desktop_default() {
-        assert_eq!(starts_in_tray(true, None, true), tray_resident_by_default());
+    fn the_running_desktop_decides_through_the_same_rule() {
+        for pref in [None, Some(true), Some(false)] {
+            assert_eq!(
+                starts_in_tray(true, pref, true),
+                starts_in_tray_on(true, pref, true, tray_resident_by_default())
+            );
+        }
         #[cfg(not(target_os = "linux"))]
         assert!(tray_resident_by_default());
+    }
+
+    #[test]
+    fn closing_the_window_still_follows_the_setting() {
+        // Unchanged by the sign-in rule: hide on close only when the setting
+        // (or the desktop default) says so and a tray exists.
+        assert!(hides_to_tray(Some(true), true));
+        assert!(!hides_to_tray(Some(false), true));
+        assert_eq!(hides_to_tray(None, true), tray_resident_by_default());
     }
 }
