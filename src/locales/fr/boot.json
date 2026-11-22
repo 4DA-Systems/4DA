@@ -1,0 +1,9 @@
+{
+  "starting": "Démarrage de 4DA",
+  "slow": "Le démarrage est toujours en cours. Cela prend plus de temps que d'habitude.",
+  "verySlow": "Juste après le démarrage de l'ordinateur, d'autres applications se chargent aussi, donc cela peut prendre quelques minutes.",
+  "reload": "Recharger",
+  "failed": "4DA n'a pas pu charger l'interface.",
+  "failedHint": "Réessayez. Si le problème persiste, redémarrez 4DA.",
+  "retry": "Réessayer"
+}

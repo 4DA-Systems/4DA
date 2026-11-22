@@ -1,0 +1,9 @@
+{
+  "starting": "Iniciando 4DA",
+  "slow": "Sigue iniciando. Está tardando más de lo habitual.",
+  "verySlow": "Justo después de encender el equipo también se cargan otras aplicaciones, así que esto puede tardar unos minutos.",
+  "reload": "Recargar",
+  "failed": "4DA no pudo cargar la interfaz.",
+  "failedHint": "Inténtalo de nuevo. Si sigue ocurriendo, reinicia 4DA.",
+  "retry": "Reintentar"
+}

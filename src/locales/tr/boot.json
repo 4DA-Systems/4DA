@@ -1,0 +1,9 @@
+{
+  "starting": "4DA başlatılıyor",
+  "slow": "Hâlâ başlatılıyor. Bu, normalden uzun sürüyor.",
+  "verySlow": "Bilgisayar açıldıktan hemen sonra diğer uygulamalar da yüklenir; bu yüzden birkaç dakika sürebilir.",
+  "reload": "Yeniden yükle",
+  "failed": "4DA arayüzü yükleyemedi.",
+  "failedHint": "Tekrar deneyin. Sorun devam ederse 4DA'yı yeniden başlatın.",
+  "retry": "Tekrar Dene"
+}

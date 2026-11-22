@@ -1,0 +1,9 @@
+{
+  "starting": "Iniciando o 4DA",
+  "slow": "Ainda iniciando. Está demorando mais que o normal.",
+  "verySlow": "Logo depois que o computador liga, outros aplicativos também estão carregando, então isso pode levar alguns minutos.",
+  "reload": "Recarregar",
+  "failed": "O 4DA não conseguiu carregar a interface.",
+  "failedHint": "Tente novamente. Se continuar acontecendo, reinicie o 4DA.",
+  "retry": "Tentar novamente"
+}

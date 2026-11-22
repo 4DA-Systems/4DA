@@ -4,11 +4,11 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BootScreen } from './boot/BootScreen';
+import { widenResourceCount } from './boot/boot-clock';
 import type { InstantBriefingSnapshot } from './store/types';
 
 const STARTUP_SNAPSHOT_TIMEOUT_MS = 750;
-const BOOT_LOADING_LABEL = 'Loading 4DA';
-const BOOT_ERROR_LABEL = '4DA could not load the interface.';
 
 async function withStartupTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   return Promise.race([
@@ -82,65 +82,14 @@ async function initNativeThemeChrome(): Promise<void> {
   }
 }
 
+// The boot screen: 4DA's mark in motion while the app's code loads, then (if
+// the wait runs long) what is happening and a way out. See src/boot.
 function BootShell() {
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#0A0A0A',
-        color: '#FFFFFF',
-        padding: 24,
-        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
-    >
-      <div
-        style={{
-          minHeight: '4rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          borderBottom: '1px solid #2A2A2A',
-        }}
-      >
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 999,
-            background: '#D4AF37',
-            flex: '0 0 auto',
-          }}
-          aria-hidden="true"
-        />
-        <span style={{ fontSize: 14, fontWeight: 500, color: '#A0A0A0' }}>{BOOT_LOADING_LABEL}</span>
-      </div>
-    </div>
-  );
+  return <BootScreen phase="loading" devBuild={import.meta.env.DEV} />;
 }
 
 function BootError() {
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#0A0A0A',
-        color: '#FFFFFF',
-        padding: 24,
-        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
-    >
-      <div
-        style={{
-          minHeight: '4rem',
-          display: 'flex',
-          alignItems: 'center',
-          borderBottom: '1px solid #2A2A2A',
-        }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 500, color: '#EF4444' }}>{BOOT_ERROR_LABEL}</span>
-      </div>
-    </div>
-  );
+  return <BootScreen phase="failed" devBuild={import.meta.env.DEV} />;
 }
 
 // ============================================================================
@@ -189,6 +138,9 @@ if ('serviceWorker' in navigator) {
 // ============================================================================
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 
+// A development build's boot screen shows the interface's files arriving.
+if (import.meta.env.DEV) widenResourceCount();
+
 root.render(
   <React.StrictMode>
     <BootShell />
@@ -211,7 +163,10 @@ void import('./App')
       </React.StrictMode>,
     );
   })
-  .catch(() => {
+  .catch((error: unknown) => {
+    // The boot screen offers a retry; the cause goes to the console (and, in
+    // an installed build, the local log via the error reporter once loaded).
+    console.error('[boot] the app could not be loaded:', error);
     root.render(
       <React.StrictMode>
         <BootError />
