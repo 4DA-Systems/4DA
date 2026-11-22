@@ -97,8 +97,13 @@ fn is_collapsible(item: &EvidenceItem, liveness: &ProjectLiveness) -> bool {
     // persisted BEFORE this collapse (`preemption::append_upgrade_plan_items`
     // caps and persists first), so the in-app feed folding the steps changes
     // nothing the MCP sees; the steps' packages are counted in the notice.
+    //
+    // Install drift does not collapse: it is a live read of what runs, with
+    // the one command that fixes it, not something "not audited since it
+    // went quiet" (it reaches the feed capped, `install_drift::items_with`).
     matches!(item.kind, EvidenceKind::Alert)
         && !item.lens_hints.dormant_notice
+        && !super::install_drift::is_install_drift_id(&item.id)
         && liveness.all_dormant(&item.affected_projects)
 }
 

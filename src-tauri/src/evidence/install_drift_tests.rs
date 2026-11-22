@@ -384,7 +384,7 @@ fn dormant_and_excluded_projects_are_skipped() {
     let dormant = ProjectLiveness::from_entries(&[(path.as_str(), 400)]);
     assert!(
         projects_with(&conn, &dormant, &|_| false).is_empty(),
-        "a dormant project is named once by collapse_dormant_alerts, not here"
+        "a dormant project's drift with no advisory on what is installed stays quiet"
     );
     let live = ProjectLiveness::from_entries(&[]);
     assert!(
@@ -489,5 +489,88 @@ fn an_overlong_title_names_the_count_instead_of_cutting_a_word() {
             .contains("@types/node 22.19.17 installed, 20.11.0/26.4.0 pinned"),
         "the detail moves to the explanation: {}",
         item.explanation
+    );
+}
+
+/// mcp-memory-server (audit 2026-11-23): dormant by git and manifest
+/// activity, its node_modules held @modelcontextprotocol/server 2.0.0 (three
+/// high advisories) while the lockfile pinned 2.3.1, and the server was
+/// running. The dormant notice names only projects that carry another alert,
+/// and the lockfile's pin carried none, so the app said nothing anywhere.
+#[test]
+fn a_dormant_projects_exposed_install_is_still_a_row() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = project(tmp.path(), "mcp-memory-server", "package-lock.json");
+    install(&dir, "@modelcontextprotocol/server", "2.0.0");
+    let db = test_db();
+    pin(&db, &dir, "@modelcontextprotocol/server", "2.3.1", false);
+    advisory(
+        &db,
+        "GHSA-46jr-4wx8-v453",
+        "@modelcontextprotocol/server",
+        "npm",
+        "2.3.0",
+    );
+    let path = path_of(&dir);
+    let conn = db.conn.lock();
+    let dormant = ProjectLiveness::from_entries(&[(path.as_str(), 104)]);
+
+    let rows = projects_with(&conn, &dormant, &|_| false);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(
+        rows[0].lead_fix(),
+        Some(("@modelcontextprotocol/server", "2.0.0", "2.3.1"))
+    );
+
+    // On the feed it informs like every alert on a dormant project (capped,
+    // and it says why), and it stays a row of its own: collapsing it into
+    // the dormant notice would drop the one command that fixes it.
+    let mut items = items_with(&conn, &dormant, &|_| false);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].urgency, Urgency::Medium);
+    assert!(
+        items[0]
+            .explanation
+            .contains(&crate::evidence::dormant_projects_note()),
+        "{}",
+        items[0].explanation
+    );
+    validate_item(&items[0]).expect("the row must validate");
+    assert_eq!(
+        crate::evidence::collapse_dormant_alerts(&mut items, &dormant),
+        0
+    );
+    assert!(is_install_drift_id(&items[0].id), "{items:?}");
+    assert!(
+        items[0].explanation.contains("`npm ci`"),
+        "{}",
+        items[0].explanation
+    );
+}
+
+/// The same dormant project with drift but no advisory on what is installed
+/// stays quiet: dormancy still keeps plain drift off the feed.
+#[test]
+fn a_dormant_projects_unexposed_drift_stays_quiet() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = project(tmp.path(), "mcp-memory-server", "package-lock.json");
+    install(&dir, "@modelcontextprotocol/server", "2.3.0");
+    let db = test_db();
+    pin(&db, &dir, "@modelcontextprotocol/server", "2.3.1", false);
+    advisory(
+        &db,
+        "GHSA-46jr-4wx8-v453",
+        "@modelcontextprotocol/server",
+        "npm",
+        "2.3.0",
+    );
+    let path = path_of(&dir);
+    let conn = db.conn.lock();
+    let dormant = ProjectLiveness::from_entries(&[(path.as_str(), 104)]);
+    assert!(projects_with(&conn, &dormant, &|_| false).is_empty());
+    assert_eq!(
+        projects_with(&conn, &ProjectLiveness::from_entries(&[]), &|_| false).len(),
+        1,
+        "an active project's plain drift is still a row"
     );
 }
