@@ -3972,7 +3972,7 @@
       "item_id": "upgrade-plan:npm:defu",
       "package": "defu",
       "ecosystem": "npm",
-      "mechanism": "mixed",
+      "mechanism": "lockfile_refresh",
       "advisory_ids": [
         "GHSA-737v-mqg7-c878"
       ],
@@ -4168,7 +4168,7 @@
       "item_id": "upgrade-plan:npm:express:ghsa-qw6h-vgh9-j6wx~2f12d0a8",
       "package": "express",
       "ecosystem": "npm",
-      "mechanism": "manifest_bump",
+      "mechanism": "lockfile_refresh",
       "advisory_ids": [
         "GHSA-qw6h-vgh9-j6wx"
       ],
@@ -4713,7 +4713,7 @@
       "item_id": "upgrade-plan:npm:js-yaml:ghsa-2883-xcg3-v3hh",
       "package": "js-yaml",
       "ecosystem": "npm",
-      "mechanism": "mixed",
+      "mechanism": "lockfile_refresh",
       "advisory_ids": [
         "GHSA-2883-xcg3-v3hh",
         "GHSA-52cp-r559-cp3m",
@@ -5634,7 +5634,7 @@
       "item_id": "upgrade-plan:npm:semver:ghsa-c2qf-rxjj-qqgw",
       "package": "semver",
       "ecosystem": "npm",
-      "mechanism": "mixed",
+      "mechanism": "lockfile_refresh",
       "advisory_ids": [
         "GHSA-c2qf-rxjj-qqgw"
       ],
@@ -6116,7 +6116,7 @@
       "item_id": "upgrade-plan:npm:undici:ghsa-2mjp-6q6p-2qxm~34b7eadb",
       "package": "undici",
       "ecosystem": "npm",
-      "mechanism": "manifest_bump",
+      "mechanism": "lockfile_refresh",
       "advisory_ids": [
         "GHSA-2mjp-6q6p-2qxm",
         "GHSA-35p6-xmwp-9g52",
