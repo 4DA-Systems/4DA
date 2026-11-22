@@ -136,6 +136,8 @@
   "settings.monitoring.title": "后台更新",
   "settings.monitoring.closeToTray": "在后台持续运行",
   "settings.monitoring.closeToTrayDescription": "最小化到系统托盘而非退出",
+  "settings.monitoring.launchAtStartup": "开机时启动",
+  "settings.monitoring.launchAtStartupDescription": "开启“在后台持续运行”时，登录后在系统托盘中启动，不打开窗口。",
   "settings.monitoring.backgroundRefresh": "4DA 关闭时仍刷新",
   "settings.monitoring.backgroundRefreshDescription": "运行一个后台系统任务，即使 4DA 未打开，也会按你的监控间隔保持信息流的更新。",
   "settings.monitoring.backgroundRefreshActive": "已开启 — 即使 4DA 已关闭，系统任务也会大约每 {{minutes}} 分钟刷新一次你的信息流。",

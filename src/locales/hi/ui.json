@@ -2012,6 +2012,8 @@
   "settings.monitoring.checking": "जाँच हो रही है...",
   "settings.monitoring.closeToTray": "बैकग्राउंड में चालू रखें",
   "settings.monitoring.closeToTrayDescription": "बंद करने की बजाय सिस्टम ट्रे में छिपाएँ",
+  "settings.monitoring.launchAtStartup": "स्टार्टअप पर लॉन्च करें",
+  "settings.monitoring.launchAtStartupDescription": "जब तक “बैकग्राउंड में चालू रखें” चालू है, साइन इन करने पर बिना कोई विंडो खोले सिस्टम ट्रे में शुरू होता है।",
   "settings.monitoring.backgroundRefresh": "4DA बंद होने पर भी रीफ़्रेश करें",
   "settings.monitoring.backgroundRefreshDescription": "एक बैकग्राउंड सिस्टम कार्य चलाता है जो 4DA के खुले न होने पर भी आपके मॉनिटरिंग अंतराल पर आपकी फ़ीड को ताज़ा रखता है।",
   "settings.monitoring.backgroundRefreshActive": "चालू — 4DA बंद होने पर भी, एक सिस्टम कार्य लगभग हर {{minutes}} मिनट में आपकी फ़ीड रीफ़्रेश करता है।",

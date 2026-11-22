@@ -134,6 +134,8 @@
   "settings.monitoring.title": "Фоновые обновления",
   "settings.monitoring.closeToTray": "Продолжать работу в фоне",
   "settings.monitoring.closeToTrayDescription": "Сворачивать окно в системный трей вместо закрытия",
+  "settings.monitoring.launchAtStartup": "Запускать при входе в систему",
+  "settings.monitoring.launchAtStartupDescription": "Запускается в области уведомлений при входе в систему, не открывая окно, пока включён параметр «Продолжать работу в фоне».",
   "settings.monitoring.backgroundRefresh": "Обновлять, когда 4DA закрыт",
   "settings.monitoring.backgroundRefreshDescription": "Запускает фоновую системную задачу, которая поддерживает вашу ленту в актуальном состоянии с вашим интервалом мониторинга, даже когда 4DA не открыт.",
   "settings.monitoring.backgroundRefreshActive": "Включено — системная задача обновляет вашу ленту примерно каждые {{minutes}} мин, даже когда 4DA закрыт.",

@@ -136,6 +136,8 @@
   "settings.monitoring.title": "バックグラウンド更新",
   "settings.monitoring.closeToTray": "バックグラウンドで実行を続ける",
   "settings.monitoring.closeToTrayDescription": "終了する代わりにシステムトレイに最小化",
+  "settings.monitoring.launchAtStartup": "起動時に開始",
+  "settings.monitoring.launchAtStartupDescription": "「バックグラウンドで実行を続ける」がオンの間は、サインイン時にウィンドウを開かずシステムトレイで起動します。",
   "settings.monitoring.backgroundRefresh": "4DAを閉じている間も更新",
   "settings.monitoring.backgroundRefreshDescription": "4DAが開いていないときでも、監視間隔に合わせてフィードを最新に保つバックグラウンドのシステムタスクを実行します。",
   "settings.monitoring.backgroundRefreshActive": "オン — 4DAを閉じていても、システムタスクが約{{minutes}}分ごとにフィードを更新します。",

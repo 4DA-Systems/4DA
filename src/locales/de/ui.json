@@ -136,6 +136,8 @@
   "settings.monitoring.title": "Hintergrund-Aktualisierungen",
   "settings.monitoring.closeToTray": "Im Hintergrund weiterlaufen",
   "settings.monitoring.closeToTrayDescription": "Fenster in den Infobereich minimieren statt zu beenden",
+  "settings.monitoring.launchAtStartup": "Beim Systemstart starten",
+  "settings.monitoring.launchAtStartupDescription": "Startet beim Anmelden im Infobereich, ohne ein Fenster zu öffnen, solange „Im Hintergrund weiterlaufen“ aktiviert ist.",
   "settings.monitoring.backgroundRefresh": "Aktualisieren, während 4DA geschlossen ist",
   "settings.monitoring.backgroundRefreshDescription": "Führt eine Hintergrund-Systemaufgabe aus, die deinen Feed in deinem Überwachungsintervall aktuell hält, auch wenn 4DA nicht geöffnet ist.",
   "settings.monitoring.backgroundRefreshActive": "An – eine Systemaufgabe aktualisiert deinen Feed etwa alle {{minutes}} Min., auch wenn 4DA geschlossen ist.",
