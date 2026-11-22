@@ -2679,7 +2679,7 @@
   "settings.monitoring.briefingPreview": "Preview briefing",
   "settings.monitoring.briefingPreviewing": "Showing...",
   "settings.monitoring.launchAtStartup": "Launch at startup",
-  "settings.monitoring.launchAtStartupDescription": "Starts in the system tray when you sign in, without opening a window, while “Keep running in background” is on.",
+  "settings.monitoring.launchAtStartupDescription": "Starts in the system tray when you sign in, without opening a window. On a desktop with no tray, the window opens.",
   "settings.monitoring.morningBriefing": "Intelligence Briefing",
   "settings.monitoring.morningBriefingDescription": "Center-screen daily briefing with signals, knowledge gaps, and escalating chains",
   "settings.privacy.activityTracking.subtitle": "Record tab opens, view durations, and search queries on your device to power relevance learning. Nothing is transmitted — data stays in your local SQLite. Off by default.",

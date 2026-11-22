@@ -194,7 +194,7 @@ fn reveal_sign_in_launch(
             target: "4da::startup",
             source,
             tray_available,
-            "Main window shown (sign-in launch, but background running is off or there is no tray icon)"
+            "Main window shown (sign-in launch, but no visible tray icon to wait in)"
         );
     }
 }
