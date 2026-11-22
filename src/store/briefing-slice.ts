@@ -7,6 +7,7 @@ import {
   budgetRefusalMessage,
   inventoryRefreshingMessage,
   narrationFailedMessage,
+  rescanFinishedMessage,
   translateError,
 } from '../utils/error-messages';
 import type { AppStore, BriefingSlice, BriefingState, BriefVerdicts, FreeBriefingData, InstantBriefingSnapshot } from './types';
@@ -15,6 +16,12 @@ import type { AppStore, BriefingSlice, BriefingState, BriefVerdicts, FreeBriefin
 export const INVENTORY_FRESH_EVENT = 'inventory-fresh';
 
 let inventoryRetryArmed = false;
+
+/**
+ * True from a brief deferred for the rescan until the answer that follows it:
+ * that answer owes the user the end of the wait they were told about.
+ */
+let waitedForRescan = false;
 
 /**
  * Generate the brief once, when the inventory refresh finishes. One armed
@@ -120,6 +127,7 @@ export function briefingStateFrom(
 /** Test seam: forget an armed retry between tests. */
 export function resetInventoryRetryForTests(): void {
   inventoryRetryArmed = false;
+  waitedForRescan = false;
 }
 
 const initialBriefingState: BriefingState = {
@@ -261,8 +269,17 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
         }));
       });
 
+      const afterRescan = waitedForRescan;
+      waitedForRescan = Boolean(result.inventory_refreshing);
+
       if (result.success && result.briefing) {
-        set({ aiBriefing: briefingStateFrom(result) });
+        const delivered = briefingStateFrom(result);
+        // A new brief says the wait is over by itself ("just now"). A kept
+        // one still shows its old age, so say the scan ran and changed nothing.
+        if (afterRescan && result.cached && !delivered.notice) {
+          delivered.notice = rescanFinishedMessage(new Date());
+        }
+        set({ aiBriefing: delivered });
         // AD-035: the generation just recorded (or superseded) the display-
         // binding verdicts — refresh so the same screen the briefing renders
         // on already honors them. Fire-and-forget: verdicts are supplementary
@@ -295,6 +312,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
         }));
       }
     } catch (error) {
+      waitedForRescan = false;
       set(state => ({
         aiBriefing: {
           ...state.aiBriefing,

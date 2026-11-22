@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useAppStore } from '../index';
-import { BRIEF_REASKS } from '../briefing-slice';
+import { BRIEF_REASKS, resetInventoryRetryForTests } from '../briefing-slice';
 import { invoke } from '@tauri-apps/api/core';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -176,6 +176,63 @@ describe('briefing-slice', () => {
       expect(aiBriefing.pending).toBe(
         'Your projects are being rescanned. The brief will be written as soon as the scan finishes.',
       );
+    });
+
+    // Live 2026-11-22: the rescan finished (19 lockfiles re-read), the backend
+    // kept today's brief ("facts unchanged"), and the "being rescanned" line
+    // vanished with nothing in its place over a brief still reading "3h ago".
+    describe('when the rescan it waited for finishes', () => {
+      const deferred = { success: false, error: 'inventory_refreshing', inventory_refreshing: true, briefing: null };
+      const verdicts = { filtered: [], expires_in_seconds: 0 };
+      const settle = () => vi.waitFor(() => expect(useAppStore.getState().aiBriefing.pending ?? null).toBeNull());
+
+      beforeEach(() => resetInventoryRetryForTests());
+
+      it('says the scan ran and the earlier brief stands when the brief is kept', async () => {
+        vi.mocked(invoke)
+          .mockResolvedValueOnce(deferred)
+          .mockResolvedValueOnce({
+            success: true, briefing: 'Kept brief', model: 'm', cached: true,
+            briefing_created_at: '2026-11-22 07:20:37',
+          })
+          .mockResolvedValue(verdicts);
+
+        await useAppStore.getState().generateBriefing({ auto: true });
+        await settle();
+
+        const { aiBriefing } = useAppStore.getState();
+        expect(aiBriefing.content).toBe('Kept brief');
+        expect(aiBriefing.error).toBeNull();
+        expect(aiBriefing.notice).toMatch(
+          /^Your projects were rescanned at .+\. Nothing new to act on, so the earlier brief stands\.$/,
+        );
+        // The brief keeps its real age; the notice carries the scan's time.
+        expect(aiBriefing.lastGenerated?.toISOString()).toBe('2026-11-22T07:20:37.000Z');
+      });
+
+      it('adds nothing when a new brief was written: its own age says so', async () => {
+        vi.mocked(invoke)
+          .mockResolvedValueOnce(deferred)
+          .mockResolvedValueOnce({ success: true, briefing: 'New brief', model: 'm' })
+          .mockResolvedValue(verdicts);
+
+        await useAppStore.getState().generateBriefing({ auto: true });
+        await settle();
+
+        const { aiBriefing } = useAppStore.getState();
+        expect(aiBriefing.content).toBe('New brief');
+        expect(aiBriefing.notice ?? null).toBeNull();
+      });
+
+      it('never claims a rescan for a kept brief that waited for none', async () => {
+        vi.mocked(invoke)
+          .mockResolvedValueOnce({ success: true, briefing: 'Kept brief', model: 'm', cached: true })
+          .mockResolvedValue(verdicts);
+
+        await useAppStore.getState().generateBriefing({ auto: true });
+
+        expect(useAppStore.getState().aiBriefing.notice ?? null).toBeNull();
+      });
     });
 
     // Live 2026-11-05: the backend finished the brief 36 s after the 120 s IPC
