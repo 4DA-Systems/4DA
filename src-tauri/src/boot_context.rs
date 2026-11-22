@@ -92,7 +92,9 @@ pub fn current_grace_secs() -> u64 {
 /// `autostart_enabled` should come from the `tauri-plugin-autostart` plugin
 /// (`app.autolaunch().is_enabled()`). Pass `false` if the check fails — the
 /// detector treats unknown autostart state as user-launched.
-pub fn detect_and_cache(autostart_enabled: bool) -> BootContext {
+/// `launched_at_sign_in` is `launch_mode::launched_at_sign_in()`: the process
+/// carries the flag the launch-at-login entry passes.
+pub fn detect_and_cache(autostart_enabled: bool, launched_at_sign_in: bool) -> BootContext {
     let uptime = system_uptime().unwrap_or(Duration::from_secs(u64::MAX));
     let uptime_secs = uptime.as_secs();
 
@@ -107,20 +109,12 @@ pub fn detect_and_cache(autostart_enabled: bool) -> BootContext {
         .unwrap_or(0);
     let recently_running = last_run > 0 && now_secs.saturating_sub(last_run) < 600;
 
-    let context = if recently_running {
-        BootContext::ProcessRestart
-    } else if uptime_secs < 300 {
-        // System uptime <5 min — definitely a cold power-on regardless of autostart.
-        BootContext::ColdPowerOn
-    } else if autostart_enabled && uptime_secs < 600 {
-        // Autostart enabled + uptime <10 min: launched as part of login flow.
-        // We give login flows the same generous grace as cold boot because
-        // multiple apps are competing for CPU on the user's desktop.
-        BootContext::AutoStart
-    } else {
-        // System has been running a while — user clicked the icon themselves.
-        BootContext::UserLaunched
-    };
+    let context = classify(
+        uptime_secs,
+        launched_at_sign_in,
+        recently_running,
+        autostart_enabled,
+    );
 
     let grace = context.grace_secs();
     CACHED_GRACE_SECS.store(grace, Ordering::Relaxed);
@@ -137,6 +131,39 @@ pub fn detect_and_cache(autostart_enabled: bool) -> BootContext {
     );
 
     context
+}
+
+/// Decide the boot context from what is known at startup.
+///
+/// A machine that has been up for under five minutes is still starting,
+/// whatever else is true, so that is checked FIRST. Until 2026-11-22
+/// `recently_running` won instead, and it is true after every real reboot
+/// where the scheduled background refresh ran before the GUI: the refresh
+/// writes `scheduler_state`, the GUI read that as "4DA was running minutes
+/// ago" and took zero grace 217 s after power-on, in the middle of the
+/// desktop's own start-up.
+fn classify(
+    uptime_secs: u64,
+    launched_at_sign_in: bool,
+    recently_running: bool,
+    autostart_enabled: bool,
+) -> BootContext {
+    if uptime_secs < 300 {
+        BootContext::ColdPowerOn
+    } else if launched_at_sign_in {
+        // The launch-at-login entry started this process: the person is
+        // signing in, however long the machine itself has been up.
+        BootContext::AutoStart
+    } else if recently_running {
+        BootContext::ProcessRestart
+    } else if autostart_enabled && uptime_secs < 600 {
+        // An entry registered before the flag existed: infer the sign-in flow
+        // from autostart being on and the machine having started recently.
+        BootContext::AutoStart
+    } else {
+        // System has been running a while — user clicked the icon themselves.
+        BootContext::UserLaunched
+    }
 }
 
 /// Find the most recent `last_run_unix` across all jobs in `scheduler_state`.
@@ -261,6 +288,48 @@ mod tests {
         assert_eq!(BootContext::AutoStart.label(), "autostart");
         assert_eq!(BootContext::UserLaunched.label(), "user-launched");
         assert_eq!(BootContext::ProcessRestart.label(), "process-restart");
+    }
+
+    #[test]
+    fn a_machine_that_just_started_is_a_cold_boot_even_if_the_engine_ran_first() {
+        // 2026-11-22: the scheduled refresh ran at boot, so `recently_running`
+        // was true when the GUI started 217 s after power-on.
+        assert_eq!(classify(217, false, true, false), BootContext::ColdPowerOn);
+        assert_eq!(classify(217, true, true, true), BootContext::ColdPowerOn);
+    }
+
+    #[test]
+    fn a_sign_in_launch_is_autostart_however_long_the_machine_has_been_up() {
+        // Signing out and back in days after power-on.
+        assert_eq!(classify(86_400, true, false, true), BootContext::AutoStart);
+        // The flag outranks "was running recently": a fast sign-out/sign-in.
+        assert_eq!(classify(86_400, true, true, true), BootContext::AutoStart);
+    }
+
+    #[test]
+    fn a_restart_on_a_settled_machine_takes_no_grace() {
+        assert_eq!(
+            classify(86_400, false, true, false),
+            BootContext::ProcessRestart
+        );
+    }
+
+    #[test]
+    fn an_unflagged_entry_is_still_recognised_soon_after_boot() {
+        assert_eq!(classify(400, false, false, true), BootContext::AutoStart);
+        assert_eq!(
+            classify(400, false, false, false),
+            BootContext::UserLaunched
+        );
+        assert_eq!(classify(900, false, false, true), BootContext::UserLaunched);
+    }
+
+    #[test]
+    fn unknown_uptime_is_never_a_cold_boot() {
+        assert_eq!(
+            classify(u64::MAX, false, false, false),
+            BootContext::UserLaunched
+        );
     }
 
     #[test]

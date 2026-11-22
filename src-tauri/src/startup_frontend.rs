@@ -5,6 +5,7 @@
 //! Frontend first-light gate for the hidden main window.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
 use serde::Serialize;
 #[cfg(debug_assertions)]
@@ -17,7 +18,14 @@ use tracing::info;
 use tracing::warn;
 
 static FRONTEND_READY: AtomicBool = AtomicBool::new(false);
+/// First light has been handled: the main window was shown, or deliberately
+/// left in the tray for a sign-in launch.
 static MAIN_WINDOW_SHOWN: AtomicBool = AtomicBool::new(false);
+/// Whether a tray icon exists. Unset until `tray_setup_finished` runs.
+static TRAY_AVAILABLE: OnceLock<bool> = OnceLock::new();
+/// A sign-in launch reached first light before the tray outcome was known
+/// (release builds mark first light as soon as the app handle exists).
+static REVEAL_AWAITS_TRAY: AtomicBool = AtomicBool::new(false);
 
 /// Start the window visibility/recovery gate as soon as Tauri gives us an
 /// AppHandle. This intentionally runs before background warmup so live
@@ -116,8 +124,7 @@ fn show_main_window_once(app_handle: &tauri::AppHandle, source: &'static str) {
         return;
     }
 
-    show_main_window(app_handle);
-    info!(target: "4da::startup", source, "Main window shown");
+    reveal_at_first_light(app_handle, source);
     crate::startup_watchdog::mark_phase0_complete();
 }
 
@@ -127,9 +134,69 @@ fn show_main_window_fallback(app_handle: &tauri::AppHandle) {
         return;
     }
 
-    show_main_window(app_handle);
-    warn!(target: "4da::startup", "Main window shown (dev server poll fallback)");
+    warn!(target: "4da::startup", "First light reached by the dev server poll fallback");
+    reveal_at_first_light(app_handle, "dev server poll fallback");
     crate::startup_watchdog::mark_phase0_complete();
+}
+
+/// Show the main window at first light, unless this is a sign-in launch that
+/// belongs in the tray (`launch_mode`).
+fn reveal_at_first_light(app_handle: &tauri::AppHandle, source: &'static str) {
+    if !crate::launch_mode::launched_at_sign_in() {
+        show_main_window(app_handle);
+        info!(target: "4da::startup", source, "Main window shown");
+        return;
+    }
+    match TRAY_AVAILABLE.get() {
+        Some(&tray_available) => reveal_sign_in_launch(app_handle, tray_available, source),
+        None => {
+            // Staying hidden is only safe with a tray icon to reopen from,
+            // and the tray is not built yet: `tray_setup_finished` decides.
+            REVEAL_AWAITS_TRAY.store(true, Ordering::SeqCst);
+            // The tray may have finished between the read and the store.
+            if let Some(&tray_available) = TRAY_AVAILABLE.get() {
+                if REVEAL_AWAITS_TRAY.swap(false, Ordering::SeqCst) {
+                    reveal_sign_in_launch(app_handle, tray_available, source);
+                }
+            }
+        }
+    }
+}
+
+/// Report the tray setup outcome. Call once, right after the tray is built
+/// (or failed to build).
+pub(crate) fn tray_setup_finished(app_handle: &tauri::AppHandle, tray_available: bool) {
+    let _ = TRAY_AVAILABLE.set(tray_available);
+    if REVEAL_AWAITS_TRAY.swap(false, Ordering::SeqCst) {
+        reveal_sign_in_launch(app_handle, tray_available, "tray setup");
+    }
+}
+
+fn reveal_sign_in_launch(
+    app_handle: &tauri::AppHandle,
+    tray_available: bool,
+    source: &'static str,
+) {
+    let close_to_tray_pref = crate::get_settings_manager()
+        .lock()
+        .get()
+        .monitoring
+        .close_to_tray;
+    if crate::launch_mode::starts_in_tray(true, close_to_tray_pref, tray_available) {
+        info!(
+            target: "4da::startup",
+            source,
+            "Started at sign-in: the main window stays in the tray until it is opened"
+        );
+    } else {
+        show_main_window(app_handle);
+        info!(
+            target: "4da::startup",
+            source,
+            tray_available,
+            "Main window shown (sign-in launch, but background running is off or there is no tray icon)"
+        );
+    }
 }
 
 fn show_main_window(app_handle: &tauri::AppHandle) {

@@ -774,6 +774,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     };
 
+    // A sign-in launch stays in the tray only when there is one to reopen it from.
+    crate::startup_frontend::tray_setup_finished(app.handle(), tray.is_some());
+
     // Store tray handle for later updates
     app.manage(parking_lot::Mutex::new(tray));
 
@@ -894,7 +897,13 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     {
         use tauri_plugin_autostart::ManagerExt;
         let autostart_enabled = app.handle().autolaunch().is_enabled().unwrap_or(false);
-        crate::boot_context::detect_and_cache(autostart_enabled);
+        if autostart_enabled {
+            crate::monitoring_commands::refresh_launch_at_startup_entry(app.handle());
+        }
+        crate::boot_context::detect_and_cache(
+            autostart_enabled,
+            crate::launch_mode::launched_at_sign_in(),
+        );
     }
 
     // Start background scheduler
@@ -2280,38 +2289,38 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
         }
     }
 
+    // macOS: a Dock click while no window is on screen (hidden to the menu
+    // bar, or a sign-in launch that never opened one) brings the window back.
+    // Without this the Dock icon of a running 4DA did nothing at all.
+    #[cfg(target_os = "macos")]
+    if let tauri::RunEvent::Reopen {
+        has_visible_windows: false,
+        ..
+    } = &event
+    {
+        if let Some(window) = ensure_main_window(app_handle) {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+
     // Hide-to-tray: intercept window close when enabled
     if let tauri::RunEvent::WindowEvent {
         event: tauri::WindowEvent::CloseRequested { api, .. },
         ..
     } = &event
     {
-        let close_to_tray = {
-            let settings = get_settings_manager().lock();
-            let user_pref = settings.get().monitoring.close_to_tray;
-            // On Linux with GNOME/Pantheon/Unity (no system tray support),
-            // default to false to prevent the window from becoming unreachable.
-            // Users who install a tray extension can explicitly enable this.
-            #[cfg(target_os = "linux")]
-            let default_value = {
-                let desktop = std::env::var("XDG_CURRENT_DESKTOP")
-                    .unwrap_or_default()
-                    .to_uppercase();
-                !desktop.contains("GNOME")
-                    && !desktop.contains("PANTHEON")
-                    && !desktop.contains("UNITY")
-            };
-            #[cfg(not(target_os = "linux"))]
-            let default_value = true;
-            user_pref.unwrap_or(default_value)
-        };
+        // On Linux with GNOME/Pantheon/Unity (no system tray support) the
+        // default is false, so the window cannot become unreachable; users who
+        // install a tray extension can explicitly enable it. The rule lives in
+        // `launch_mode` because a sign-in launch asks the same question.
+        let user_pref = get_settings_manager().lock().get().monitoring.close_to_tray;
         // Safety: if tray setup failed, never hide to tray (window becomes unreachable)
         let tray_available = app_handle
             .try_state::<parking_lot::Mutex<Option<tauri::tray::TrayIcon<tauri::Wry>>>>()
             .map(|state| state.lock().is_some())
             .unwrap_or(false);
-        let close_to_tray = close_to_tray && tray_available;
-        if close_to_tray {
+        if crate::launch_mode::hides_to_tray(user_pref, tray_available) {
             api.prevent_close();
             if let Some(window) = app_handle.get_webview_window("main") {
                 let _ = window.hide();
