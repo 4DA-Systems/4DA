@@ -12,6 +12,8 @@ const {
   DEFAULT_READY,
   DEFAULT_FATAL,
   findRelease,
+  resolveTags,
+  matchingLines,
   pickInstaller,
   parseShasums,
   checkHash,
@@ -158,4 +160,44 @@ test('argument parsing collects repeated --fatal and refuses a missing value', (
   assert.equal(a.pid, '42');
   assert.deepEqual(a.fatal, ['A', 'B']);
   assert.throws(() => parseArgs(['watch', '--pid']), /--pid needs a value/);
+});
+
+// The repo's real release list shape: production tags, MCP tags, a pointer
+// release, a dry-run draft and a prerelease.
+const RELEASES = [
+  { tag_name: 'desktop-latest', draft: false, prerelease: true },
+  { tag_name: 'mcp-v6.0.0', draft: false, prerelease: false },
+  { tag_name: 'v1.0.2', draft: false, prerelease: false },
+  { tag_name: 'v1.0.10', draft: false, prerelease: false },
+  { tag_name: 'v1.0.3', draft: false, prerelease: false },
+  { tag_name: 'v1.0.4', draft: true, prerelease: false },
+  { tag_name: 'v1.0.11-rc.1', draft: false, prerelease: true },
+  { tag_name: 'ocr-models-onnx-1', draft: false, prerelease: true },
+];
+
+test('resolve picks the newest PUBLISHED production release, by version not by text', () => {
+  assert.deepEqual(resolveTags(RELEASES), { tag: 'v1.0.10', previous: 'v1.0.3' });
+});
+
+test('resolve: a release under test upgrades from the newest published one that is not itself', () => {
+  // A release run tests its own, still-draft tag; the previous release is the
+  // newest one users have.
+  assert.deepEqual(resolveTags(RELEASES, { tag: 'v1.0.4' }), { tag: 'v1.0.4', previous: 'v1.0.10' });
+  assert.deepEqual(resolveTags(RELEASES, { tag: 'v1.0.10' }), { tag: 'v1.0.10', previous: 'v1.0.3' });
+  assert.deepEqual(resolveTags(RELEASES, { tag: 'v1.0.4', previous: 'v1.0.2' }), { tag: 'v1.0.4', previous: 'v1.0.2' });
+});
+
+test('resolve never offers a draft, a prerelease or a non-production tag, and says when nothing is published', () => {
+  const onlyOne = [{ tag_name: 'v1.0.3', draft: false, prerelease: false }, { tag_name: 'v1.0.4', draft: true, prerelease: false }];
+  assert.deepEqual(resolveTags(onlyOne), { tag: 'v1.0.3', previous: '' });
+  assert.throws(() => resolveTags([{ tag_name: 'v1.0.4', draft: true, prerelease: false }]), /no published production release/);
+});
+
+test('evidence lines are the matching ones, capped', () => {
+  const log = 'a\nRunning Phase 129: x (schema version 128 -> 129)\nb\nPhase 129 completed\n';
+  assert.deepEqual(matchingLines(log, 'schema version|completed'), [
+    'Running Phase 129: x (schema version 128 -> 129)',
+    'Phase 129 completed',
+  ]);
+  assert.equal(matchingLines('x\n'.repeat(100), 'x', 40).length, 40);
 });

@@ -13,9 +13,8 @@
  *      `--unsigned-ok` is passed (useful for unsigned dev builds).
  *
  * What it does NOT check:
- *   - That the installer actually runs on a clean Windows box. That requires
- *     a VM and is documented as manual step 5 in RELEASE-RUNBOOK.md.
- *   - That the bundled binary starts post-install. Also manual, same reason.
+ *   - That the installer runs on a clean machine and the installed app starts.
+ *     .github/workflows/installer-smoke.yml does that, per platform.
  *   - Any Linux/macOS bundle formats. NSIS is the primary ship vehicle.
  *
  * Usage:
@@ -236,8 +235,8 @@ function report() {
   for (const f of result.failures) console.log(`  ${RED}[FAIL]${RESET} ${f}`);
   console.log('');
   if (result.failures.length > 0) {
-    console.log(`${RED}FAIL${RESET} — ${result.failures.length} failing check(s). See RELEASE-RUNBOOK.md step 5 for the manual VM test that must also pass before shipping.`);
+    console.log(`${RED}FAIL${RESET} — ${result.failures.length} failing check(s). The install-and-launch check is .github/workflows/installer-smoke.yml.`);
   } else {
-    console.log(`${GRN}PASS${RESET} — artifact-level smoke passes. Now run the manual VM install check (RELEASE-RUNBOOK.md step 5).`);
+    console.log(`${GRN}PASS${RESET} — artifact-level smoke passes. Installing and launching it is .github/workflows/installer-smoke.yml's job.`);
   }
 }

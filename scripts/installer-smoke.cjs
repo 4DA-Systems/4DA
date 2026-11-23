@@ -15,12 +15,19 @@
  *          in the log at any point. Exit 1 with a `::error::` annotation on any
  *          miss.
  *
+ *   resolve  Which release to test and which to upgrade from: the given tags,
+ *          else the newest PUBLISHED production release (vX.Y.Z, not draft,
+ *          not prerelease) and the newest one that is not the tag under test.
+ *          Writes `tag` and `previous_tag` to $GITHUB_OUTPUT.
+ *
  * Usage:
+ *   node scripts/installer-smoke.cjs resolve --repo OWNER/NAME [--tag T] [--previous-tag P]
  *   node scripts/installer-smoke.cjs fetch --repo OWNER/NAME --tag vX.Y.Z \
  *        --kind win|macArm|macIntel|linuxDeb|linuxAppImage --dir <download dir>
  *   node scripts/installer-smoke.cjs watch --log-dir <dir> --pid <pid> \
  *        [--ready <text>] [--budget-secs 120] [--alive-secs 45] [--fatal <text>]... \
- *        [--page <text>] [--output-file <launcher output>] [--title <text>]
+ *        [--page <text>] [--output-file <launcher output>] [--title <text>] \
+ *        [--summary-match <regex>]
  *
  * Asset names are never templated: Tauri derives them from productName, which
  * has changed before (see update-site-release.cjs). The shapes come from that
@@ -80,6 +87,33 @@ function findRelease(releases, tag) {
     throw new Error(`${hits.length} releases carry tag ${tag} (${ids}); delete the stale one first`);
   }
   return hits[0];
+}
+
+const PRODUCTION_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
+
+/** Published production releases (vX.Y.Z, not draft, not prerelease), newest first. */
+function publishedProduction(releases) {
+  const key = (t) => PRODUCTION_TAG.exec(t).slice(1).map(Number);
+  return releases
+    .filter((r) => !r.draft && !r.prerelease && PRODUCTION_TAG.test(r.tag_name))
+    .sort((a, b) => {
+      const [x, y] = [key(a.tag_name), key(b.tag_name)];
+      return y[0] - x[0] || y[1] - x[1] || y[2] - x[2];
+    });
+}
+
+/**
+ * The tag to test and the tag to upgrade from. A given tag wins; otherwise the
+ * newest published production release, so pull-request runs follow the
+ * newest release a user can actually download. `previous` is empty when there
+ * is nothing else published.
+ */
+function resolveTags(releases, { tag = '', previous = '' } = {}) {
+  const prod = publishedProduction(releases);
+  const resolvedTag = tag || (prod[0] && prod[0].tag_name);
+  if (!resolvedTag) throw new Error('no published production release (vX.Y.Z) to test');
+  const other = prod.find((r) => r.tag_name !== resolvedTag);
+  return { tag: resolvedTag, previous: previous || (other ? other.tag_name : '') };
 }
 
 /** This platform's installer: exactly one asset of the right shape, safe name. */
@@ -169,6 +203,12 @@ function verdict({ scan, alive, elapsedMs, readyAtMs, budgetMs, aliveMs }) {
   return { status: 'waiting' };
 }
 
+/** Up to `max` log lines matching `pattern` (a regular expression), trimmed. */
+function matchingLines(text, pattern, max = 40) {
+  const re = new RegExp(pattern);
+  return text.split(/\r?\n/).filter((l) => re.test(l)).slice(0, max).map((l) => l.trim());
+}
+
 /** Escape a value for a `::error::` workflow command. */
 function annotation(text) {
   return String(text).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
@@ -228,10 +268,21 @@ function setOutput(values) {
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, lines.join('\n') + '\n');
 }
 
+/** Every release this token can see (drafts only with push access). */
+function listReleases(repo) {
+  return JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`])).flat();
+}
+
+function resolveCommand(args) {
+  required(args, 'repo');
+  const { tag, previous } = resolveTags(listReleases(args.repo), { tag: args.tag, previous: args['previous-tag'] });
+  console.log(`testing ${tag}; upgrade legs start from ${previous || '(no other published release)'}`);
+  setOutput({ tag, previous_tag: previous });
+}
+
 function fetchCommand(args) {
   required(args, 'repo', 'tag', 'kind', 'dir');
-  const releases = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${args.repo}/releases?per_page=100`])).flat();
-  const release = findRelease(releases, args.tag);
+  const release = findRelease(listReleases(args.repo), args.tag);
   console.log(`${args.tag}: release ${release.id}${release.draft ? ' (DRAFT)' : ''}, ${release.assets.length} assets`);
 
   const installer = pickInstaller(release.assets, args.kind);
@@ -331,12 +382,17 @@ async function watchCommand(args) {
       const lines = text.split(/\r?\n/);
       printUntrusted(`App log (last 80 of ${lines.length} lines)`, lines.slice(-80).join('\n'));
       const summary = process.env.GITHUB_STEP_SUMMARY;
+      const evidence = args['summary-match'] ? matchingLines(text, args['summary-match']) : [];
+      const evidenceMd = evidence.length
+        ? `\nLog lines matching \`${args['summary-match'].replace(/`/g, '')}\`:\n\n\`\`\`\n${evidence.join('\n').replace(/`/g, "'")}\n\`\`\`\n`
+        : '';
+      if (evidence.length) printUntrusted(`Log lines matching ${args['summary-match']}`, evidence.join('\n'));
       if (v.status === 'pass') {
         const pageLine = scanLog(text, page, []).readyLine;
         console.log(`PASS: ${v.reason}`);
         if (pageLine) printUntrusted('The page ran JavaScript', pageLine.trim());
         else console.log(`::warning title=${annotation(title)}::no "${annotation(page)}" line, so nothing shows the page ran JavaScript`);
-        if (summary) fs.appendFileSync(summary, `### ${title}: PASS\n\n${v.reason}.\n\nReadiness line:\n\n\`\`\`\n${readyLine}\n\`\`\`\n`);
+        if (summary) fs.appendFileSync(summary, `### ${title}: PASS\n\n${v.reason}.\n\nReadiness line:\n\n\`\`\`\n${readyLine}\n\`\`\`\n${evidenceMd}`);
         return 0;
       }
       // A panic's message reaches stderr, not the log, in builds up to v1.0.3.
@@ -346,7 +402,7 @@ async function watchCommand(args) {
         printUntrusted(`Launcher output (last 40 lines of ${args['output-file']})`, out.split(/\r?\n/).slice(-40).join('\n'));
       }
       console.log(`::error title=${annotation(title)}::${annotation(v.reason)}`);
-      if (summary) fs.appendFileSync(summary, `### ${title}: FAIL\n\n${v.reason}\n`);
+      if (summary) fs.appendFileSync(summary, `### ${title}: FAIL\n\n${v.reason}\n${evidenceMd}`);
       return 1;
     }
     await new Promise((r) => setTimeout(r, 1000));
@@ -356,15 +412,18 @@ async function watchCommand(args) {
 async function main(argv) {
   const args = parseArgs(argv);
   const cmd = args._[0];
+  if (cmd === 'resolve') { resolveCommand(args); return 0; }
   if (cmd === 'fetch') { fetchCommand(args); return 0; }
   if (cmd === 'watch') return watchCommand(args);
-  throw new Error('usage: installer-smoke.cjs fetch|watch [options] (see the file header)');
+  throw new Error('usage: installer-smoke.cjs resolve|fetch|watch [options] (see the file header)');
 }
 
 module.exports = {
   DEFAULT_READY,
   DEFAULT_FATAL,
   findRelease,
+  resolveTags,
+  matchingLines,
   pickInstaller,
   parseShasums,
   checkHash,
