@@ -175,7 +175,11 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
           - label: macOS (Intel)
-            runner: macos-14
+            # Cross-compiled on the Apple-silicon image, the same one the leg
+            # above uses. It was pinned to macos-14 until GitHub retired that
+            # image: the v1.0.4 rehearsal's Intel job was cancelled at once with
+            # "The configuration 'macos-14-arm64-us-default' is not supported".
+            runner: macos-latest
             target: x86_64-apple-darwin
           - label: Linux
             # ubuntu-22.04 is the minimum - Tauri 2.0 requires libwebkit2gtk-4.1-dev
