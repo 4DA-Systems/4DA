@@ -99,15 +99,16 @@ permalink: "/mcp/"
       <div class="mcp-client">
         <h3>Claude Code</h3>
         <div class="mcp-cmd">
-          <code>claude mcp add 4da -- npx -y @4da/mcp-server</code>
-          <button type="button" class="copy-btn" data-copy="claude mcp add 4da -- npx -y @4da/mcp-server" aria-label="Copy command">Copy</button>
+          <code>claude mcp add --scope user 4da -- npx -y --prefer-offline {{ mcpServer.spec }}</code>
+          <button type="button" class="copy-btn" data-copy="claude mcp add --scope user 4da -- npx -y --prefer-offline {{ mcpServer.spec }}" aria-label="Copy command">Copy</button>
         </div>
+        <div class="where">The version is pinned: the same server starts every time, without waiting on the registry. Your agent is told when a newer release is out.</div>
       </div>
       <div class="mcp-client">
         <h3>Cursor</h3>
         <div class="mcp-cmd">
-          <code>{ "mcpServers": { "4da": { "command": "npx", "args": ["-y", "@4da/mcp-server"] } } }</code>
-          <button type="button" class="copy-btn" data-copy='{ "mcpServers": { "4da": { "command": "npx", "args": ["-y", "@4da/mcp-server"] } } }' aria-label="Copy config">Copy</button>
+          <code>{ "mcpServers": { "4da": { "command": "npx", "args": ["-y", "--prefer-offline", "{{ mcpServer.spec }}"] } } }</code>
+          <button type="button" class="copy-btn" data-copy='{ "mcpServers": { "4da": { "command": "npx", "args": ["-y", "--prefer-offline", "{{ mcpServer.spec }}"] } } }' aria-label="Copy config">Copy</button>
         </div>
         <div class="where">Add to <code>.cursor/mcp.json</code> (project) or <code>~/.cursor/mcp.json</code> (global).</div>
       </div>

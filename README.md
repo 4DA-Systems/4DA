@@ -40,11 +40,11 @@ From the screenshot above: `@zag-js/core` 0.82.1 has an advisory, but its parent
 ### For your coding agent — free, Apache-2.0, no account
 
 ```bash
-claude mcp add 4da -- npx @4da/mcp-server     # Claude Code
-npx @4da/mcp-server --setup                   # Cursor, VS Code, Windsurf, Claude Desktop, Devin
+claude mcp add --scope user 4da -- npx -y --prefer-offline @4da/mcp-server@6.5.0   # Claude Code
+npx -y @4da/mcp-server@latest --setup    # Cursor, VS Code, Windsurf, Claude Desktop, Devin
 ```
 
-Needs Node.js 22 or later. It works on its own, with no desktop app, no API key and no account. This is a `dependency_check` answer from 2026-11-05, condensed from the tool's JSON:
+The version is pinned, so what runs changes only when you change it; the server tells your agent when a newer release is published. Needs Node.js 22 or later. It works on its own, with no desktop app, no API key and no account. This is a `dependency_check` answer from 2026-11-05, condensed from the tool's JSON:
 
 ```text
 axios 1.7.4   (npm)        AVOID    33 advisories affect 1.7.4. Safe on 1.x: 1.20.0, 1.21.0
