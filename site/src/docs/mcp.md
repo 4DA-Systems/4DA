@@ -28,11 +28,13 @@ Point any MCP-compatible client — Claude Code, Cursor, Windsurf, VS Code (Copi
   "mcpServers": {
     "4da": {
       "command": "npx",
-      "args": ["@4da/mcp-server"]
+      "args": ["-y", "--prefer-offline", "@4da/mcp-server@6.5.0"]
     }
   }
 }
 ```
+
+The version is pinned, so what runs changes only when you change it, and `--prefer-offline` starts a cached version without asking the registry first. The server tells your agent when a newer release is published. To write this entry into Cursor, VS Code, Windsurf, Devin and Claude Desktop for you, run `npx -y @4da/mcp-server@latest --setup`.
 
 ## The 16 tools
 
