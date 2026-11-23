@@ -12,10 +12,6 @@
   "app": {
     "withGlobalTauri": true,
     "macOSPrivateApi": true,
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false
-    },
     "windows": [
       {
         "title": "4DA",

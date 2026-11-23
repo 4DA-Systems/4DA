@@ -48,6 +48,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tracing::{debug, info, warn};
 
+/// Base D-Bus name `tauri_plugin_single_instance` claims on Linux (it appends
+/// `.SingleInstance`).
+///
+/// The plugin's default is the bundle identifier, `com.4da.app`, and that is
+/// not a D-Bus name: the specification forbids a name element that starts
+/// with a digit. The bus library refused it, the plugin's setup failed, and
+/// with it `tauri::Builder::build`, so every Linux build through v1.0.3
+/// stopped at launch (found 2026-11-23 by installing v1.0.3 on clean Ubuntu
+/// runners: "Invalid well-known name"). The bundle identifier stays as it is;
+/// only the name on the session bus differs.
+pub(crate) const DBUS_ID: &str = "com.fourda.app";
+
 /// Filename of the single-instance lock inside the data directory.
 const LOCK_FILENAME: &str = ".process.lock";
 
@@ -440,6 +452,34 @@ fn is_process_alive_unix(pid: u32) -> bool {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    /// The D-Bus specification's rule for a well-known bus name: at most 255
+    /// bytes, two or more elements separated by `.`, each element non-empty,
+    /// made of `[A-Za-z0-9_-]` and not starting with a digit.
+    fn is_dbus_well_known_name(name: &str) -> bool {
+        let elements: Vec<&str> = name.split('.').collect();
+        name.len() <= 255
+            && elements.len() >= 2
+            && elements.iter().all(|element| {
+                element.chars().next().is_some_and(|c| !c.is_ascii_digit())
+                    && element
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            })
+    }
+
+    #[test]
+    fn the_single_instance_name_is_one_the_session_bus_accepts() {
+        // What the plugin registers: the base id plus its own suffix.
+        let registered = format!("{DBUS_ID}.SingleInstance");
+        assert!(
+            is_dbus_well_known_name(&registered),
+            "{registered} is not a valid D-Bus name; a Linux build would stop at launch"
+        );
+        // The bundle identifier, the plugin's default, is the name that was
+        // refused: this is why DBUS_ID exists and must not be set back to it.
+        assert!(!is_dbus_well_known_name("com.4da.app.SingleInstance"));
+    }
 
     #[test]
     fn acquire_creates_lock_file_with_current_pid() {

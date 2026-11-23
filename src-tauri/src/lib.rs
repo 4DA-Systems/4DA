@@ -826,13 +826,20 @@ pub fn run() {
 
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Focus the existing window when a second instance is launched
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }))
+        .plugin(
+            tauri_plugin_single_instance::Builder::new()
+                // Linux only: the default name is not one the session bus
+                // accepts, and the app stopped at launch (see DBUS_ID).
+                .dbus_id(single_instance::DBUS_ID)
+                .callback(|app, _args, _cwd| {
+                    // Focus the existing window when a second instance is launched
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
