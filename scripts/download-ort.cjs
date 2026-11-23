@@ -21,6 +21,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { execSync } = require('child_process');
 
 const ORT_VERSION = '1.24.2';
@@ -47,11 +48,27 @@ function closeIdleConnections() {
   require('http').globalAgent.destroy();
 }
 
-// Every archive is pinned by SHA-256 (audit 2026-11-11, P4): the library is
+// Every download is pinned by SHA-256 (audit 2026-11-11, P4): the library is
 // loaded into the app's process, and the archive used to be trusted on "exists
-// and is over 1 MB". The digests are GitHub's own for the v1.24.2 release
-// assets (`gh api repos/microsoft/onnxruntime/releases/tags/v1.24.2`, field
-// `digest`), checked 2026-11-11. A version bump must update them.
+// and is over 1 MB".
+//
+// Two sources, tried in order, each pinned on its own:
+//
+//   1. Microsoft's NuGet package, Microsoft.ML.OnnxRuntime (NUGET below). One
+//      package holds every platform's library under runtimes/<rid>/native/.
+//      The package is pinned by SHA-256 (the same bytes carry the SHA-512
+//      packageHash in nuget.org's own catalog entry for 1.24.2), and each
+//      library taken out of it is pinned by SHA-256 as well (`libSha256`).
+//   2. The GitHub release archive (`url`, `sha256`). The digests are GitHub's
+//      own for the v1.24.2 release assets, checked 2026-11-11.
+//
+// NuGet is first because the GitHub repository microsoft/onnxruntime, with its
+// releases, started returning 404 around 2026-11-17 and still did on
+// 2026-11-23: every build that bundles the library failed at this script. The
+// libraries are the same files: the win-x64 onnxruntime.dll in the package is
+// byte-identical (SHA-256 114947d6...) to the one extracted from the pinned
+// GitHub zip before the repository went away. A version bump must update every
+// pin here and the five in src-tauri/src/embeddings_providers/ort_runtime.rs.
 //
 // darwin-x64 has no archive: Microsoft stopped publishing Intel macOS builds
 // after 1.23.2, and this app's `ort` crate needs ONNX Runtime API 24 (>= 1.24),
@@ -74,8 +91,15 @@ const DARWIN_X64_SKIP =
   `build bundles no ONNX Runtime: local embeddings are declared unavailable there and ` +
   `Ollama serves embeddings instead.`;
 
+const NUGET = {
+  url: `https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg`,
+  sha256: '782564d3d68e87269ea1812cc94710ad06fe014faf093f01a6f89d0bd58719d3',
+};
+
 const PLATFORMS = {
   'win32-x64': {
+    member: 'runtimes/win-x64/native/onnxruntime.dll',
+    libSha256: '114947d633e6844ce3c4b51ef6678f776628571d08a5763859c61642c8dcca9c',
     url: `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-x64-${ORT_VERSION}.zip`,
     sha256: '8e3e9c826375352e29cb2614fe44f3d7a4b0ff7b8028ad7a456af9d949a7e8b0',
     lib: 'onnxruntime.dll',
@@ -83,6 +107,8 @@ const PLATFORMS = {
     arch: 'x64',
   },
   'win32-arm64': {
+    member: 'runtimes/win-arm64/native/onnxruntime.dll',
+    libSha256: 'd4c4d939c8bd1e93a86bc5a45b37a1fdd08dce34d8231db014a7e4a023923f5a',
     url: `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-arm64-${ORT_VERSION}.zip`,
     sha256: 'dd8180d98e5a0ead7ead99029acc80b86a8b905b9aba4cc978e388039bb5823b',
     lib: 'onnxruntime.dll',
@@ -90,6 +116,8 @@ const PLATFORMS = {
     arch: 'arm64',
   },
   'darwin-arm64': {
+    member: 'runtimes/osx-arm64/native/libonnxruntime.dylib',
+    libSha256: '8e88284d3b4395b1e532831ac05eb0ffa3673a62df32349e1b0fd64542cb827d',
     url: `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz`,
     sha256: '0af4fa503e8ea285245b47ee42d0a7461b8156a81270857da0c1d4ecf858abde',
     lib: 'libonnxruntime.dylib',
@@ -103,6 +131,8 @@ const PLATFORMS = {
     arch: 'x64',
   },
   'linux-x64': {
+    member: 'runtimes/linux-x64/native/libonnxruntime.so',
+    libSha256: 'ffc84d48e845cf0b562ba4ea5ca32aaafc0d4069019fef4f63095b307d0270ad',
     url: `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION}.tgz`,
     sha256: '43725474ba5663642e17684717946693850e2005efbd724ac72da278fead25e6',
     lib: 'libonnxruntime.so',
@@ -110,6 +140,8 @@ const PLATFORMS = {
     arch: 'x64',
   },
   'linux-arm64': {
+    member: 'runtimes/linux-arm64/native/libonnxruntime.so',
+    libSha256: 'e18fe095919d8613ead3a31ff78212bde4fad929418a9b48f49d61c829ed5c82',
     url: `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-aarch64-${ORT_VERSION}.tgz`,
     sha256: '6715b3d19965a2a6981e78ed4ba24f17a8c30d2d26420dbed10aac7ceca0085e',
     lib: 'libonnxruntime.so',
@@ -222,6 +254,108 @@ function download(url) {
   });
 }
 
+function sha256Hex(buffer) {
+  return require('crypto').createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * One member of a zip archive, by its full path, or null when the archive has
+ * no such member. Read here rather than by `unzip` or PowerShell so that every
+ * platform takes the same path, and by full path because the NuGet package
+ * holds five libraries under two file names.
+ */
+function zipMember(buffer, memberPath) {
+  let eocd = -1;
+  for (let i = buffer.length - 22, min = Math.max(0, buffer.length - 65557); i >= min; i--) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('not a zip archive: no end-of-central-directory record');
+  const count = buffer.readUInt16LE(eocd + 10);
+  if (count === 0xffff) throw new Error('zip64 archives are not supported');
+  let p = buffer.readUInt32LE(eocd + 16);
+  for (let n = 0; n < count; n++) {
+    if (p + 46 > buffer.length || buffer.readUInt32LE(p) !== 0x02014b50) throw new Error('corrupt zip central directory');
+    const method = buffer.readUInt16LE(p + 10);
+    const packed = buffer.readUInt32LE(p + 20);
+    const size = buffer.readUInt32LE(p + 24);
+    const nameLen = buffer.readUInt16LE(p + 28);
+    const local = buffer.readUInt32LE(p + 42);
+    if (buffer.toString('utf8', p + 46, p + 46 + nameLen) === memberPath) {
+      if (local + 30 > buffer.length || buffer.readUInt32LE(local) !== 0x04034b50) throw new Error(`corrupt zip entry for ${memberPath}`);
+      const start = local + 30 + buffer.readUInt16LE(local + 26) + buffer.readUInt16LE(local + 28);
+      const data = buffer.subarray(start, start + packed);
+      let out;
+      if (method === 0) out = Buffer.from(data);
+      else if (method === 8) out = zlib.inflateRawSync(data);
+      else throw new Error(`${memberPath} uses zip compression method ${method}, which is not supported`);
+      if (out.length !== size) throw new Error(`${memberPath} is ${out.length} bytes after extraction, the archive says ${size}`);
+      return out;
+    }
+    p += 46 + nameLen + buffer.readUInt16LE(p + 30) + buffer.readUInt16LE(p + 32);
+  }
+  return null;
+}
+
+async function downloadWithRetry(label, url) {
+  // Retry transient network failures (e.g. ECONNRESET mid-download) so a single
+  // blip doesn't fail the whole signed release.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await download(url);
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      console.error(`\n  ${label}: download attempt ${attempt}/4 failed (${e.message}); retrying...`);
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+  }
+}
+
+// The NuGet package is fetched and checked once, however many platforms ask.
+let nugetPackage = null;
+function fetchNugetPackage() {
+  if (!nugetPackage) {
+    nugetPackage = downloadWithRetry('NuGet package', NUGET.url).then((buffer) => {
+      const digest = sha256Hex(buffer);
+      if (digest !== NUGET.sha256) {
+        throw new Error(`the NuGet package's SHA-256 is ${digest}, expected ${NUGET.sha256} (${NUGET.url}). Nothing was taken from it.`);
+      }
+      return buffer;
+    });
+  }
+  return nugetPackage;
+}
+
+/** Source 1: the library out of the pinned NuGet package, itself pinned. */
+async function fromNuget(platformKey, spec, destPath) {
+  const pkg = await fetchNugetPackage();
+  const lib = zipMember(pkg, spec.member);
+  if (!lib) throw new Error(`${spec.member} is not in the NuGet package`);
+  const digest = sha256Hex(lib);
+  if (digest !== spec.libSha256) {
+    throw new Error(`${spec.member} in the NuGet package has SHA-256 ${digest}, expected ${spec.libSha256}. Not bundled.`);
+  }
+  fs.writeFileSync(destPath, lib, { mode: 0o755 });
+  console.log(`  ${platformKey}: ${spec.lib} taken from the NuGet package; package and library SHA-256 match their pins`);
+}
+
+/** Source 2: the library out of the pinned GitHub release archive. */
+async function fromGithubArchive(platformKey, spec, destPath) {
+  const buffer = await downloadWithRetry(platformKey, spec.url);
+  const digest = sha256Hex(buffer);
+  if (digest !== spec.sha256) {
+    throw new Error(
+      `the downloaded archive's SHA-256 is ${digest}, expected ${spec.sha256} ` +
+        `(${spec.url}). Not extracted: a library that does not match its pin is never bundled.`,
+    );
+  }
+  console.log(`  ${platformKey}: archive SHA-256 matches the pin; extracting ${spec.lib}...`);
+  if (spec.archive === 'zip') {
+    extractZipLib(buffer, spec.lib, destPath);
+  } else {
+    extractTgzLib(buffer, spec.lib, destPath);
+  }
+}
+
 function extractZipLib(buffer, libName, destPath) {
   const tmpZip = path.join(DEST_DIR, '_tmp.zip');
   fs.writeFileSync(tmpZip, buffer);
@@ -318,33 +452,21 @@ async function downloadForPlatform(platformKey) {
     fs.unlinkSync(destPath);
   }
 
-  console.log(`  ${platformKey}: downloading ORT ${ORT_VERSION}...`);
-  // Retry transient network failures (e.g. ECONNRESET mid-download) so a single
-  // blip doesn't fail the whole signed release.
-  let buffer;
-  for (let attempt = 1; ; attempt++) {
+  console.log(`  ${platformKey}: fetching ORT ${ORT_VERSION}...`);
+  const failures = [];
+  for (const [name, source] of [['NuGet', fromNuget], ['GitHub release', fromGithubArchive]]) {
     try {
-      buffer = await download(spec.url);
+      await source(platformKey, spec, destPath);
+      failures.length = 0;
       break;
     } catch (e) {
-      if (attempt >= 4) throw e;
-      console.error(`\n  ${platformKey}: download attempt ${attempt}/4 failed (${e.message}); retrying...`);
-      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      try { fs.unlinkSync(destPath); } catch {}
+      failures.push(`${name}: ${e.message}`);
+      console.error(`  ${platformKey}: the ${name} source failed (${e.message})`);
     }
   }
-  const digest = require('crypto').createHash('sha256').update(buffer).digest('hex');
-  if (digest !== spec.sha256) {
-    throw new Error(
-      `${platformKey}: the downloaded archive's SHA-256 is ${digest}, expected ${spec.sha256} ` +
-        `(${spec.url}). Not extracted: a library that does not match its pin is never bundled.`,
-    );
-  }
-  console.log(`  ${platformKey}: SHA-256 matches the pin; extracting ${spec.lib}...`);
-
-  if (spec.archive === 'zip') {
-    extractZipLib(buffer, spec.lib, destPath);
-  } else {
-    extractTgzLib(buffer, spec.lib, destPath);
+  if (failures.length) {
+    throw new Error(`${platformKey}: no source delivered ${spec.lib}. ${failures.join(' | ')}`);
   }
 
   if (!fs.existsSync(destPath)) {
@@ -392,9 +514,13 @@ async function main() {
   console.log('\nDone. ORT libraries ready for Tauri bundling.');
 }
 
-main()
-  .then(closeIdleConnections)
-  .catch((err) => {
-    console.error(`\nFATAL: ${err.message}`);
-    process.exit(1);
-  });
+if (require.main === module) {
+  main()
+    .then(closeIdleConnections)
+    .catch((err) => {
+      console.error(`\nFATAL: ${err.message}`);
+      process.exit(1);
+    });
+}
+
+module.exports = { zipMember, PLATFORMS, NUGET };
