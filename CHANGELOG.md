@@ -26,6 +26,10 @@ of the version 4DA needs, so the Intel build ships without it and says so. Every
 works, and Ollama provides embeddings if you run it. (1.0.3's Intel build carried a library
 for the wrong CPU, so this was already the case, silently.)
 
+**Linux: the first release that starts.** Every Linux build up to 1.0.3 stopped at
+launch: the check that keeps a second copy from opening asked the session bus for a name
+it does not accept. 1.0.4 uses a valid one.
+
 **The Windows installer in this release is not code-signed.** Verify its SHA-256 against
 `SHASUMS256.txt` before running it. macOS is signed and notarized; Linux is unaffected.
 
@@ -107,6 +111,9 @@ for the wrong CPU, so this was already the case, silently.)
 - Backend errors read as sentences; paywalls say exactly what is gated.
 - Saved items are kept by retention.
 - A clean quit releases the instance lock; a reused process id no longer blocks launch.
+- One icon in the system tray or menu bar, where there were two.
+- Every release is now installed and started on clean Windows, macOS and Linux machines,
+  and upgraded from the previous release on Windows and macOS, before it is published.
 
 ## [1.0.3] - 2026-10-05
 
