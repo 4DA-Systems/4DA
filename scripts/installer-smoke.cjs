@@ -203,10 +203,13 @@ function verdict({ scan, alive, elapsedMs, readyAtMs, budgetMs, aliveMs }) {
   return { status: 'waiting' };
 }
 
-/** Up to `max` log lines matching `pattern` (a regular expression), trimmed. */
-function matchingLines(text, pattern, max = 40) {
-  const re = new RegExp(pattern);
-  return text.split(/\r?\n/).filter((l) => re.test(l)).slice(0, max).map((l) => l.trim());
+/**
+ * Up to `max` log lines containing any of the `|`-separated phrases, trimmed.
+ * Plain text, never a regular expression: the phrases arrive on the command line.
+ */
+function matchingLines(text, phrases, max = 40) {
+  const wanted = String(phrases).split('|').map((p) => p.trim()).filter(Boolean);
+  return text.split(/\r?\n/).filter((l) => wanted.some((p) => l.includes(p))).slice(0, max).map((l) => l.trim());
 }
 
 /** Escape a value for a `::error::` workflow command. */
