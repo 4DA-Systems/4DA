@@ -79,7 +79,7 @@ jobs:
       # release build logs "Main window shown" at the TOP of setup_app, before
       # the page has loaded, so this later line proves strictly more. See
       # scripts/installer-smoke.cjs for what it does and does not prove.
-      READY_TEXT: 'setup_app: phase 0 (essential services) complete'
+      READY_TEXT: 'NEGATIVE TEST: a line no build writes'
       READY_BUDGET_SECS: '120'
       # Long enough for a fresh profile's first analysis cycle (source fetch,
       # then the first embedding) in the runs measured: v1.0.3's Intel build
