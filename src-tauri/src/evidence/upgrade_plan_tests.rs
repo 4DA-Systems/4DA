@@ -1208,6 +1208,8 @@ fn persist_and_read_upgrade_plan_snapshot_round_trips() {
     let built = super::build_upgrade_plan(&db).expect("upgrade plan");
     let plan = built.items.clone();
     assert_eq!(plan.len(), 1);
+    // The advisory data the plan read was verified now: the full horizon.
+    db.update_osv_sync_status("npm", 1, None).unwrap();
     persist_upgrade_plan(&db, &plan, &built.steps, 0, None);
 
     let snap = read_upgrade_plan_snapshot(&db).expect("snapshot present after persist");
@@ -1270,8 +1272,10 @@ fn envelope_stamps_engine_run_id_and_source_freshness() {
         "no ecosystem synced -> no freshness floor"
     );
 
-    // Once an ecosystem has synced, the plan records the freshness floor; a GUI
-    // persist (None) carries no run id.
+    // Once an ecosystem the inventory needs has synced, the plan records the
+    // freshness floor; a GUI persist (None) carries no run id.
+    db.store_dependency("/proj/a", "lodash", Some("4.17.20"), "npm", false, None)
+        .unwrap();
     db.update_osv_sync_status("npm", 100, None).unwrap();
     persist_upgrade_plan(&db, &[], &[], 0, None);
     let snap = read_upgrade_plan_snapshot(&db).unwrap();

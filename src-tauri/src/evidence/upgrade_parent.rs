@@ -223,10 +223,14 @@ fn blocked_copy<'a>(
 }
 
 /// Some link of the same copy (project, installed version) does not admit a
-/// refresh — so no refresh fixes that copy, whatever this link allows.
+/// refresh — so no refresh fixes that copy, whatever this link allows. A
+/// parent that itself moves by a refresh admits one.
 fn blocked(all: &[ParentLink], link: &ParentLink) -> bool {
     all.iter().any(|l| {
-        l.project == link.project && l.child_version == link.child_version && !l.refresh.is_enough()
+        l.project == link.project
+            && l.child_version == link.child_version
+            && !l.refresh.is_enough()
+            && !super::upgrade_blocked::parent_refreshes(l)
     })
 }
 
@@ -238,7 +242,7 @@ fn commands(routes: &TransitiveRoutes) -> Vec<(String, Vec<String>)> {
         .links
         .iter()
         .filter(|l| !blocked(&routes.links, l))
-        .filter_map(|l| l.command.clone().map(|c| (c, &l.project)))
+        .filter_map(|l| super::upgrade_blocked::copy_command(l).map(|c| (c, &l.project)))
         .chain(
             routes
                 .unlinked

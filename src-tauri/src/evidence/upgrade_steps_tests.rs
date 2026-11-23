@@ -427,3 +427,76 @@ fn a_held_target_is_not_clears_all_known() {
     let json = serde_json::to_value(&step).unwrap_or_default();
     assert_eq!(json["held"]["status"], "unchecked");
 }
+
+/// A project on disk declaring `next` with `spec`, locked at 16.4.3, and one
+/// advisory fixed in 16.4.5. `None` when this checkout's path is one the DB
+/// write guard refuses (the store would hold nothing to plan).
+fn declared_next(spec: &str) -> Option<(tempfile::TempDir, Database, String)> {
+    let dir = tempfile::Builder::new()
+        .prefix("declared-next-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("tempdir");
+    let project = dir.path().to_string_lossy().replace('\\', "/");
+    if crate::project_inclusion::is_hard_excluded(&project) {
+        eprintln!("SKIPPED declared_next: {project} is excluded from DB writes here");
+        return None;
+    }
+    std::fs::write(
+        dir.path().join("package.json"),
+        format!(r#"{{"name": "app", "dependencies": {{"next": "{spec}"}}}}"#),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("package-lock.json"),
+        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"next": "16.4.3"}}, "node_modules/next": {"version": "16.4.3"}}}"#,
+    )
+    .unwrap();
+    let db = test_db();
+    install(&db, &project, "npm", &[("next", "16.4.3", true)]);
+    ranged(
+        &db,
+        "GHSA-7qx7-33qx-rqx2",
+        "next",
+        "npm",
+        r#"[{"type":"SEMVER","events":[{"introduced":"16.0.0"},{"fixed":"16.4.5"}]}]"#,
+        5.3,
+    );
+    Some((dir, db, project))
+}
+
+/// navcal (audit 2026-11-23): `"next": "^16.4.3"` already admits 16.4.5, so
+/// the item said "a lockfile refresh ... `npm update next`" while its step said
+/// `manifest_bump`. The work order follows the same declared-range reading.
+#[test]
+fn a_declared_range_that_admits_the_fix_is_a_lockfile_refresh_step() {
+    let Some((_dir, db, project)) = declared_next("^16.4.3") else {
+        return;
+    };
+    let (items, steps) = built(&db);
+    let step = step_for(&steps, "next", &project.to_lowercase());
+    let item = items
+        .iter()
+        .find(|i| i.id == step.item_id)
+        .expect("the step's item");
+    assert!(
+        item.explanation.contains("lockfile refresh")
+            && item.explanation.contains("`npm update next`"),
+        "{}",
+        item.explanation
+    );
+    assert_eq!(step.mechanism, Mechanism::LockfileRefresh, "{step:#?}");
+    assert!(step.lines[0].sites[0].direct);
+}
+
+/// An exact pin does not admit the fix: the manifest itself moves.
+#[test]
+fn an_exact_pin_stays_a_manifest_bump() {
+    let Some((_dir, db, project)) = declared_next("16.4.3") else {
+        return;
+    };
+    let (_, steps) = built(&db);
+    assert_eq!(
+        step_for(&steps, "next", &project.to_lowercase()).mechanism,
+        Mechanism::ManifestBump
+    );
+}

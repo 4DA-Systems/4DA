@@ -36,15 +36,19 @@ pub const VERIFICATION: &str = "After the change, wait for 4DA to rescan the pro
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mechanism {
-    /// Every install site declares the package directly: bump it in each
-    /// project's manifest.
+    /// Every install site declares the package directly, and not every
+    /// declared range is known to admit the fix: bump it in each project's
+    /// manifest.
     ManifestBump,
     /// Transitive everywhere, and the routes were not all decided (or they
     /// differ: some copies refresh, some are blocked): update the parent that
     /// pulls it in, or refresh the lockfile, per the item's route text.
     LockfileOrParentUpdate,
-    /// Transitive everywhere, and every parent's requirement admits the fix:
-    /// refresh the lockfile, no manifest change.
+    /// No manifest change: refresh the lockfile. Every declared range already
+    /// admits the fix (the in-range refresh, `osv::direct_upgrade`), and every
+    /// transitive copy's parent requirement admits it, or that parent moves
+    /// by a refresh because what it arrives through already admits a fixed
+    /// release of it.
     LockfileRefresh,
     /// Transitive everywhere; some parent must move, and for each such copy
     /// the registry (or a project here) shows a parent release that admits
@@ -121,7 +125,9 @@ pub struct UpgradeStep {
 
 /// Build the step for one plan row from the row's own lines and the routes
 /// of its transitive copies (`osv::parent_hint::load_routes`; empty for a
-/// direct-only row and for the maintenance-notice item).
+/// direct-only row and for the maintenance-notice item). `direct_refresh`:
+/// every direct copy's declared range already admits its target
+/// (`osv::direct_upgrade::all_refresh`, the reading the item's text uses).
 pub(super) fn step_for(
     item_id: &str,
     ecosystem: &str,
@@ -129,6 +135,7 @@ pub(super) fn step_for(
     lines: &[LineTarget],
     routes: &TransitiveRoutes,
     advisories: &[&MatchedAdvisory],
+    direct_refresh: bool,
 ) -> UpgradeStep {
     let mut advisory_ids: Vec<String> = advisories.iter().map(|a| a.advisory_id.clone()).collect();
     advisory_ids.sort_unstable();
@@ -138,7 +145,7 @@ pub(super) fn step_for(
         ecosystem: ecosystem.to_string(),
         package: package.to_string(),
         lines: lines.iter().map(step_line).collect(),
-        mechanism: mechanism(lines, routes),
+        mechanism: mechanism(lines, routes, direct_refresh),
         blocked_upstream: if lines.iter().any(|l| l.target_version.is_some()) {
             super::upgrade_blocked::holds(ecosystem, package, routes)
         } else {
@@ -210,17 +217,27 @@ fn step_line(line: &LineTarget) -> StepLine {
 
 /// `no_fix` when no line has a target (the same test that makes the item say
 /// "No fix published"); otherwise by where the package is declared and, for
-/// an all-transitive step, by the decided route of every copy
-/// (`upgrade_blocked::transitive_mechanism`).
-fn mechanism(lines: &[LineTarget], routes: &TransitiveRoutes) -> Mechanism {
+/// a transitive copy, by its decided route
+/// (`upgrade_blocked::transitive_mechanism`). Declared copies whose ranges
+/// all admit the fix need no manifest change, so they are a refresh like
+/// the transitive copies that need none.
+fn mechanism(lines: &[LineTarget], routes: &TransitiveRoutes, direct_refresh: bool) -> Mechanism {
     if lines.iter().all(|l| l.target_version.is_none()) {
         return Mechanism::NoFix;
     }
     let sites = || lines.iter().flat_map(|l| l.sites.iter());
     if sites().all(|s| s.is_direct) {
-        Mechanism::ManifestBump
+        if direct_refresh {
+            Mechanism::LockfileRefresh
+        } else {
+            Mechanism::ManifestBump
+        }
     } else if sites().all(|s| !s.is_direct) {
         super::upgrade_blocked::transitive_mechanism(lines, routes)
+    } else if direct_refresh
+        && super::upgrade_blocked::transitive_mechanism(lines, routes) == Mechanism::LockfileRefresh
+    {
+        Mechanism::LockfileRefresh
     } else {
         Mechanism::Mixed
     }

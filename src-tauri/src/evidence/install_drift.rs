@@ -120,6 +120,11 @@ impl PackageDrift {
         }
     }
 
+    /// A known npm advisory affects the installed copy.
+    fn exposed(&self) -> bool {
+        !self.cleared_by_install.is_empty() || !self.still_exposed.is_empty()
+    }
+
     fn urgency(&self) -> Urgency {
         match self.rank() {
             0 => Urgency::High,
@@ -466,10 +471,11 @@ impl ProjectDrift {
 
 /// Every live install-drift row, as the Preemption feed carries it.
 pub fn detect(conn: &Connection) -> Vec<EvidenceItem> {
-    projects(conn)
-        .iter()
-        .map(ProjectDrift::to_evidence_item)
-        .collect()
+    let liveness = ProjectLiveness::load(conn);
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    items_with(conn, &liveness, &|path| {
+        crate::project_inclusion::is_excluded_from_intelligence(path, &user_excluded)
+    })
 }
 
 /// The structured form — `preemption` projects the High rows into the
@@ -482,6 +488,23 @@ pub fn projects(conn: &Connection) -> Vec<ProjectDrift> {
     })
 }
 
+/// The feed rows. A row about a dormant project follows the liveness policy
+/// every alert on one follows (`cap_dormant_items`: Medium at most, and the
+/// explanation says why), and stays a row of its own: `collapse_dormant_alerts`
+/// leaves install drift alone.
+fn items_with(
+    conn: &Connection,
+    liveness: &ProjectLiveness,
+    is_excluded: &dyn Fn(&str) -> bool,
+) -> Vec<EvidenceItem> {
+    let mut items: Vec<EvidenceItem> = projects_with(conn, liveness, is_excluded)
+        .iter()
+        .map(ProjectDrift::to_evidence_item)
+        .collect();
+    super::cap_dormant_items(&mut items, liveness);
+    items
+}
+
 /// The core, with the two policy inputs injected so tests can drive it on a
 /// temp directory (which the real inclusion policy excludes by design).
 fn projects_with(
@@ -491,10 +514,8 @@ fn projects_with(
 ) -> Vec<ProjectDrift> {
     let mut drifted = Vec::new();
     for (project, pins) in direct_npm_pins(conn) {
-        // The Preemption gates: an excluded project is not the user's to be
-        // told about, and a dormant one is named once by
-        // `collapse_dormant_alerts`, not here.
-        if is_excluded(&project) || liveness.is_dormant(&project) {
+        // An excluded project is not the user's to be told about.
+        if is_excluded(&project) {
             continue;
         }
         let dir = Path::new(&project);
@@ -512,6 +533,13 @@ fn projects_with(
             .filter_map(|(package, pin)| package_drift(conn, dir, package, pin, &optional))
             .collect();
         if packages.is_empty() {
+            continue;
+        }
+        // In a dormant project, drift alone is not worth a row. A copy that
+        // runs with a known advisory is: nothing else names it, because the
+        // dormant notice speaks only for projects some other alert names, and
+        // a clean pin raises none.
+        if liveness.is_dormant(&project) && !packages.iter().any(PackageDrift::exposed) {
             continue;
         }
         packages.sort_by(|a, b| {

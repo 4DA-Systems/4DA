@@ -648,6 +648,7 @@ impl PackageGroup<'_> {
             &self.lines,
             &self.routes,
             &self.advisories,
+            crate::osv::direct_upgrade::all_refresh(&self.direct_fixes, &self.lines),
         );
         let item = EvidenceItem {
             id,
@@ -713,6 +714,7 @@ fn informational_item(
                     &g.lines,
                     &g.routes,
                     &g.advisories,
+                    false,
                 )
             })
             .collect(),

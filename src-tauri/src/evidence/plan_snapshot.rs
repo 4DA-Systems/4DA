@@ -48,17 +48,7 @@ pub fn persist_upgrade_plan(
         .cloned()
         .collect();
     let generated = chrono::Utc::now();
-    // Freshness FLOOR of the security data: the oldest ecosystem sync timestamp
-    // (lexicographic min of the fixed-width `YYYY-MM-DD HH:MM:SS` = chronological
-    // oldest). A reader pairs this with `expires_at` to judge staleness honestly.
-    let source_freshness = db
-        .get_osv_sync_statuses()
-        .ok()
-        .and_then(|statuses| statuses.into_iter().filter_map(|s| s.last_synced_at).min());
-    // Staleness horizon: the plan is only as fresh as the security data it read,
-    // and that data is refreshed on the OSV sync cadence. State that horizon so a
-    // reader judges staleness without knowing 4DA's policy.
-    let expires = generated + chrono::Duration::hours(crate::osv::sync::osv_sync_max_age_hours());
+    let (source_freshness, expires) = advisory_horizon(db, generated);
     // The inventory the plan was computed from (already sorted by the query) —
     // used for both the change-detection hash and the coverage gate.
     let instances = db.get_all_dependency_instances().unwrap_or_default();
@@ -115,6 +105,54 @@ pub fn persist_upgrade_plan(
     }
 }
 
+/// The advisory data a plan was built from, and how long the plan stays fresh.
+///
+/// `source_freshness` is the freshness FLOOR: the oldest verified sync time of
+/// the ecosystems the inventory needs, by the rule the advisory readiness line
+/// uses (`osv::readiness::classify`), so an ecosystem never verified leaves no
+/// floor and a row for an ecosystem the inventory no longer holds is not one.
+/// A plan cannot be fresher than that data, so it expires when the data falls
+/// due for a sync ([`plan_expiry`]); a reader comparing `expires_at` with the
+/// clock needs no knowledge of 4DA's sync policy.
+fn advisory_horizon(
+    db: &Database,
+    generated: chrono::DateTime<chrono::Utc>,
+) -> (Option<String>, chrono::DateTime<chrono::Utc>) {
+    let max_age = chrono::Duration::hours(crate::osv::sync::osv_sync_max_age_hours());
+    let required = match crate::osv::sync::auditable_coverage(db) {
+        Ok(coverage) => coverage.versioned,
+        // The inventory could not be read: nothing dates the plan's data.
+        Err(_) => return (None, generated),
+    };
+    if required.is_empty() {
+        // Nothing to check against advisories: no data to grow stale.
+        return (None, generated + max_age);
+    }
+    let statuses = db.get_osv_sync_statuses().unwrap_or_default();
+    let floor = crate::osv::readiness::classify(&required, &statuses, generated.naive_utc(), false)
+        .synced_at;
+    let expires = plan_expiry(generated, floor.as_deref(), max_age);
+    (floor, expires)
+}
+
+/// `generated + max_age`, never later than `source_freshness + max_age`: a
+/// plan built from advisory data older than `max_age` is already expired when
+/// written, and one built with no dated advisory data (`None`, or a time that
+/// does not parse) expires at `generated`.
+fn plan_expiry(
+    generated: chrono::DateTime<chrono::Utc>,
+    source_freshness: Option<&str>,
+    max_age: chrono::Duration,
+) -> chrono::DateTime<chrono::Utc> {
+    let Some(synced) = source_freshness
+        .and_then(|at| chrono::NaiveDateTime::parse_from_str(at, "%Y-%m-%d %H:%M:%S").ok())
+        .map(|at| at.and_utc())
+    else {
+        return generated;
+    };
+    (synced + max_age).min(generated + max_age)
+}
+
 /// Attribute the stored snapshot to the engine run that built it. The engine
 /// builds the plan early in its cycle (dependency intelligence first, audit
 /// R7), before that cycle's receipt exists; this sets `engine_run_id` once the
@@ -162,3 +200,7 @@ pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::Upgrade
     }
     Some(snapshot)
 }
+
+#[cfg(test)]
+#[path = "plan_snapshot_tests.rs"]
+mod tests;

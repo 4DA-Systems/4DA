@@ -281,8 +281,46 @@ pub(crate) fn note_marker(l: &ParentLink) -> String {
     }
 }
 
+/// A lever whose installed release already brings in a parent release that
+/// admits a clean copy (`osv::parent_release_hop`): its named release is its
+/// installed version, so it stays where it is.
+pub(crate) fn in_range(l: &Through) -> bool {
+    matches!(&l.standing, ParentStanding::Admits(r) if r.to == l.version)
+}
+
+/// The parent has a release that admits a clean copy, and every declared
+/// dependency it arrives through already admits such a release as installed:
+/// the parent moves by a lockfile refresh and nothing the project declares
+/// is upgraded. Undecided when any lever is unnamed (`more`) or unread.
+pub(crate) fn route_refreshes(standing: &ParentStanding, through: Option<&Through>) -> bool {
+    matches!(standing, ParentStanding::Admits(_))
+        && through.is_some_and(|t| t.more == 0 && t.all().all(in_range))
+}
+
+/// [`route_refreshes`] for a link whose parent must move.
+pub(crate) fn parent_refreshes(l: &ParentLink) -> bool {
+    !l.refresh.is_enough() && route_refreshes(&l.standing, l.through.as_ref())
+}
+
+/// The refresh command a link's copy takes: its own, or (when its parent
+/// moves by a refresh, [`parent_refreshes`]) the one that moves the parent.
+pub(crate) fn copy_command(l: &ParentLink) -> Option<String> {
+    if l.command.is_some() || !parent_refreshes(l) {
+        return l.command.clone();
+    }
+    l.through.as_ref()?.all().find_map(|t| match &t.standing {
+        ParentStanding::Admits(r) => r.refresh.clone(),
+        _ => None,
+    })
+}
+
 fn route_of_copy(links: &[&ParentLink]) -> CopyRoute {
-    let movers: Vec<&&ParentLink> = links.iter().filter(|l| !l.refresh.is_enough()).collect();
+    // A parent that moves by a refresh is no mover: the copy needs no
+    // manifest change from it.
+    let movers: Vec<&&ParentLink> = links
+        .iter()
+        .filter(|l| !l.refresh.is_enough() && !parent_refreshes(l))
+        .collect();
     if movers.is_empty() {
         return CopyRoute::Refresh;
     }
@@ -330,7 +368,8 @@ fn copy_routes(lines: &[LineTarget], routes: &TransitiveRoutes) -> Vec<CopyRoute
 }
 
 /// The mechanism of an all-transitive step: `lockfile_refresh` when every
-/// copy's requirement admits the fix, `parent_update` when the rest need a
+/// copy's requirement admits the fix or its parent moves by a refresh
+/// ([`parent_refreshes`]), `parent_update` when the rest need a
 /// parent release the registry (or a project here) shows admits it,
 /// `blocked_upstream` when no release fixes any of them yet, otherwise the
 /// undecided `lockfile_or_parent_update`.
@@ -440,3 +479,7 @@ pub(super) fn blocked_title(package: &str, holds: &[BlockedHold]) -> Option<Stri
 #[cfg(test)]
 #[path = "upgrade_blocked_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "upgrade_route_tests.rs"]
+mod route_tests;
