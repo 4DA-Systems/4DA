@@ -19,7 +19,8 @@
  *   node scripts/installer-smoke.cjs fetch --repo OWNER/NAME --tag vX.Y.Z \
  *        --kind win|macArm|macIntel|linuxDeb|linuxAppImage --dir <download dir>
  *   node scripts/installer-smoke.cjs watch --log-dir <dir> --pid <pid> \
- *        [--ready <text>] [--budget-secs 120] [--alive-secs 45] [--fatal <text>]...
+ *        [--ready <text>] [--budget-secs 120] [--alive-secs 45] [--fatal <text>]... \
+ *        [--page <text>] [--output-file <launcher output>] [--title <text>]
  *
  * Asset names are never templated: Tauri derives them from productName, which
  * has changed before (see update-site-release.cjs). The shapes come from that
@@ -49,6 +50,12 @@ const DEFAULT_FATAL = [
   'Context Engine initialization failed',
   'FATAL:',
 ];
+
+// Logged when the notification page's own JavaScript emits `notification-ready`:
+// the bundled frontend ran in the installed webview and reached the backend.
+// Evidence, not a requirement: up to v1.0.3 the listener is registered after
+// the window is created, so the event can be lost on a healthy start.
+const DEFAULT_PAGE = 'Notification window JS listener registered';
 
 // ---------------------------------------------------------------------------
 // Pure logic (unit-tested in installer-smoke.test.cjs)
@@ -298,6 +305,7 @@ async function watchCommand(args) {
   if (!Number.isInteger(pid) || pid <= 0) throw new Error(`--pid must be a process id, got ${args.pid}`);
   const ready = args.ready || DEFAULT_READY;
   const fatal = args.fatal.length ? args.fatal : DEFAULT_FATAL;
+  const page = args.page || DEFAULT_PAGE;
   const budgetMs = Number(args['budget-secs'] || 120) * 1000;
   const aliveMs = Number(args['alive-secs'] || 45) * 1000;
   const title = args.title || 'Installer smoke';
@@ -324,9 +332,18 @@ async function watchCommand(args) {
       printUntrusted(`App log (last 80 of ${lines.length} lines)`, lines.slice(-80).join('\n'));
       const summary = process.env.GITHUB_STEP_SUMMARY;
       if (v.status === 'pass') {
+        const pageLine = scanLog(text, page, []).readyLine;
         console.log(`PASS: ${v.reason}`);
+        if (pageLine) printUntrusted('The page ran JavaScript', pageLine.trim());
+        else console.log(`::warning title=${annotation(title)}::no "${annotation(page)}" line, so nothing shows the page ran JavaScript`);
         if (summary) fs.appendFileSync(summary, `### ${title}: PASS\n\n${v.reason}.\n\nReadiness line:\n\n\`\`\`\n${readyLine}\n\`\`\`\n`);
         return 0;
+      }
+      // A panic's message reaches stderr, not the log, in builds up to v1.0.3.
+      if (args['output-file']) {
+        let out = '';
+        try { out = fs.readFileSync(args['output-file'], 'utf8'); } catch { out = '(not readable)'; }
+        printUntrusted(`Launcher output (last 40 lines of ${args['output-file']})`, out.split(/\r?\n/).slice(-40).join('\n'));
       }
       console.log(`::error title=${annotation(title)}::${annotation(v.reason)}`);
       if (summary) fs.appendFileSync(summary, `### ${title}: FAIL\n\n${v.reason}\n`);

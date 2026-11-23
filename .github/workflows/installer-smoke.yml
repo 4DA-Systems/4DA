@@ -248,13 +248,21 @@ jobs:
           bash smoke-tools/scripts/ci/apt-install.sh "$INSTALLER"
           PKG="$(dpkg-deb -f "$INSTALLER" Package)"
           VERSION="$(dpkg-query -W -f='${Version}' "$PKG")"
-          EXE="$(dpkg -L "$PKG" | grep -E '^/usr/bin/[^/]+$' | head -n 1 || true)"
+          # The binary the menu entry starts. /usr/bin also holds fourda-engine,
+          # the headless refresh engine, which runs one cycle and exits.
+          DESKTOP="$(dpkg -L "$PKG" | grep -E '^/usr/share/applications/[^/]+\.desktop$' | head -n 1 || true)"
+          EXEC_CMD=""
+          if [ -n "$DESKTOP" ]; then
+            EXEC_CMD="$(grep -m 1 '^Exec=' "$DESKTOP" | cut -d= -f2- | cut -d' ' -f1 | tr -d '"')"
+          fi
+          EXE=""
+          if [ -n "$EXEC_CMD" ]; then EXE="$(command -v "$EXEC_CMD" || true)"; fi
           if [ -z "$EXE" ]; then
-            echo "::error title=Install::package $PKG put nothing in /usr/bin"
+            echo "::error title=Install::cannot tell which binary the menu entry of $PKG starts (desktop file: ${DESKTOP:-none})"
             dpkg -L "$PKG"
             exit 1
           fi
-          echo "installed package $PKG $VERSION, executable $EXE"
+          echo "installed package $PKG $VERSION; $DESKTOP starts $EXE"
           { echo "APP_EXE=$EXE"; echo "APP_VERSION=$VERSION"; } >> "$GITHUB_ENV"
 
       - name: Install (Linux, AppImage)
@@ -269,11 +277,18 @@ jobs:
           # An AppImage mounts itself through FUSE 2. Ubuntu 24.04 no longer
           # ships it by default; the documented fix for users is libfuse2t64
           # (libfuse2 before 24.04). grep without -q: no SIGPIPE under pipefail.
+          #
+          # AppImages also leave the GL/EGL stack to the host, by convention.
+          # Every Ubuntu desktop has Mesa's; this server image does not (v1.0.3:
+          # "libEGL.so.1: cannot open shared object file"). The .deb legs get it
+          # through webkit2gtk's dependencies.
+          PKGS="libegl1 libegl-mesa0 libgles2 libgl1 libgbm1"
           if ! ldconfig -p | grep 'libfuse.so.2' >/dev/null; then
             . /etc/os-release
-            if [ "${VERSION_ID%%.*}" -ge 24 ]; then PKG=libfuse2t64; else PKG=libfuse2; fi
-            bash smoke-tools/scripts/ci/apt-install.sh "$PKG"
+            if [ "${VERSION_ID%%.*}" -ge 24 ]; then PKGS="$PKGS libfuse2t64"; else PKGS="$PKGS libfuse2"; fi
           fi
+          # shellcheck disable=SC2086
+          bash smoke-tools/scripts/ci/apt-install.sh $PKGS
           { echo "APP_EXE=$INSTALLER"; echo "APP_VERSION=AppImage"; } >> "$GITHUB_ENV"
 
       - name: Launch on the fresh profile (Windows)
@@ -308,7 +323,7 @@ jobs:
             exit 1
           fi
           echo "launched $APP_EXE as pid $PID, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
-          echo "APP_PID=$PID" >> "$GITHUB_ENV"
+          { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$SMOKE_EVIDENCE/app-stderr.log"; } >> "$GITHUB_ENV"
 
       - name: Launch on the fresh profile (Linux, Xvfb)
         if: runner.os == 'Linux'
@@ -331,7 +346,7 @@ jobs:
             exit 1
           fi
           echo "launched $APP_EXE as pid $PID, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
-          echo "APP_PID=$PID" >> "$GITHUB_ENV"
+          { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$SMOKE_EVIDENCE/app-output.log"; } >> "$GITHUB_ENV"
 
       - name: Prove the installed app started
         if: env.APP_PID != ''
@@ -343,7 +358,7 @@ jobs:
           echo "installed version: $APP_VERSION"
           node smoke-tools/scripts/installer-smoke.cjs watch --log-dir "$SMOKE_LOG_DIR" --pid "$APP_PID" \
             --ready "$READY_TEXT" --budget-secs "$READY_BUDGET_SECS" --alive-secs "$ALIVE_SECS" \
-            --title "$LABEL, $SMOKE_TAG"
+            --output-file "${SMOKE_APP_OUTPUT:-}" --title "$LABEL, $SMOKE_TAG"
 
       # Windows has no clean way to quit a tray app from outside (closing the
       # window only hides it), so the stop is forced. Fine on a throwaway VM.
