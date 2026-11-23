@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The release that makes 4DA the dependency engine the site describes. A summary of what you
 will notice since 1.0.3, not the full commit log.
 
-**Upgrading from 1.0.3:** the database migrates from schema 124 to 130 on first launch, each
+**Upgrading from 1.0.3:** the database migrates from schema 124 to 131 on first launch, each
 step in its own transaction, after a backup (`4da.db.backup.v124`). Your dependencies,
 advisories, saved items and settings carry over (a test now opens a real 1.0.3 database
 and checks exactly that). Interest feeds (news sources) are switched off by the upgrade, as
@@ -33,11 +33,25 @@ for the wrong CPU, so this was already the case, silently.)
 
 - Dependencies updated to clear published advisories that 1.0.3 carries, among them
   rustls-webpki, webpki-roots, libsqlite3-sys (rusqlite 0.41), tokio, ctutils, rustls,
-  ammonia, rmcp and zip.
+  ammonia, rmcp, zip, lettre (six SMTP advisories), quinn-udp and url.
 - The ONNX Runtime library is pinned by SHA-256 when it is bundled and when the app
   downloads it, and a library built for another CPU is never loaded.
 - The HTML digest escapes everything it prints. The OS keychain is the source of truth for
   API keys.
+
+### Privacy and networks
+
+- Advisory matching sends nothing about your dependencies. 4DA downloads the public
+  advisory archive for each ecosystem and matches it on your machine; the request that
+  sent every dependency name to OSV.dev is gone.
+- Settings > Privacy > Registry lookups switches off every request to npm, crates.io,
+  PyPI and the Go module proxy. Advisories are still matched, and Preemption says that
+  release checks are off.
+- Private packages are never looked up, whatever that switch says: private npm scopes and
+  registries, `GOPRIVATE` modules, crates from git, a path or another registry, and
+  Python packages from an index other than PyPI.
+- Corporate networks: every outbound request uses the operating system's certificate
+  store, and a proxy set as `network.proxy_url` in `settings.json`.
 
 ### The dependency engine
 
@@ -54,12 +68,25 @@ for the wrong CPU, so this was already the case, silently.)
 - A failed advisory refresh, a failed database read or an unreadable inventory shows as an
   error, never as an all-clear or a fresh check.
 - Malware advisories are named as malware; maintenance notices are listed but never block.
+- The Upgrade Plan expires with the advisory data it was built from, so a plan made from
+  old data is never shown as current.
+- An installed copy with a known advisory is shown even when its project is dormant, with
+  the install command that fixes it.
+- Advisory matching reads version ranges that an advisory lists out of order, grades an
+  advisory by its highest valid CVSS score, honours Python's exclusive comparisons, and
+  reads `npm-shrinkwrap.json` ahead of `package-lock.json`, as npm does.
+- The critical banner and Preemption share one list of dismissals. A dismissal expires
+  after 7 days and can be undone. Preemption cards no longer show a confidence percentage.
+- The header shows when your stack and the advisories were last checked, and turns amber
+  after 24 hours or a failed check.
 - Search finds a package's own advisories first.
 
 ### Brief and Signal
 
 - The morning Brief always goes out: when the AI summary abstains or fails, the facts view
   is sent instead. At most three automatic briefs a day.
+- An offline first run gets the facts brief. After a rescan that changes nothing, the
+  Brief says when your projects were rescanned and that nothing new needs action.
 - Signal leads with what changed in your stack; reading news is opt-in (interests).
 
 ### The app
@@ -68,6 +95,14 @@ for the wrong CPU, so this was already the case, silently.)
   progress, says why an update failed, and restarts into the new version. The last check
   and any error are shown in About.
 - 4DA steps aside while a game, VR session or presentation is using the machine.
+- Started at sign-in, 4DA waits in the system tray instead of opening a window. The
+  setting "Keep running in background" is now "Keep the window ready when closed" and
+  says what it does: 4DA keeps running in the tray either way, and Quit on the tray icon
+  stops it.
+- A hung or failing background job can no longer stop the others, and dependency checks
+  run first in every cycle. A settings file that cannot be read is never overwritten.
+- The first-run scan shows what it found for each ecosystem. Translating with a cloud AI
+  model asks for your consent first.
 - Hidden windows stop rendering, and the scheduled jobs no longer freeze the app.
 - Backend errors read as sentences; paywalls say exactly what is gated.
 - Saved items are kept by retention.
