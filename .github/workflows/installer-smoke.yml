@@ -365,11 +365,6 @@ jobs:
           echo "launched $APP_EXE as pid $PID, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
           { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$OUT"; } >> "$GITHUB_ENV"
 
-      - name: NEGATIVE TEST - kill the app straight after launch
-        if: env.APP_PID != ''
-        shell: bash
-        run: node -e "process.kill(Number(process.env.APP_PID), 'SIGKILL'); console.log('killed pid ' + process.env.APP_PID)"
-
       - name: Prove the installed app started
         if: env.APP_PID != ''
         shell: bash
