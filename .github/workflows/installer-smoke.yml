@@ -73,10 +73,6 @@ jobs:
           - label: Linux AppImage (Ubuntu 24.04)
             runner: ubuntu-24.04
             kind: linuxAppImage
-          - label: DIAGNOSTIC Linux deb (Ubuntu 24.04, no session bus)
-            runner: ubuntu-24.04
-            kind: linuxDeb
-            session_bus: none
     env:
       SMOKE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || 'v1.0.3' }}
       # The last line setup_app logs once the essential services are up. A
@@ -338,8 +334,6 @@ jobs:
       - name: Launch on the fresh profile (Linux, Xvfb)
         if: runner.os == 'Linux'
         shell: bash
-        env:
-          SESSION_BUS: ${{ matrix.session_bus }}
         run: |
           set -euo pipefail
           OUT="$SMOKE_EVIDENCE/app-output.log"
@@ -347,13 +341,8 @@ jobs:
           # a session bus (the single-instance plugin, the tray and the keyring
           # use D-Bus). The bus starts inside xvfb-run so that the services it
           # activates see DISPLAY.
-          if [ "$SESSION_BUS" = "none" ]; then
-            setsid nohup env -u DBUS_SESSION_BUS_ADDRESS xvfb-run -n 99 -s '-screen 0 1280x800x24' \
-              "$APP_EXE" > "$OUT" 2>&1 < /dev/null &
-          else
-            setsid nohup xvfb-run -n 99 -s '-screen 0 1280x800x24' dbus-run-session -- \
-              "$APP_EXE" > "$OUT" 2>&1 < /dev/null &
-          fi
+          setsid nohup xvfb-run -n 99 -s '-screen 0 1280x800x24' dbus-run-session -- \
+            "$APP_EXE" > "$OUT" 2>&1 < /dev/null &
           LAUNCHER=$!
           PID=""
           for _ in $(seq 1 30); do
