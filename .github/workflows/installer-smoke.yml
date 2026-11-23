@@ -73,6 +73,10 @@ jobs:
           - label: Linux AppImage (Ubuntu 24.04)
             runner: ubuntu-24.04
             kind: linuxAppImage
+          - label: DIAGNOSTIC Linux deb (Ubuntu 24.04, no session bus)
+            runner: ubuntu-24.04
+            kind: linuxDeb
+            session_bus: none
     env:
       SMOKE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || 'v1.0.3' }}
       # The last line setup_app logs once the essential services are up. A
@@ -81,7 +85,10 @@ jobs:
       # scripts/installer-smoke.cjs for what it does and does not prove.
       READY_TEXT: 'setup_app: phase 0 (essential services) complete'
       READY_BUDGET_SECS: '120'
-      ALIVE_SECS: '45'
+      # Long enough for a fresh profile's first analysis cycle (source fetch,
+      # then the first embedding) in the runs measured: v1.0.3's Intel build
+      # panics there, 40 to 60 s after launch depending on the network.
+      ALIVE_SECS: '90'
     steps:
       # Only scripts/, and into a subdirectory. The installed binary checks for
       # <CARGO_MANIFEST_DIR>/../data, a path compiled in at build time that is
@@ -278,11 +285,14 @@ jobs:
           # ships it by default; the documented fix for users is libfuse2t64
           # (libfuse2 before 24.04). grep without -q: no SIGPIPE under pipefail.
           #
-          # AppImages also leave the GL/EGL stack to the host, by convention.
-          # Every Ubuntu desktop has Mesa's; this server image does not (v1.0.3:
-          # "libEGL.so.1: cannot open shared object file"). The .deb legs get it
-          # through webkit2gtk's dependencies.
-          PKGS="libegl1 libegl-mesa0 libgles2 libgl1 libgbm1"
+          # This server image also lacks two things every stock Ubuntu desktop
+          # has, and the AppImage needs: the host GL/EGL stack, which AppImages
+          # leave to the host by convention (v1.0.3: "libEGL.so.1: cannot open
+          # shared object file"), and a system libwebkit2gtk-4.1 (GNOME Help
+          # depends on it), which the app's own Linux preflight demands even
+          # though the AppImage bundles WebKit (v1.0.3: "Missing required
+          # system libraries").
+          PKGS="libegl1 libegl-mesa0 libgles2 libgl1 libgbm1 libwebkit2gtk-4.1-0"
           if ! ldconfig -p | grep 'libfuse.so.2' >/dev/null; then
             . /etc/os-release
             if [ "${VERSION_ID%%.*}" -ge 24 ]; then PKGS="$PKGS libfuse2t64"; else PKGS="$PKGS libfuse2"; fi
@@ -328,25 +338,43 @@ jobs:
       - name: Launch on the fresh profile (Linux, Xvfb)
         if: runner.os == 'Linux'
         shell: bash
+        env:
+          SESSION_BUS: ${{ matrix.session_bus }}
         run: |
           set -euo pipefail
-          # A desktop session in miniature: a session bus (the single-instance
-          # plugin and the tray talk D-Bus) and an X display on :99.
-          setsid nohup dbus-run-session -- xvfb-run -n 99 -s '-screen 0 1280x800x24' "$APP_EXE" \
-            > "$SMOKE_EVIDENCE/app-output.log" 2>&1 < /dev/null &
+          OUT="$SMOKE_EVIDENCE/app-output.log"
+          # A desktop session in miniature: an X display on :99 and, inside it,
+          # a session bus (the single-instance plugin, the tray and the keyring
+          # use D-Bus). The bus starts inside xvfb-run so that the services it
+          # activates see DISPLAY.
+          if [ "$SESSION_BUS" = "none" ]; then
+            setsid nohup env -u DBUS_SESSION_BUS_ADDRESS xvfb-run -n 99 -s '-screen 0 1280x800x24' \
+              "$APP_EXE" > "$OUT" 2>&1 < /dev/null &
+          else
+            setsid nohup xvfb-run -n 99 -s '-screen 0 1280x800x24' dbus-run-session -- \
+              "$APP_EXE" > "$OUT" 2>&1 < /dev/null &
+          fi
+          LAUNCHER=$!
           PID=""
           for _ in $(seq 1 30); do
             PID="$(pgrep -n -f "^$APP_EXE" || true)"
-            if [ -n "$PID" ]; then break; fi
+            if [ -n "$PID" ] || ! kill -0 "$LAUNCHER" 2>/dev/null; then break; fi
             sleep 1
           done
           if [ -z "$PID" ]; then
-            echo "::error title=Launch::no $APP_EXE process 30 s after launch"
-            cat "$SMOKE_EVIDENCE/app-output.log" || true
-            exit 1
+            if kill -0 "$LAUNCHER" 2>/dev/null; then
+              echo "::error title=Launch::no $APP_EXE process 30 s after launch"
+              cat "$OUT" || true
+              exit 1
+            fi
+            # It came and went before pgrep saw it. The watch step judges the
+            # log and prints the launcher output; the dead launcher pid makes
+            # it report an exit, not a missing process.
+            echo "the app exited within seconds of launch"
+            PID="$LAUNCHER"
           fi
           echo "launched $APP_EXE as pid $PID, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
-          { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$SMOKE_EVIDENCE/app-output.log"; } >> "$GITHUB_ENV"
+          { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$OUT"; } >> "$GITHUB_ENV"
 
       - name: Prove the installed app started
         if: env.APP_PID != ''
