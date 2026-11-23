@@ -434,3 +434,41 @@ test('an unpinned CLI or an unverified signing client fails the gate', () => {
   );
   assert.ok(checkReleaseChannel(unverified).some((f) => f.includes('by SHA-256')));
 });
+
+// ── publishing waits for the installer smoke check ────────────────────────
+//
+// Every tag run rebuilds the binaries, so the smoke check must run in the same
+// run, and every step that makes a release visible must wait for it.
+
+test('a publishing job that does not need installer-smoke fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    'needs: [create-release, assemble-release, installer-smoke]',
+    'needs: [create-release, assemble-release]'
+  );
+  const failures = checkReleaseChannel(root);
+  assert.ok(
+    failures.some((f) => f.includes('"Publish release" un-drafts') && f.includes('installer-smoke')),
+    `expected the un-draft step to fail, got: ${JSON.stringify(failures)}`
+  );
+  assert.ok(failures.some((f) => f.includes('"Publish desktop updater manifest" moves desktop-latest')));
+});
+
+test('a publishing step moved into a job that does not wait fails the gate, whatever its name', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    '      - name: Consolidate SHA-256 checksums\n',
+    "      - name: Early bird\n        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7\n        with:\n          script: |\n            await github.rest.repos.updateRelease({ owner: 'o', repo: 'r', release_id: 1, draft: false });\n\n      - name: Consolidate SHA-256 checksums\n"
+  );
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('"Early bird" un-drafts') && f.includes('"assemble-release"')));
+});
+
+test('an installer-smoke job that does not run the smoke workflow does not count', () => {
+  const root = copyFixture();
+  replaceInFile(root, '.github/workflows/release.yml', '    uses: ./.github/workflows/installer-smoke.yml\n', '    runs-on: ubuntu-latest\n');
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('installer-smoke job that runs')));
+});

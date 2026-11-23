@@ -1,0 +1,673 @@
+name: Installer smoke
+
+# release.yml builds, signs and verifies the installers but never installs and
+# launches one, so "the installer builds" was never proof that "the installed
+# app starts". This job is that proof, on a clean GitHub-hosted runner per
+# platform: download the release's installer for the platform (picked by its
+# shape, never by a hard-coded name), check it against SHASUMS256.txt, install
+# it the way a user would, launch it on a fresh profile and require (1) the
+# readiness line in the app's own log within READY_BUDGET_SECS and (2) the
+# process still alive ALIVE_SECS later, with no fatal line in the log. The
+# upgrade legs first install the previous release, run it, and install the
+# candidate over it on the same profile, the way the updater does. The app's
+# log directory is uploaded whatever the outcome.
+#
+# Three ways in:
+# - release.yml calls it (workflow_call) between "artifacts assembled" and
+#   "un-draft", on the binaries that will ship. It gates publishing.
+# - By hand, for any tag, a draft included: Actions > Installer smoke > Run
+#   workflow, or `gh workflow run installer-smoke.yml -f tag=v1.0.4`.
+# - A pull request that touches this workflow or its scripts tests the newest
+#   published production release (vX.Y.Z), upgrading from the one before it.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to install and launch (a draft release works)
+        required: true
+        type: string
+      previous_tag:
+        description: Release to upgrade from (default the newest published vX.Y.Z that is not tag)
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to install and launch (a draft release works)
+        required: true
+        type: string
+      previous_tag:
+        description: Release to upgrade from (default the newest published vX.Y.Z that is not tag)
+        required: false
+        type: string
+        default: ''
+  pull_request:
+    paths:
+      - .github/workflows/installer-smoke.yml
+      - scripts/installer-smoke.cjs
+      - scripts/installer-smoke.test.cjs
+      - scripts/update-site-release.cjs
+      - scripts/ci/apt-install.sh
+      - scripts/ci/apt-mirror-select.sh
+
+permissions: {}
+
+# Only a pull request's runs share a group, so a new push cancels the last
+# one. Every other run, above all a release's, gets a group of its own and
+# can never be cancelled by another run. (In a called workflow the github
+# context is the caller's, so run_id is the release run's.)
+concurrency:
+  group: installer-smoke-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  resolve:
+    name: Resolve the release under test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Lists published releases only (a given tag passes through unchecked;
+    # the download step finds drafts).
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      previous_tag: ${{ steps.resolve.outputs.previous_tag }}
+    steps:
+      - name: Check out the smoke scripts only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - name: Resolve the tag to test and the tag to upgrade from
+        id: resolve
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_INPUT: ${{ inputs.tag }}
+          PREVIOUS_INPUT: ${{ inputs.previous_tag }}
+        run: |
+          node scripts/installer-smoke.cjs resolve --repo "$GITHUB_REPOSITORY"             --tag "${TAG_INPUT:-}" --previous-tag "${PREVIOUS_INPUT:-}"
+
+  smoke:
+    name: ${{ matrix.label }}
+    needs: resolve
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    # One permission, for one reason: the REST API lists a DRAFT release only
+    # to a token with push access, which for GITHUB_TOKEN is `contents: write`
+    # ("get a release by tag" never returns drafts). Permissions cannot vary by
+    # trigger, so a pull_request run holds it too. A caller must grant it as
+    # well. The token goes to the download steps alone: checkout does not
+    # persist it and the installed app never sees it.
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64
+            runner: windows-latest
+            kind: win
+          - label: macOS arm64
+            runner: macos-latest
+            kind: macArm
+          # A real Intel Mac. The release builds this .dmg by cross-compiling
+          # on Apple silicon, so this is the only place it ever runs natively.
+          - label: macOS Intel
+            runner: macos-15-intel
+            kind: macIntel
+          - label: Linux deb (Ubuntu 22.04)
+            runner: ubuntu-22.04
+            kind: linuxDeb
+          - label: Linux deb (Ubuntu 24.04)
+            runner: ubuntu-24.04
+            kind: linuxDeb
+          - label: Linux AppImage (Ubuntu 24.04)
+            runner: ubuntu-24.04
+            kind: linuxAppImage
+          # Upgrade legs: the previous release, then the candidate over it on
+          # the same profile. No Linux upgrade leg yet: no published Linux
+          # build has ever started (up to v1.0.3 the single-instance plugin
+          # panics on every launch), so there is nothing to upgrade from. Add
+          # one once a published Linux release passes the fresh legs.
+          - label: Windows x64 upgrade
+            runner: windows-latest
+            kind: win
+            upgrade: true
+          - label: macOS arm64 upgrade
+            runner: macos-latest
+            kind: macArm
+            upgrade: true
+    env:
+      SMOKE_TAG: ${{ needs.resolve.outputs.tag }}
+      PREV_TAG: ${{ needs.resolve.outputs.previous_tag }}
+      UPGRADE: ${{ matrix.upgrade && 'true' || 'false' }}
+      # The last line setup_app logs once the essential services are up. A
+      # release build logs "Main window shown" at the TOP of setup_app, before
+      # the page has loaded, so this later line proves strictly more. See
+      # scripts/installer-smoke.cjs for what it does and does not prove.
+      READY_TEXT: 'setup_app: phase 0 (essential services) complete'
+      READY_BUDGET_SECS: '120'
+      # Long enough for a fresh profile's first analysis cycle (source fetch,
+      # then the first embedding) in the runs measured: v1.0.3's Intel build
+      # panics there, 40 to 60 s after launch depending on the network.
+      ALIVE_SECS: '90'
+      # What the upgrade legs put in the step summary: the schema migrations
+      # the candidate ran on the previous release's database, and whether it
+      # saw the previous session end uncleanly.
+      MIGRATION_EVIDENCE: 'schema version|Running Phase|Database ready|migrat|exited uncleanly'
+    steps:
+      # Only scripts/, and into a subdirectory. The installed binary checks for
+      # <CARGO_MANIFEST_DIR>/../data, a path compiled in at build time that is
+      # this same workspace path on the same runner image. A full checkout
+      # there (data/ is tracked) would make the RELEASE build load its
+      # resources from the checkout instead of from what it installed.
+      - name: Check out the smoke scripts only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          path: smoke-tools
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
+        with:
+          node-version: '22'
+
+      - name: Prepare a fresh profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs"), path = require("path");
+            for (const d of ["data", "src-tauri"]) {
+              const p = path.join(process.env.GITHUB_WORKSPACE, d);
+              if (fs.existsSync(p)) {
+                console.log(`::error title=Unfaithful test::${p} exists, so the installed app would read its resources from this checkout`);
+                process.exit(1);
+              }
+            }
+            const profile = path.join(process.env.RUNNER_TEMP, "fourda-profile");
+            if (fs.existsSync(profile)) {
+              console.log(`::error title=Not a fresh profile::${profile} already exists`);
+              process.exit(1);
+            }
+            const evidence = path.join(process.env.RUNNER_TEMP, "smoke-evidence");
+            fs.mkdirSync(evidence, { recursive: true });
+            fs.appendFileSync(process.env.GITHUB_ENV, [
+              `FOURDA_DATA_DIR=${profile}`,
+              `SMOKE_LOG_DIR=${path.join(profile, "logs")}`,
+              `SMOKE_EVIDENCE=${evidence}`,
+            ].join("\n") + "\n");
+            console.log(`fresh profile: ${profile}`);
+          '
+
+      - name: Download the installer and check its SHA-256
+        id: fetch
+        shell: bash
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIND: ${{ matrix.kind }}
+        run: |
+          node smoke-tools/scripts/installer-smoke.cjs fetch --repo "$GITHUB_REPOSITORY" \
+            --tag "$SMOKE_TAG" --kind "$KIND" --dir "$RUNNER_TEMP/installer"
+
+      - name: Download the previous release's installer (upgrade legs)
+        id: fetch_prev
+        if: matrix.upgrade
+        shell: bash
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIND: ${{ matrix.kind }}
+        run: |
+          if [ -z "$PREV_TAG" ]; then
+            echo "::error title=Upgrade::no other published production release to upgrade from"
+            exit 1
+          fi
+          node smoke-tools/scripts/installer-smoke.cjs fetch --repo "$GITHUB_REPOSITORY"             --tag "$PREV_TAG" --kind "$KIND" --dir "$RUNNER_TEMP/installer-previous"
+
+      - name: Install (Windows, silent NSIS)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 12
+        env:
+          # An upgrade leg installs the previous release here, the candidate later.
+          INSTALLER: ${{ matrix.upgrade && steps.fetch_prev.outputs.installer || steps.fetch.outputs.installer }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "installer signature: $((Get-AuthenticodeSignature -LiteralPath $env:INSTALLER).Status)"
+          # Wait for the installer process alone: Start-Process -Wait also waits
+          # for anything it starts, and would hang here if it launched the app.
+          $setup = Start-Process -FilePath $env:INSTALLER -ArgumentList '/S' -PassThru
+          $null = $setup.Handle
+          if (-not $setup.WaitForExit(600000)) { Write-Host '::error title=Install::the installer did not finish within 10 minutes'; exit 1 }
+          if ($setup.ExitCode -ne 0) { Write-Host "::error title=Install::the installer exited with code $($setup.ExitCode)"; exit 1 }
+
+          $roots = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )
+          $entries = @(foreach ($r in $roots) { if (Test-Path $r) { Get-ChildItem $r | Get-ItemProperty | Where-Object { $_.DisplayName -eq '4DA' } } })
+          if ($entries.Count -ne 1) { Write-Host "::error title=Install::expected one uninstall entry named 4DA, found $($entries.Count)"; exit 1 }
+          $e = $entries[0]
+          $dir = "$($e.InstallLocation)".Trim('"')
+          if (-not $dir) { $dir = Split-Path -Parent "$($e.UninstallString)".Trim('"') }
+          $exe = ("$($e.DisplayIcon)" -replace ',\d+$', '').Trim('"')
+          if (-not $exe -or -not (Test-Path -LiteralPath $exe)) {
+            $exes = @(Get-ChildItem -LiteralPath $dir -Filter *.exe | Where-Object { $_.Name -ne 'uninstall.exe' })
+            if ($exes.Count -ne 1) { Write-Host "::error title=Install::cannot tell the app's executable in $dir"; exit 1 }
+            $exe = $exes[0].FullName
+          }
+          Write-Host "installed $($e.DisplayName) $($e.DisplayVersion) into $dir"
+          Write-Host "uninstall entry: $($e.PSPath)"
+          Write-Host "executable: $exe (signature: $((Get-AuthenticodeSignature -LiteralPath $exe).Status))"
+          Get-ChildItem -LiteralPath $dir | Format-Table Name, Length -AutoSize | Out-String | Write-Host
+
+          # A running copy would also hold the single-instance lock our launch
+          # needs, so say so and stop it.
+          $stray = @(Get-Process | Where-Object { $_.Path -and $_.Path -ieq $exe })
+          if ($stray.Count -gt 0) {
+            Write-Host "::warning title=Install::the silent installer left the app running (pid $($stray.Id -join ', ')); stopping it"
+            $stray | Stop-Process -Force
+          }
+          "APP_EXE=$exe", "INSTALL_DIR=$dir", "APP_VERSION=$($e.DisplayVersion)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Install (macOS, copy the app out of the disk image)
+        if: runner.os == 'macOS'
+        shell: bash
+        timeout-minutes: 10
+        env:
+          # An upgrade leg installs the previous release here, the candidate later.
+          INSTALLER: ${{ matrix.upgrade && steps.fetch_prev.outputs.installer || steps.fetch.outputs.installer }}
+        run: |
+          set -euo pipefail
+          echo "runner: $(uname -m), macOS $(sw_vers -productVersion)"
+          MNT="$(mktemp -d)"
+          hdiutil attach "$INSTALLER" -nobrowse -readonly -noautoopen -mountpoint "$MNT" >/dev/null
+          SRC="$(find "$MNT" -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$SRC" ]; then
+            echo "::error title=Install::no .app at the top of the disk image"
+            ls -la "$MNT"
+            exit 1
+          fi
+          APP="/Applications/$(basename "$SRC")"
+          # What a user does: drag the app into Applications.
+          ditto "$SRC" "$APP"
+          hdiutil detach "$MNT" >/dev/null
+          PLIST="$APP/Contents/Info.plist"
+          EXEC_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
+          echo "installed $APP, version $VERSION"
+          file "$APP/Contents/MacOS/$EXEC_NAME"
+          ORT="$APP/Contents/Resources/models/ort/libonnxruntime.dylib"
+          if [ -f "$ORT" ]; then file "$ORT"; else echo "no bundled ONNX Runtime"; fi
+          # Gatekeeper's verdict on the installed copy: what a user's first open
+          # depends on. The CI download carries no quarantine flag, so the
+          # launch below would not trigger this check by itself.
+          if ! spctl --assess --type execute --verbose=2 "$APP"; then
+            echo "::error title=Gatekeeper::spctl rejects $APP, so a user could not open it"
+            exit 1
+          fi
+          {
+            echo "APP_BUNDLE=$APP"
+            echo "APP_EXE=$APP/Contents/MacOS/$EXEC_NAME"
+            echo "APP_VERSION=$VERSION"
+          } >> "$GITHUB_ENV"
+
+      - name: Install the tools for a headless Linux desktop
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            bash smoke-tools/scripts/ci/apt-install.sh xvfb
+          fi
+          command -v xvfb-run dbus-run-session
+
+      - name: Install (Linux, apt install ./the.deb)
+        if: matrix.kind == 'linuxDeb'
+        shell: bash
+        timeout-minutes: 12
+        env:
+          INSTALLER: ${{ steps.fetch.outputs.installer }}
+        run: |
+          set -euo pipefail
+          # As a user would: apt resolves the package's own dependencies.
+          bash smoke-tools/scripts/ci/apt-install.sh "$INSTALLER"
+          PKG="$(dpkg-deb -f "$INSTALLER" Package)"
+          VERSION="$(dpkg-query -W -f='${Version}' "$PKG")"
+          # The binary the menu entry starts. /usr/bin also holds fourda-engine,
+          # the headless refresh engine, which runs one cycle and exits.
+          DESKTOP="$(dpkg -L "$PKG" | grep -E '^/usr/share/applications/[^/]+\.desktop$' | head -n 1 || true)"
+          EXEC_CMD=""
+          if [ -n "$DESKTOP" ]; then
+            EXEC_CMD="$(grep -m 1 '^Exec=' "$DESKTOP" | cut -d= -f2- | cut -d' ' -f1 | tr -d '"')"
+          fi
+          EXE=""
+          if [ -n "$EXEC_CMD" ]; then EXE="$(command -v "$EXEC_CMD" || true)"; fi
+          if [ -z "$EXE" ]; then
+            echo "::error title=Install::cannot tell which binary the menu entry of $PKG starts (desktop file: ${DESKTOP:-none})"
+            dpkg -L "$PKG"
+            exit 1
+          fi
+          echo "installed package $PKG $VERSION; $DESKTOP starts $EXE"
+          { echo "APP_EXE=$EXE"; echo "APP_VERSION=$VERSION"; } >> "$GITHUB_ENV"
+
+      - name: Install (Linux, AppImage)
+        if: matrix.kind == 'linuxAppImage'
+        shell: bash
+        timeout-minutes: 10
+        env:
+          INSTALLER: ${{ steps.fetch.outputs.installer }}
+        run: |
+          set -euo pipefail
+          chmod +x "$INSTALLER"
+          # An AppImage mounts itself through FUSE 2. Ubuntu 24.04 no longer
+          # ships it by default; the documented fix for users is libfuse2t64
+          # (libfuse2 before 24.04). grep without -q: no SIGPIPE under pipefail.
+          #
+          # This server image also lacks two things every stock Ubuntu desktop
+          # has, and the AppImage needs: the host GL/EGL stack, which AppImages
+          # leave to the host by convention (v1.0.3: "libEGL.so.1: cannot open
+          # shared object file"), and a system libwebkit2gtk-4.1 (GNOME Help
+          # depends on it), which the app's own Linux preflight demands even
+          # though the AppImage bundles WebKit (v1.0.3: "Missing required
+          # system libraries").
+          PKGS="libegl1 libegl-mesa0 libgles2 libgl1 libgbm1 libwebkit2gtk-4.1-0"
+          if ! ldconfig -p | grep 'libfuse.so.2' >/dev/null; then
+            . /etc/os-release
+            if [ "${VERSION_ID%%.*}" -ge 24 ]; then PKGS="$PKGS libfuse2t64"; else PKGS="$PKGS libfuse2"; fi
+          fi
+          # shellcheck disable=SC2086
+          bash smoke-tools/scripts/ci/apt-install.sh $PKGS
+          { echo "APP_EXE=$INSTALLER"; echo "APP_VERSION=AppImage"; } >> "$GITHUB_ENV"
+
+      - name: Launch on the fresh profile (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # From the install directory, as the Start menu shortcut does. No
+          # output redirection: that would make the app inherit this step's
+          # pipe handles, and the step would not end until the app did.
+          $p = Start-Process -FilePath $env:APP_EXE -WorkingDirectory $env:INSTALL_DIR -PassThru
+          Write-Host "launched $($env:APP_EXE) as pid $($p.Id), FOURDA_DATA_DIR=$($env:FOURDA_DATA_DIR)"
+          "APP_PID=$($p.Id)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Launch on the fresh profile (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Through LaunchServices, as a double-click does.
+          open -n -a "$APP_BUNDLE" --env "FOURDA_DATA_DIR=$FOURDA_DATA_DIR" \
+            --stdout "$SMOKE_EVIDENCE/app-stdout.log" --stderr "$SMOKE_EVIDENCE/app-stderr.log"
+          PID=""
+          for _ in $(seq 1 30); do
+            PID="$(pgrep -n -f "^$APP_EXE" || true)"
+            if [ -n "$PID" ]; then break; fi
+            sleep 1
+          done
+          if [ -z "$PID" ]; then
+            echo "::error title=Launch::no $APP_EXE process 30 s after open"
+            cat "$SMOKE_EVIDENCE"/app-std*.log 2>/dev/null || true
+            exit 1
+          fi
+          echo "launched $APP_EXE as pid $PID, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
+          { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$SMOKE_EVIDENCE/app-stderr.log"; } >> "$GITHUB_ENV"
+
+      - name: Launch on the fresh profile (Linux, Xvfb)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$SMOKE_EVIDENCE/app-output.log"
+          # A desktop session in miniature: an X display on :99 and, inside it,
+          # a session bus (the single-instance plugin, the tray and the keyring
+          # use D-Bus). The bus starts inside xvfb-run so that the services it
+          # activates see DISPLAY.
+          setsid nohup xvfb-run -n 99 -s '-screen 0 1280x800x24' dbus-run-session -- \
+            "$APP_EXE" > "$OUT" 2>&1 < /dev/null &
+          LAUNCHER=$!
+          PID=""
+          for _ in $(seq 1 30); do
+            PID="$(pgrep -n -f "^$APP_EXE" || true)"
+            if [ -n "$PID" ] || ! kill -0 "$LAUNCHER" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ -z "$PID" ]; then
+            if kill -0 "$LAUNCHER" 2>/dev/null; then
+              echo "::error title=Launch::no $APP_EXE process 30 s after launch"
+              cat "$OUT" || true
+              exit 1
+            fi
+            # It came and went before pgrep saw it. The watch step judges the
+            # log and prints the launcher output; the dead launcher pid makes
+            # it report an exit, not a missing process.
+            echo "the app exited within seconds of launch"
+            PID="$LAUNCHER"
+          fi
+          echo "launched $APP_EXE as pid $PID, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
+          { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$OUT"; } >> "$GITHUB_ENV"
+
+      # In an upgrade leg this is the previous release: it only has to come up
+      # (readiness, then 10 s alive) so that it leaves a real profile behind.
+      - name: Prove the installed app started
+        if: env.APP_PID != ''
+        shell: bash
+        timeout-minutes: 6
+        env:
+          LABEL: ${{ matrix.label }}
+          PHASE_TAG: ${{ matrix.upgrade && needs.resolve.outputs.previous_tag || needs.resolve.outputs.tag }}
+          PHASE_ALIVE_SECS: ${{ matrix.upgrade && '10' || env.ALIVE_SECS }}
+        run: |
+          echo "installed version: $APP_VERSION"
+          node smoke-tools/scripts/installer-smoke.cjs watch --log-dir "$SMOKE_LOG_DIR" --pid "$APP_PID" \
+            --ready "$READY_TEXT" --budget-secs "$READY_BUDGET_SECS" --alive-secs "$PHASE_ALIVE_SECS" \
+            --output-file "${SMOKE_APP_OUTPUT:-}" --title "$LABEL, $PHASE_TAG"
+
+      # How the updater replaces a running app (tauri-plugin-updater 2.14.1):
+      # it starts the new setup.exe with /P /UPDATE /R and then calls
+      # std::process::exit(0), so the old process ends without Tauri's clean
+      # exit (no RunEvent::Exit, no destructors; 4DA registers no
+      # on_before_exit hook). Stop-Process -Force (TerminateProcess) ends it the
+      # same way. The setup runs with /S instead of /P (/P only adds a progress
+      # window) and without /R: this job relaunches the app on the profile.
+      - name: Upgrade (Windows) - stop the previous release as the updater does, install the candidate over it, launch it
+        if: matrix.upgrade && runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 12
+        env:
+          INSTALLER: ${{ steps.fetch.outputs.installer }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $old = Get-Process -Id ([int]$env:APP_PID) -ErrorAction SilentlyContinue
+          if (-not $old) { Write-Host "::error title=Upgrade::$($env:PREV_TAG) was no longer running when the update began"; exit 1 }
+          $old | Stop-Process -Force
+          $null = $old.WaitForExit(30000)
+          Write-Host "stopped $($env:PREV_TAG) (pid $($env:APP_PID)) the way the updater's process::exit does"
+          # Kept as evidence; the candidate's readiness must come from its own log.
+          Move-Item -LiteralPath $env:SMOKE_LOG_DIR -Destination (Join-Path $env:SMOKE_EVIDENCE 'previous-release-logs')
+
+          $setup = Start-Process -FilePath $env:INSTALLER -ArgumentList '/S', '/UPDATE' -PassThru
+          $null = $setup.Handle
+          if (-not $setup.WaitForExit(600000)) { Write-Host '::error title=Upgrade::the candidate setup did not finish within 10 minutes'; exit 1 }
+          if ($setup.ExitCode -ne 0) { Write-Host "::error title=Upgrade::the candidate setup exited with code $($setup.ExitCode)"; exit 1 }
+          $roots = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )
+          $entries = @(foreach ($r in $roots) { if (Test-Path $r) { Get-ChildItem $r | Get-ItemProperty | Where-Object { $_.DisplayName -eq '4DA' } } })
+          if ($entries.Count -ne 1) { Write-Host "::error title=Upgrade::expected one uninstall entry named 4DA after the upgrade, found $($entries.Count)"; exit 1 }
+          $e = $entries[0]
+          $exe = ("$($e.DisplayIcon)" -replace ',\d+$', '').Trim('"')
+          if (-not (Test-Path -LiteralPath $exe)) { Write-Host "::error title=Upgrade::$exe is missing after the upgrade"; exit 1 }
+          Write-Host "upgraded in place: $($e.DisplayName) $($e.DisplayVersion) in $($env:INSTALL_DIR), executable $exe"
+
+          $p = Start-Process -FilePath $exe -WorkingDirectory $env:INSTALL_DIR -PassThru
+          Write-Host "launched $exe as pid $($p.Id) on the same profile, FOURDA_DATA_DIR=$($env:FOURDA_DATA_DIR)"
+          "APP_EXE=$exe", "APP_VERSION=$($e.DisplayVersion)", "APP_PID=$($p.Id)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # How the updater replaces a running app on macOS: it swaps the .app
+      # bundle in place while the app runs, then the frontend calls relaunch(),
+      # a clean exit. The same here: swap the bundle, then SIGTERM. From v1.0.4
+      # (#1132) SIGTERM takes the same clean exit path (spawn_termination_listener
+      # calls app.exit). Up to v1.0.3 it kills the app uncleanly, so the
+      # candidate sees a crashed previous session: harsher than the updater,
+      # never kinder. The updater's payload is the .app.tar.gz; the bundle here
+      # comes from the checksum-verified .dmg of the same build.
+      - name: Upgrade (macOS) - swap in the candidate as the updater does, quit the previous release, launch the candidate
+        if: matrix.upgrade && runner.os == 'macOS'
+        shell: bash
+        timeout-minutes: 10
+        env:
+          INSTALLER: ${{ steps.fetch.outputs.installer }}
+        run: |
+          set -euo pipefail
+          MNT="$(mktemp -d)"
+          hdiutil attach "$INSTALLER" -nobrowse -readonly -noautoopen -mountpoint "$MNT" >/dev/null
+          SRC="$(find "$MNT" -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$SRC" ]; then echo "::error title=Upgrade::no .app at the top of the candidate disk image"; exit 1; fi
+          mv "$APP_BUNDLE" "$RUNNER_TEMP/previous-release.app"
+          ditto "$SRC" "$APP_BUNDLE"
+          hdiutil detach "$MNT" >/dev/null
+          kill -TERM "$APP_PID"
+          for _ in $(seq 1 30); do kill -0 "$APP_PID" 2>/dev/null || break; sleep 1; done
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "::error title=Upgrade::$PREV_TAG did not quit within 30 s of SIGTERM"
+            exit 1
+          fi
+          echo "swapped in the candidate, then $PREV_TAG exited on SIGTERM"
+          # Kept as evidence; the candidate's readiness must come from its own log.
+          mv "$SMOKE_LOG_DIR" "$SMOKE_EVIDENCE/previous-release-logs"
+          PLIST="$APP_BUNDLE/Contents/Info.plist"
+          EXEC_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
+          spctl --assess --type execute --verbose=2 "$APP_BUNDLE"
+          EXE="$APP_BUNDLE/Contents/MacOS/$EXEC_NAME"
+          open -n -a "$APP_BUNDLE" --env "FOURDA_DATA_DIR=$FOURDA_DATA_DIR" \
+            --stdout "$SMOKE_EVIDENCE/candidate-stdout.log" --stderr "$SMOKE_EVIDENCE/candidate-stderr.log"
+          PID=""
+          for _ in $(seq 1 30); do
+            PID="$(pgrep -n -f "^$EXE" || true)"
+            if [ -n "$PID" ]; then break; fi
+            sleep 1
+          done
+          if [ -z "$PID" ]; then echo "::error title=Upgrade::no $EXE process 30 s after open"; exit 1; fi
+          echo "launched $VERSION as pid $PID on the same profile, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
+          {
+            echo "APP_EXE=$EXE"
+            echo "APP_VERSION=$VERSION"
+            echo "APP_PID=$PID"
+            echo "SMOKE_APP_OUTPUT=$SMOKE_EVIDENCE/candidate-stderr.log"
+          } >> "$GITHUB_ENV"
+
+      - name: Prove the candidate started on the upgraded profile
+        if: matrix.upgrade
+        shell: bash
+        timeout-minutes: 6
+        env:
+          LABEL: ${{ matrix.label }}
+        run: |
+          echo "upgraded to: $APP_VERSION"
+          node smoke-tools/scripts/installer-smoke.cjs watch --log-dir "$SMOKE_LOG_DIR" --pid "$APP_PID" \
+            --ready "$READY_TEXT" --budget-secs "$READY_BUDGET_SECS" --alive-secs "$ALIVE_SECS" \
+            --output-file "${SMOKE_APP_OUTPUT:-}" --summary-match "$MIGRATION_EVIDENCE" \
+            --title "$LABEL, $PREV_TAG to $SMOKE_TAG"
+
+      # Windows has no clean way to quit a tray app from outside (closing the
+      # window only hides it), so the stop is forced. Fine on a throwaway VM.
+      - name: Screenshot, then stop the app (Windows)
+        if: always() && runner.os == 'Windows' && env.APP_PID != ''
+        shell: pwsh
+        run: |
+          try {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+            $bmp.Save((Join-Path $env:SMOKE_EVIDENCE 'screen.png'))
+          } catch { Write-Host "no screenshot: $($_.Exception.Message)" }
+          $p = Get-Process -Id ([int]$env:APP_PID) -ErrorAction SilentlyContinue
+          if ($p) { $p | Stop-Process -Force; $null = $p.WaitForExit(30000) } else { Write-Host 'the app was no longer running' }
+          Get-Process | Where-Object { $_.Path -and $_.Path -ieq $env:APP_EXE } | Stop-Process -Force
+
+      - name: Screenshot, then stop the app (macOS, Linux)
+        if: always() && runner.os != 'Windows' && env.APP_PID != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            screencapture -x "$SMOKE_EVIDENCE/screen.png" || echo "no screenshot"
+          elif command -v import >/dev/null 2>&1; then
+            import -display :99 -window root "$SMOKE_EVIDENCE/screen.png" || echo "no screenshot"
+          fi
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            echo "the app was no longer running"
+            exit 0
+          fi
+          # SIGTERM is the app's clean-exit path (spawn_termination_listener).
+          kill -TERM "$APP_PID"
+          for _ in $(seq 1 30); do
+            kill -0 "$APP_PID" 2>/dev/null || { echo "exited cleanly after SIGTERM"; exit 0; }
+            sleep 1
+          done
+          echo "::warning title=Shutdown::the app did not exit within 30 s of SIGTERM; killing it"
+          kill -KILL "$APP_PID" || true
+
+      - name: Upload the app's logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-smoke-${{ matrix.kind }}-${{ matrix.runner }}
+          path: |
+            ${{ env.SMOKE_LOG_DIR }}
+            ${{ env.SMOKE_EVIDENCE }}
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Uninstall silently and check nothing is left (Windows)
+        if: always() && runner.os == 'Windows' && env.INSTALL_DIR != ''
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $u = Join-Path $env:INSTALL_DIR 'uninstall.exe'
+          if (-not (Test-Path -LiteralPath $u)) { Write-Host "::error title=Uninstall::no uninstall.exe in $($env:INSTALL_DIR)"; exit 1 }
+          $p = Start-Process -FilePath $u -ArgumentList '/S' -PassThru
+          $null = $p.Handle
+          if (-not $p.WaitForExit(300000)) { Write-Host '::error title=Uninstall::the uninstaller did not finish within 5 minutes'; exit 1 }
+          Write-Host "uninstaller exited with code $($p.ExitCode)"
+          # The NSIS uninstaller re-runs itself from %TEMP% so it can delete its
+          # own file, so the process above can exit before the files are gone.
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Test-Path -LiteralPath $env:INSTALL_DIR) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
+          if (Test-Path -LiteralPath $env:INSTALL_DIR) {
+            $files = @(Get-ChildItem -LiteralPath $env:INSTALL_DIR -Recurse -File)
+            $mb = [math]::Round((($files | Measure-Object -Property Length -Sum).Sum) / 1MB, 1)
+            Get-ChildItem -LiteralPath $env:INSTALL_DIR -Recurse | Select-Object -First 50 -ExpandProperty FullName | Write-Host
+            # NSIS removes the files the CURRENT version installed. After an
+            # upgrade, paths only the previous release shipped stay behind; the
+            # fresh leg proves the candidate's own uninstall is clean.
+            if ($env:UPGRADE -eq 'true') {
+              Write-Host "::warning title=Uninstall after upgrade::$($env:PREV_TAG) left $($files.Count) file(s), $mb MB, in $($env:INSTALL_DIR) that the $($env:SMOKE_TAG) uninstaller does not remove"
+            } else {
+              Write-Host "::error title=Uninstall::$($env:INSTALL_DIR) is still there 120 s after a silent uninstall ($($files.Count) file(s), $mb MB)"
+              exit 1
+            }
+          }
+          $roots = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )
+          $left = @(foreach ($r in $roots) { if (Test-Path $r) { Get-ChildItem $r | Get-ItemProperty | Where-Object { $_.DisplayName -eq '4DA' } } })
+          if ($left.Count -gt 0) { Write-Host '::error title=Uninstall::the 4DA uninstall entry is still registered'; exit 1 }
+          Write-Host "uninstalled: $($env:INSTALL_DIR) is gone and the uninstall entry is removed"

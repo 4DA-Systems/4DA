@@ -1065,8 +1065,12 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           gh release upload "$TAG" sbom-rust.sig.bundle sbom-npm.sig.bundle --clobber
 
-  publish-release:
-    name: Publish Release
+  # The release's artifacts, assembled and checked: one SHASUMS256.txt, every
+  # required asset present, the updater manifest pinned to this tag and
+  # covering every platform. Nothing here is visible to a user: the release is
+  # still a draft and desktop-latest has not moved.
+  assemble-release:
+    name: Assemble Release
     needs: [create-release, build-tauri]
     runs-on: ubuntu-latest
     # Pure gh-CLI asset shuffling; minutes, not hours.
@@ -1202,6 +1206,39 @@ jobs:
             }
             console.log("Updater manifest covers every released platform, all entries signed.");
           '
+
+  # The gate between "artifacts assembled" and "un-draft": install the
+  # installers this run built, on clean GitHub-hosted runners, launch them on a
+  # fresh profile, and upgrade the previous release to them. A smoke run on a
+  # rehearsal draft never tests these binaries (every tag run rebuilds them),
+  # so the check has to sit here, in the same run. It runs for dry-run tags
+  # too: that is a rehearsal's point.
+  installer-smoke:
+    name: Installer smoke
+    needs: [create-release, assemble-release]
+    # A called workflow cannot hold more than its caller grants. contents:
+    # write is what lets it list and download this run's still-draft release.
+    permissions:
+      contents: write
+    uses: ./.github/workflows/installer-smoke.yml
+    with:
+      tag: ${{ github.ref_name }}
+
+  publish-release:
+    name: Publish Release
+    needs: [create-release, assemble-release, installer-smoke]
+    runs-on: ubuntu-latest
+    # Pure gh-CLI asset shuffling; minutes, not hours.
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      # Only for scripts/pin-updater-manifest.cjs check-urls (runs on the image's Node).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+
       # Order matters (audit 2026-11-11, R5). Installed apps read ONLY the
       # desktop-latest pointer, so it moves LAST: un-draft (awaited and
       # confirmed), then prove every payload URL in the manifest answers, then

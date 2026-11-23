@@ -148,6 +148,8 @@ function main() {
   console.log(`\nupdated ${FILE} -> ${TAG} (all 6 urls match real assets)`);
 }
 
-module.exports = { SAFE_ASSET_NAME, selectInstallers, matchInstallers, rewriteRelease };
+// `shapes` is also read by installer-smoke.cjs, so the download page and the
+// install-and-launch check agree on which asset is which platform's installer.
+module.exports = { SAFE_ASSET_NAME, shapes, selectInstallers, matchInstallers, rewriteRelease };
 
 if (require.main === module) main();

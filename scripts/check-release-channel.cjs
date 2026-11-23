@@ -47,6 +47,35 @@ const ARTIFACT_SIGNING_CONFIG = 'src-tauri/tauri.artifact-signing.conf.json';
 const ARTIFACT_SIGNING_SCRIPT = 'sign-windows-artifact.ps1';
 const ARTIFACT_SIGNING_GUARD = "needs.create-release.outputs.windows_signer == 'artifact-signing'";
 
+/**
+ * The jobs of a workflow, in order: { name, needs, steps }. Line-based, like
+ * the rest of this gate: job keys sit at two spaces under `jobs:`, steps at
+ * six. `needs` reads both the inline list and the block list form. Comment
+ * lines are dropped from step text, so a comment cannot satisfy or trip a check.
+ */
+function workflowJobs(yml) {
+  const lines = yml.split('\n');
+  const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
+  const heads = [];
+  for (let i = jobsAt + 1; jobsAt >= 0 && i < lines.length; i++) {
+    const m = /^ {2}([A-Za-z_][\w-]*):\s*$/.exec(lines[i]);
+    if (m) heads.push({ name: m[1], start: i });
+  }
+  return heads.map((h, k) => {
+    const body = lines.slice(h.start + 1, k + 1 < heads.length ? heads[k + 1].start : lines.length);
+    const at = body.findIndex((l) => /^ {4}needs:/.test(l));
+    let needs = [];
+    if (at >= 0) {
+      const inline = body[at].replace(/^ {4}needs:\s*/, '').trim();
+      if (inline) needs = inline.replace(/[[\]]/g, '').split(',');
+      else for (let j = at + 1; j < body.length && /^ {6}- /.test(body[j]); j++) needs.push(body[j].replace(/^ {6}- /, ''));
+    }
+    const text = body.filter((l) => !/^\s*#/.test(l)).join('\n');
+    const steps = text.split('\n      - ').slice(1).map((s) => '- ' + s);
+    return { name: h.name, needs: needs.map((n) => n.trim()).filter(Boolean), text, steps };
+  });
+}
+
 /** The text of one workflow step, from its `- name:` line to the next step. */
 function stepText(yml, name) {
   const start = yml.indexOf(`- name: ${name}`);
@@ -323,6 +352,31 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
       'release.yml must not publish to npm. The MCP server is released only by ' +
         '4DA-Systems/4da-mcp-server (trusted publishing); an npm publish cannot be undone.'
     );
+  }
+
+  // Publishing waits for the installer smoke check. Every tag run rebuilds the
+  // binaries, so a check on a rehearsal draft says nothing about the ones that
+  // ship: the check must run in the same run, and every step that makes a
+  // release visible must sit in a job that needs it. Found by what a step does
+  // (un-drafts, or writes to desktop-latest), not by its name, so a renamed or
+  // new publishing step cannot slip past.
+  const jobs = workflowJobs(releaseYml);
+  const smokeJob = jobs.find((j) => j.name === 'installer-smoke');
+  if (!smokeJob || !/^ {4}uses: \.\/\.github\/workflows\/installer-smoke\.yml\s*$/m.test(smokeJob.text)) {
+    fail('release.yml must have an installer-smoke job that runs ./.github/workflows/installer-smoke.yml.');
+  }
+  for (const job of jobs) {
+    for (const step of job.steps) {
+      const undrafts = /\bdraft:\s*false\b|--draft=false/.test(step);
+      const movesPointer = /desktop-latest/.test(step) && /gh release (upload|edit|create)/.test(step);
+      if ((undrafts || movesPointer) && !job.needs.includes('installer-smoke')) {
+        const name = (step.match(/^- name:\s*(.+)$/m) || [, '(unnamed step)'])[1].trim();
+        fail(
+          `release.yml step "${name}" ${undrafts ? 'un-drafts the release' : 'moves desktop-latest'}, but its job "${job.name}" ` +
+            'does not need installer-smoke: binaries nobody installed could reach users.'
+        );
+      }
+    }
   }
 
   for (const step of ['Publish desktop updater manifest', 'Publish release']) {
