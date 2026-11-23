@@ -517,10 +517,12 @@ jobs:
 
       # How the updater replaces a running app on macOS: it swaps the .app
       # bundle in place while the app runs, then the frontend calls relaunch(),
-      # a clean exit. The same here: swap the bundle, then SIGTERM, which takes
-      # the same clean exit path (spawn_termination_listener calls app.exit).
-      # The updater's payload is the .app.tar.gz; the bundle here comes from
-      # the checksum-verified .dmg of the same build.
+      # a clean exit. The same here: swap the bundle, then SIGTERM. From v1.0.4
+      # (#1132) SIGTERM takes the same clean exit path (spawn_termination_listener
+      # calls app.exit). Up to v1.0.3 it kills the app uncleanly, so the
+      # candidate sees a crashed previous session: harsher than the updater,
+      # never kinder. The updater's payload is the .app.tar.gz; the bundle here
+      # comes from the checksum-verified .dmg of the same build.
       - name: Upgrade (macOS) - swap in the candidate as the updater does, quit the previous release, launch the candidate
         if: matrix.upgrade && runner.os == 'macOS'
         shell: bash
@@ -542,7 +544,7 @@ jobs:
             echo "::error title=Upgrade::$PREV_TAG did not quit within 30 s of SIGTERM"
             exit 1
           fi
-          echo "swapped in the candidate, then $PREV_TAG quit cleanly"
+          echo "swapped in the candidate, then $PREV_TAG exited on SIGTERM"
           # Kept as evidence; the candidate's readiness must come from its own log.
           mv "$SMOKE_LOG_DIR" "$SMOKE_EVIDENCE/previous-release-logs"
           PLIST="$APP_BUNDLE/Contents/Info.plist"
@@ -648,9 +650,18 @@ jobs:
           $deadline = (Get-Date).AddSeconds(120)
           while ((Test-Path -LiteralPath $env:INSTALL_DIR) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
           if (Test-Path -LiteralPath $env:INSTALL_DIR) {
-            Write-Host "::error title=Uninstall::$($env:INSTALL_DIR) is still there 120 s after a silent uninstall"
+            $files = @(Get-ChildItem -LiteralPath $env:INSTALL_DIR -Recurse -File)
+            $mb = [math]::Round((($files | Measure-Object -Property Length -Sum).Sum) / 1MB, 1)
             Get-ChildItem -LiteralPath $env:INSTALL_DIR -Recurse | Select-Object -First 50 -ExpandProperty FullName | Write-Host
-            exit 1
+            # NSIS removes the files the CURRENT version installed. After an
+            # upgrade, paths only the previous release shipped stay behind; the
+            # fresh leg proves the candidate's own uninstall is clean.
+            if ($env:UPGRADE -eq 'true') {
+              Write-Host "::warning title=Uninstall after upgrade::$($env:PREV_TAG) left $($files.Count) file(s), $mb MB, in $($env:INSTALL_DIR) that the $($env:SMOKE_TAG) uninstaller does not remove"
+            } else {
+              Write-Host "::error title=Uninstall::$($env:INSTALL_DIR) is still there 120 s after a silent uninstall ($($files.Count) file(s), $mb MB)"
+              exit 1
+            }
           }
           $roots = @(
             'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
