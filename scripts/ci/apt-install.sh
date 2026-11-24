@@ -41,6 +41,15 @@ if [ "${APT_NO_RECOMMENDS:-0}" = "1" ]; then
   INSTALL_OPTS+=(--no-install-recommends)
 fi
 export DEBIAN_FRONTEND=noninteractive
+# Seconds one install attempt may take. A caller whose step has a short budget
+# lowers it (APT_INSTALL_TIMEOUT), so a stalled mirror is given up on while
+# there is still time to try the fallback: on 2026-11-24 the installer smoke
+# check's AppImage leg sat on one unanswered package of the runner's default
+# mirror until its 10-minute step limit, twice, and attempt 2 never ran.
+INSTALL_TIMEOUT="${APT_INSTALL_TIMEOUT:-600}"
+case "$INSTALL_TIMEOUT" in
+  ''|*[!0-9]*) echo "apt-install: APT_INSTALL_TIMEOUT must be whole seconds, got '$INSTALL_TIMEOUT'" >&2; exit 2 ;;
+esac
 
 use_fallback_mirror() {
   # Off the runner's Azure default, onto the first mirror this runner resolves
@@ -56,7 +65,7 @@ for attempt in 1 2 3; do
     use_fallback_mirror
   fi
   if timeout 240 sudo -E apt-get "${APT_OPTS[@]}" update \
-     && timeout 600 sudo -E apt-get "${APT_OPTS[@]}" install "${INSTALL_OPTS[@]}" "$@"; then
+     && timeout "$INSTALL_TIMEOUT" sudo -E apt-get "${APT_OPTS[@]}" install "${INSTALL_OPTS[@]}" "$@"; then
     echo "apt-install: installed $* (attempt $attempt)"
     exit 0
   fi

@@ -95,7 +95,12 @@ jobs:
     name: ${{ matrix.label }}
     needs: resolve
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 40
+    timeout-minutes: 60
+    env:
+      # scripts/ci/apt-install.sh: give up on a stalled mirror after 4 minutes
+      # an attempt, so its second and third attempts (on another mirror) fit
+      # inside the Linux install steps below. The packages are about 60 MB.
+      APT_INSTALL_TIMEOUT: "240"
     # One permission, for one reason: the REST API lists a DRAFT release only
     # to a token with push access, which for GITHUB_TOKEN is `contents: write`
     # ("get a release by tag" never returns drafts). Permissions cannot vary by
@@ -322,7 +327,7 @@ jobs:
       - name: Install the tools for a headless Linux desktop
         if: runner.os == 'Linux'
         shell: bash
-        timeout-minutes: 10
+        timeout-minutes: 30
         run: |
           set -euo pipefail
           if ! command -v xvfb-run >/dev/null 2>&1; then
@@ -333,7 +338,7 @@ jobs:
       - name: Install (Linux, apt install ./the.deb)
         if: matrix.kind == 'linuxDeb'
         shell: bash
-        timeout-minutes: 12
+        timeout-minutes: 30
         env:
           INSTALLER: ${{ steps.fetch.outputs.installer }}
         run: |
@@ -362,7 +367,7 @@ jobs:
       - name: Install (Linux, AppImage)
         if: matrix.kind == 'linuxAppImage'
         shell: bash
-        timeout-minutes: 10
+        timeout-minutes: 30
         env:
           INSTALLER: ${{ steps.fetch.outputs.installer }}
         run: |
