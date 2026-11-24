@@ -10,7 +10,7 @@
 // `node --test scripts/check-mcp-pin.test.cjs`. It names every file that states
 // the version itself (README.md, gemini-extension.json, mcp-4da-server/README.md
 // and docs/mcp.md, which is plain Markdown) and fails until they agree.
-const VERSION = "6.5.0";
+const VERSION = "6.5.1";
 
 export default {
   version: VERSION,

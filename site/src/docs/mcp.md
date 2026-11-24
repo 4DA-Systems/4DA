@@ -28,7 +28,7 @@ Point any MCP-compatible client — Claude Code, Cursor, Windsurf, VS Code (Copi
   "mcpServers": {
     "4da": {
       "command": "npx",
-      "args": ["-y", "--prefer-offline", "@4da/mcp-server@6.5.0"]
+      "args": ["-y", "--prefer-offline", "@4da/mcp-server@6.5.1"]
     }
   }
 }
