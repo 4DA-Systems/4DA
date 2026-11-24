@@ -26,6 +26,9 @@
   {% endif %}
 </head>
 <body>
+{# Cloudflare's email obfuscation rewrote `@4da/mcp-server@6.5.1` in the install lines into an "[email protected]" link: a reader without scripts, a crawler or an agent saw no package name. These comments switch it off for the page. #}
+<!--email_off-->
   {% block body %}{% endblock %}
+<!--/email_off-->
 </body>
 </html>
