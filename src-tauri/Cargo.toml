@@ -125,7 +125,7 @@ rten = { version = "0.26", optional = true }     # Model loading for ocrs (text-
 # calamine 0.37) is on zip 9.1, which takes zstd ^0.14.2, so restoring `zstd`
 # is no longer blocked; it is a separate change with its own dependency check.
 zip = { version = "9.1", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "lzma", "ppmd", "time", "xz"] }
-tar = { version = "0.4.45", optional = true }        # TAR archive extraction
+tar = { version = "0.4.45", optional = true }        # TAR archive extraction (the `archive` feature)
 # Gzip decompression. Not optional: the release-changelog lane reads registry
 # package archives (.crate / .tgz) in every build (release_changelog/archive.rs).
 flate2 = "1.0"
@@ -263,7 +263,7 @@ harness = false
 
 [features]
 default = ["fastembed-local"]
-fastembed-local = ["dep:fastembed", "dep:tar"]
+fastembed-local = ["dep:fastembed"]
 ocr = ["dep:ocrs", "dep:rten"]
 archive = ["dep:tar"]
 void-universe = []

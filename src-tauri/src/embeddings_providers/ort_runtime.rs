@@ -2,35 +2,52 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-//! The ONNX Runtime archive this platform downloads, pinned by SHA-256, and a
-//! check that a runtime library is built for this machine's CPU (audit
-//! 2026-11-11, P4 and R10).
+//! Where the ONNX Runtime library this platform downloads comes from, pinned
+//! by SHA-256, and a check that a runtime library is built for this machine's
+//! CPU (audit 2026-11-11, P4 and R10).
 //!
-//! The library is loaded into the app's process, and its download was trusted
-//! on HTTP success alone. The digests are GitHub's own for the v1.24.2 release
-//! assets (`gh api repos/microsoft/onnxruntime/releases/tags/v1.24.2`, field
-//! `digest`), checked 2026-11-11; `scripts/download-ort.cjs` pins the same
-//! five, and a version bump must update both.
+//! The library is loaded into the app's process, so its download is trusted on
+//! nothing but its digests. It comes out of Microsoft's NuGet package
+//! Microsoft.ML.OnnxRuntime, one zip that holds every platform's library under
+//! `runtimes/<rid>/native/`, and it is pinned twice: the package's SHA-256 is
+//! checked before the package is opened, and the library's before it is given
+//! its own name. The GitHub release archives this used to download went away
+//! with the microsoft/onnxruntime repository, which has answered 404 since
+//! about 2026-11-17. `scripts/download-ort.cjs` pins the same package and the
+//! same five libraries; a test holds the two equal, so a version bump must
+//! update both.
 //!
-//! Intel macOS has no archive: Microsoft published none after 1.23.2, and the
+//! Intel macOS has no library: Microsoft published none after 1.23.2, and the
 //! `ort` crate here needs ONNX Runtime API 24 (>= 1.24). v1.0.3's Intel app
 //! shipped an ARM64 library, which no Intel Mac can load; the CPU check below
 //! keeps such a library from being used, so the reason a user sees is the real
 //! one rather than a loader error.
 
-/// Archive format of a runtime download: decides how the library is extracted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ArchiveKind {
-    Zip,
-    Tgz,
-}
+use std::io::{Read, Seek as _, Write};
+use std::path::{Path, PathBuf};
 
-/// A pinned ONNX Runtime release archive.
+use sha2::{Digest as _, Sha256};
+
+/// The ONNX Runtime release every pin below belongs to.
+pub(crate) const ORT_VERSION: &str = "1.24.2";
+
+/// Microsoft's NuGet package of that release.
+pub(crate) const PACKAGE_URL: &str = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.24.2/microsoft.ml.onnxruntime.1.24.2.nupkg";
+
+/// The package's SHA-256 (the same bytes carry the SHA-512 `packageHash` in
+/// nuget.org's own catalog entry for 1.24.2).
+pub(crate) const PACKAGE_SHA256: &str =
+    "782564d3d68e87269ea1812cc94710ad06fe014faf093f01a6f89d0bd58719d3";
+
+/// The pinned package is 124,756,536 bytes. A response that says or turns out
+/// to be larger than this is stopped before it can fill the disk.
+pub(crate) const PACKAGE_MAX_BYTES: u64 = 128 * 1024 * 1024;
+
+/// One platform's library in the package: its full path there and its SHA-256.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct OrtArchive {
-    pub url: &'static str,
-    pub sha256: &'static str,
-    pub kind: ArchiveKind,
+pub(crate) struct OrtLibrary<'a> {
+    pub member: &'a str,
+    pub sha256: &'a str,
 }
 
 /// Why Intel macOS has no runtime to download (the error a user is shown).
@@ -38,53 +55,141 @@ pub(crate) const INTEL_MAC_UNAVAILABLE: &str = "Local embeddings are not availab
 ONNX Runtime 1.24, which this version of 4DA needs, publishes no Intel macOS build. \
 Use Ollama for embeddings (Settings > AI), or run 4DA on an Apple-silicon Mac.";
 
-/// The pinned archive for the platform this binary was built for, or why there is none.
-pub(crate) fn host_archive() -> std::result::Result<OrtArchive, &'static str> {
-    archive_for(std::env::consts::OS, std::env::consts::ARCH)
+/// The pinned library for the platform this binary was built for, or why there is none.
+pub(crate) fn host_library() -> std::result::Result<OrtLibrary<'static>, &'static str> {
+    library_for(std::env::consts::OS, std::env::consts::ARCH)
 }
 
-/// A v1.24.2 release asset URL.
-macro_rules! ort_url {
-    ($file:literal) => {
-        concat!(
-            "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/",
-            $file
-        )
-    };
-}
-
-/// The pinned archive for an OS and CPU (`std::env::consts` names).
-pub(crate) fn archive_for(os: &str, arch: &str) -> std::result::Result<OrtArchive, &'static str> {
-    let (url, sha256, kind) = match (os, arch) {
+/// The pinned library for an OS and CPU (`std::env::consts` names).
+pub(crate) fn library_for(
+    os: &str,
+    arch: &str,
+) -> std::result::Result<OrtLibrary<'static>, &'static str> {
+    let (member, sha256) = match (os, arch) {
         ("windows", "x86_64") => (
-            ort_url!("onnxruntime-win-x64-1.24.2.zip"),
-            "8e3e9c826375352e29cb2614fe44f3d7a4b0ff7b8028ad7a456af9d949a7e8b0",
-            ArchiveKind::Zip,
+            "runtimes/win-x64/native/onnxruntime.dll",
+            "114947d633e6844ce3c4b51ef6678f776628571d08a5763859c61642c8dcca9c",
         ),
         ("windows", "aarch64") => (
-            ort_url!("onnxruntime-win-arm64-1.24.2.zip"),
-            "dd8180d98e5a0ead7ead99029acc80b86a8b905b9aba4cc978e388039bb5823b",
-            ArchiveKind::Zip,
+            "runtimes/win-arm64/native/onnxruntime.dll",
+            "d4c4d939c8bd1e93a86bc5a45b37a1fdd08dce34d8231db014a7e4a023923f5a",
         ),
         ("macos", "aarch64") => (
-            ort_url!("onnxruntime-osx-arm64-1.24.2.tgz"),
-            "0af4fa503e8ea285245b47ee42d0a7461b8156a81270857da0c1d4ecf858abde",
-            ArchiveKind::Tgz,
+            "runtimes/osx-arm64/native/libonnxruntime.dylib",
+            "8e88284d3b4395b1e532831ac05eb0ffa3673a62df32349e1b0fd64542cb827d",
         ),
         ("macos", "x86_64") => return Err(INTEL_MAC_UNAVAILABLE),
         ("linux", "x86_64") => (
-            ort_url!("onnxruntime-linux-x64-1.24.2.tgz"),
-            "43725474ba5663642e17684717946693850e2005efbd724ac72da278fead25e6",
-            ArchiveKind::Tgz,
+            "runtimes/linux-x64/native/libonnxruntime.so",
+            "ffc84d48e845cf0b562ba4ea5ca32aaafc0d4069019fef4f63095b307d0270ad",
         ),
         ("linux", "aarch64") => (
-            ort_url!("onnxruntime-linux-aarch64-1.24.2.tgz"),
-            "6715b3d19965a2a6981e78ed4ba24f17a8c30d2d26420dbed10aac7ceca0085e",
-            ArchiveKind::Tgz,
+            "runtimes/linux-arm64/native/libonnxruntime.so",
+            "e18fe095919d8613ead3a31ff78212bde4fad929418a9b48f49d61c829ed5c82",
         ),
         _ => return Err("ONNX Runtime publishes no build for this platform, so local embeddings are not available. Use Ollama for embeddings (Settings > AI)."),
     };
-    Ok(OrtArchive { url, sha256, kind })
+    Ok(OrtLibrary { member, sha256 })
+}
+
+/// Why a downloaded package did not yield a library this app will load.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum OrtPackageError {
+    #[error("ONNX Runtime package rejected: its SHA-256 is {found}, expected {expected}. Nothing was taken from it")]
+    PackageDigest { found: String, expected: String },
+    #[error("ONNX Runtime library rejected: {member} in the package has SHA-256 {found}, expected {expected}")]
+    LibraryDigest {
+        member: String,
+        found: String,
+        expected: String,
+    },
+    #[error("ONNX Runtime package has no {0}")]
+    MissingMember(String),
+    #[error("ONNX Runtime package: {0}")]
+    Unreadable(String),
+}
+
+/// Take `lib.member` out of the package at `package` and put it at `dest`.
+///
+/// The package is hashed through the same open handle the zip reader then
+/// uses, so the bytes checked are the bytes read. The member is looked up by
+/// its full path only: the package holds five libraries under two file names,
+/// so a file of the same name elsewhere is never taken, and no name from the
+/// archive is used to build a path on disk. The library is written to
+/// `<dest>.tmp` and gets `dest`'s name only once its own SHA-256 matches.
+pub(crate) fn extract_library(
+    package: &Path,
+    package_sha256: &str,
+    lib: OrtLibrary<'_>,
+    dest: &Path,
+) -> std::result::Result<(), OrtPackageError> {
+    let mut file = std::fs::File::open(package).map_err(|e| unreadable("open", e))?;
+    let found = copy_hashing(&mut file, &mut std::io::sink()).map_err(|e| unreadable("read", e))?;
+    if found != package_sha256 {
+        return Err(OrtPackageError::PackageDigest {
+            found,
+            expected: package_sha256.to_string(),
+        });
+    }
+    file.rewind().map_err(|e| unreadable("rewind", e))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| unreadable("not a zip", e))?;
+    let entry = match archive.by_name(lib.member) {
+        Ok(entry) => entry,
+        Err(zip::result::ZipError::FileNotFound) => {
+            return Err(OrtPackageError::MissingMember(lib.member.to_string()))
+        }
+        Err(e) => return Err(unreadable(lib.member, e)),
+    };
+    let tmp = tmp_path(dest);
+    let written = std::fs::File::create(&tmp).and_then(|mut out| {
+        let digest = copy_hashing(entry, &mut out)?;
+        out.sync_all()?;
+        Ok(digest)
+    });
+    match written {
+        Ok(found) if found == lib.sha256 => {}
+        Ok(found) => {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(OrtPackageError::LibraryDigest {
+                member: lib.member.to_string(),
+                found,
+                expected: lib.sha256.to_string(),
+            });
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(unreadable(lib.member, e));
+        }
+    }
+    std::fs::rename(&tmp, dest).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        unreadable("rename", e)
+    })
+}
+
+fn unreadable(what: &str, e: impl std::fmt::Display) -> OrtPackageError {
+    OrtPackageError::Unreadable(format!("{what}: {e}"))
+}
+
+/// `<path>.tmp`, beside it.
+fn tmp_path(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".tmp");
+    PathBuf::from(name)
+}
+
+/// Copy `from` into `to` and return the SHA-256 of what was copied.
+fn copy_hashing(mut from: impl Read, to: &mut impl Write) -> std::io::Result<String> {
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 16];
+    loop {
+        let n = from.read(&mut buf)?;
+        if n == 0 {
+            return Ok(hex::encode(hasher.finalize()));
+        }
+        hasher.update(&buf[..n]);
+        to.write_all(&buf[..n])?;
+    }
 }
 
 /// The CPU a native library is built for.
