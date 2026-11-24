@@ -42,7 +42,6 @@ fn ort_lib_filename() -> &'static str {
 }
 
 #[cfg(feature = "fastembed-local")]
-#[allow(clippy::large_stack_arrays)]
 fn ensure_ort_runtime(
     cache_dir: &std::path::Path,
     progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
@@ -53,8 +52,7 @@ fn ensure_ort_runtime(
         return Ok(());
     }
 
-    use super::ort_runtime::{host_archive, lib_runs_here};
-    use sha2::{Digest as _, Sha256};
+    use super::ort_runtime::lib_runs_here;
 
     let bundled_path = crate::runtime_paths::RuntimePaths::get()
         .bundled_models_dir()
@@ -82,26 +80,87 @@ fn ensure_ort_runtime(
         let _ = std::fs::remove_file(&dll_path);
     }
 
-    // No pinned archive for this platform (Intel macOS): say why, without a doomed download.
-    let spec = host_archive().map_err(|why| FourDaError::from(why.to_string()))?;
+    fetch_ort_runtime(&ort_dir, &dll_path, progress)?;
+    std::env::set_var("ORT_DYLIB_PATH", &dll_path);
+    tracing::info!(target: "4da::embeddings", path = %dll_path.display(), "ONNX Runtime ready");
+    Ok(())
+}
 
-    let _ = std::fs::create_dir_all(&ort_dir);
+/// Download the pinned NuGet package into `ort_dir` and take this platform's
+/// library out of it to `dll_path`, which exists afterwards only if both
+/// digests matched and the library is built for this CPU.
+#[cfg(feature = "fastembed-local")]
+fn fetch_ort_runtime(
+    ort_dir: &std::path::Path,
+    dll_path: &std::path::Path,
+    progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
+) -> std::result::Result<(), FourDaError> {
+    use super::ort_runtime::{
+        extract_library, host_library, lib_runs_here, ORT_VERSION, PACKAGE_SHA256,
+    };
+
+    // No pinned library for this platform (Intel macOS): say why, without a doomed download.
+    let lib = host_library().map_err(|why| FourDaError::from(why.to_string()))?;
+
+    let _ = std::fs::create_dir_all(ort_dir);
     tracing::info!(
         target: "4da::embeddings",
         dest = %ort_dir.display(),
-        "Downloading ONNX Runtime 1.24.2 (one-time, ~70MB)"
+        version = ORT_VERSION,
+        "Downloading ONNX Runtime from Microsoft's NuGet package (one-time, ~120MB)"
     );
-    let url = spec.url;
-    let mut hasher = Sha256::new();
+    let package_path = ort_dir.join("ort_download.tmp");
+    let downloaded = download_ort_package(&package_path, progress);
+    if let (Some(tx), Ok(bytes)) = (progress, &downloaded) {
+        let _ = tx.send(DownloadProgress {
+            stage: "ort-extract".into(),
+            percent: 45,
+            bytes_downloaded: *bytes,
+            bytes_total: *bytes,
+            message: "Extracting ONNX Runtime...".into(),
+            done: false,
+        });
+    }
+    // The library is loaded into this process: `extract_library` checks the
+    // package's digest before opening it and the library's before naming it.
+    let extracted = downloaded.and_then(|_| {
+        extract_library(&package_path, PACKAGE_SHA256, lib, dll_path)
+            .map_err(|e| FourDaError::from(e.to_string()))
+    });
+    let _ = std::fs::remove_file(&package_path);
+    extracted?;
 
-    let archive_path = ort_dir.join("ort_download.tmp");
+    if !lib_runs_here(dll_path) {
+        let _ = std::fs::remove_file(dll_path);
+        return Err(FourDaError::from(
+            "ONNX Runtime download contained a library for another CPU".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Stream the pinned package to `dest`, no more than `PACKAGE_MAX_BYTES` of it.
+/// Returns the bytes received. Nothing here trusts the bytes; that is
+/// `extract_library`'s job.
+#[cfg(feature = "fastembed-local")]
+fn download_ort_package(
+    dest: &std::path::Path,
+    progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
+) -> std::result::Result<u64, FourDaError> {
+    use super::ort_runtime::{PACKAGE_MAX_BYTES, PACKAGE_URL};
+
+    let too_large = |bytes: u64| {
+        FourDaError::from(format!(
+            "ORT download refused: {bytes} bytes is more than the {PACKAGE_MAX_BYTES} allowed for {PACKAGE_URL}"
+        ))
+    };
     let client = crate::http_client::outbound_blocking_builder()
         .timeout(std::time::Duration::from_mins(10))
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
         .map_err(|e| FourDaError::from(format!("HTTP client init: {e}")))?;
     let mut response = client
-        .get(url)
+        .get(PACKAGE_URL)
         .send()
         .map_err(|e| FourDaError::from(format!("ORT download failed: {e}")))?;
     if !response.status().is_success() {
@@ -111,144 +170,60 @@ fn ensure_ort_runtime(
         )));
     }
     let total = response.content_length().unwrap_or(0);
-    let mut file = std::fs::File::create(&archive_path)
+    if total > PACKAGE_MAX_BYTES {
+        return Err(too_large(total));
+    }
+    let mut file = std::fs::File::create(dest)
         .map_err(|e| FourDaError::from(format!("create archive: {e}")))?;
     let mut downloaded: u64 = 0;
     let mut last_report: u64 = 0;
-    let mut buf = [0u8; 32_768];
+    let mut buf = vec![0u8; 1 << 16];
     loop {
         let n = response
             .read(&mut buf)
             .map_err(|e| FourDaError::from(format!("download read: {e}")))?;
         if n == 0 {
-            break;
+            return Ok(downloaded);
+        }
+        downloaded += n as u64;
+        if downloaded > PACKAGE_MAX_BYTES {
+            return Err(too_large(downloaded));
         }
         file.write_all(&buf[..n])
             .map_err(|e| FourDaError::from(format!("write chunk: {e}")))?;
-        hasher.update(&buf[..n]);
-        downloaded += n as u64;
         if downloaded - last_report > 524_288 {
             last_report = downloaded;
-            super::fastembed_setup::set_preparing("Downloading ONNX Runtime", downloaded, total);
-            if let Some(tx) = progress.as_ref() {
-                let pct = if total > 0 {
-                    ((downloaded as f64 / total as f64) * 50.0) as u32
-                } else {
-                    0
-                };
-                let _ = tx.send(DownloadProgress {
-                    stage: "ort-download".into(),
-                    percent: pct,
-                    bytes_downloaded: downloaded,
-                    bytes_total: total,
-                    message: format!(
-                        "Downloading ONNX Runtime... {:.1}MB / {:.1}MB",
-                        downloaded as f64 / 1_048_576.0,
-                        total as f64 / 1_048_576.0
-                    ),
-                    done: false,
-                });
-            }
+            report_ort_download(progress, downloaded, total);
         }
     }
-    drop(file);
-
-    // The library is loaded into this process: an archive that does not match its pin is never extracted.
-    let digest = hex::encode(hasher.finalize());
-    if digest != spec.sha256 {
-        let _ = std::fs::remove_file(&archive_path);
-        return Err(FourDaError::from(format!(
-            "ONNX Runtime download rejected: its SHA-256 is {digest}, expected {} ({url})",
-            spec.sha256
-        )));
-    }
-
-    if let Some(tx) = progress.as_ref() {
-        let _ = tx.send(DownloadProgress {
-            stage: "ort-extract".into(),
-            percent: 45,
-            bytes_downloaded: downloaded,
-            bytes_total: total,
-            message: "Extracting ONNX Runtime...".into(),
-            done: false,
-        });
-    }
-
-    extract_ort_library(&archive_path, &dll_path, spec.kind)?;
-    let _ = std::fs::remove_file(&archive_path);
-    if !lib_runs_here(&dll_path) {
-        let _ = std::fs::remove_file(&dll_path);
-        return Err(FourDaError::from(
-            "ONNX Runtime download contained a library for another CPU".to_string(),
-        ));
-    }
-
-    std::env::set_var("ORT_DYLIB_PATH", &dll_path);
-    tracing::info!(target: "4da::embeddings", path = %dll_path.display(), "ONNX Runtime ready");
-    Ok(())
 }
 
 #[cfg(feature = "fastembed-local")]
-fn extract_ort_library(
-    archive_path: &std::path::Path,
-    dll_dest: &std::path::Path,
-    kind: super::ort_runtime::ArchiveKind,
-) -> std::result::Result<(), FourDaError> {
-    let lib_name = ort_lib_filename();
-    // The kind comes from the pinned archive, not the file name: the download is
-    // always saved as `ort_download.tmp`, and a `.tmp` name sent every macOS and
-    // Linux .tgz down the zip path ("invalid zip") (audit 2026-11-11).
-    if kind == super::ort_runtime::ArchiveKind::Zip {
-        let file = std::fs::File::open(archive_path)
-            .map_err(|e| FourDaError::from(format!("open archive: {e}")))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| FourDaError::from(format!("invalid zip: {e}")))?;
-        for i in 0..archive.len() {
-            let mut entry = archive
-                .by_index(i)
-                .map_err(|e| FourDaError::from(format!("zip entry: {e}")))?;
-            // zip 9: `name()` fails when the raw name is neither UTF-8 nor
-            // CP437. Such an entry cannot be the runtime library; skip it.
-            let is_lib = match entry.name() {
-                Ok(name) => name.ends_with(lib_name),
-                Err(e) => {
-                    tracing::debug!(target: "4da::embeddings", index = i, error = %e, "Skipping ORT archive entry with an undecodable name");
-                    continue;
-                }
-            };
-            if is_lib {
-                let mut out = std::fs::File::create(dll_dest)
-                    .map_err(|e| FourDaError::from(format!("create dll: {e}")))?;
-                std::io::copy(&mut entry, &mut out)
-                    .map_err(|e| FourDaError::from(format!("extract dll: {e}")))?;
-                return Ok(());
-            }
-        }
-        return Err(FourDaError::from(format!(
-            "{lib_name} not found in archive"
-        )));
+fn report_ort_download(
+    progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
+    downloaded: u64,
+    total: u64,
+) {
+    super::fastembed_setup::set_preparing("Downloading ONNX Runtime", downloaded, total);
+    if let Some(tx) = progress {
+        let pct = if total > 0 {
+            ((downloaded as f64 / total as f64) * 50.0) as u32
+        } else {
+            0
+        };
+        let _ = tx.send(DownloadProgress {
+            stage: "ort-download".into(),
+            percent: pct,
+            bytes_downloaded: downloaded,
+            bytes_total: total,
+            message: format!(
+                "Downloading ONNX Runtime... {:.1}MB / {:.1}MB",
+                downloaded as f64 / 1_048_576.0,
+                total as f64 / 1_048_576.0
+            ),
+            done: false,
+        });
     }
-    let file = std::fs::File::open(archive_path)
-        .map_err(|e| FourDaError::from(format!("open tgz: {e}")))?;
-    let gz = flate2::read::GzDecoder::new(file);
-    let mut archive = tar::Archive::new(gz);
-    for entry in archive
-        .entries()
-        .map_err(|e| FourDaError::from(format!("tar entries: {e}")))?
-    {
-        let mut entry = entry.map_err(|e| FourDaError::from(format!("tar entry: {e}")))?;
-        let path = entry
-            .path()
-            .map_err(|e| FourDaError::from(format!("tar path: {e}")))?;
-        if path.to_string_lossy().ends_with(lib_name) {
-            let mut out = std::fs::File::create(dll_dest)
-                .map_err(|e| FourDaError::from(format!("create lib: {e}")))?;
-            std::io::copy(&mut entry, &mut out)
-                .map_err(|e| FourDaError::from(format!("extract lib: {e}")))?;
-            return Ok(());
-        }
-    }
-    Err(FourDaError::from(format!("{lib_name} not found in tgz")))
 }
 
 // ============================================================================
@@ -514,5 +489,37 @@ mod tests {
             "{err:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The real run-time fallback against api.nuget.org: the package and this
+    /// platform's library both match their pins and the library runs here.
+    /// Downloads ~120 MB, so it runs only when asked for:
+    /// `cargo test --lib real_ort_package -- --ignored --nocapture`
+    #[test]
+    #[ignore = "downloads the ~120 MB ONNX Runtime package from api.nuget.org"]
+    fn real_ort_package_yields_a_library_that_runs_here() {
+        use super::super::ort_runtime::{host_library, lib_runs_here, PACKAGE_SHA256, PACKAGE_URL};
+        use sha2::{Digest as _, Sha256};
+
+        let Ok(lib) = host_library() else {
+            return; // Intel macOS: nothing to fetch.
+        };
+        let dir = tempfile::tempdir().expect("tempdir");
+        let dll = dir.path().join(ort_lib_filename());
+        let started = std::time::Instant::now();
+        fetch_ort_runtime(dir.path(), &dll, None).expect("fetched and verified");
+        let bytes = std::fs::read(&dll).expect("read library");
+        let digest = hex::encode(Sha256::digest(&bytes));
+        assert_eq!(digest, lib.sha256);
+        assert!(lib_runs_here(&dll));
+        assert!(!dir.path().join("ort_download.tmp").exists());
+        // fetch_ort_runtime fails before extracting when the package's digest differs.
+        println!(
+            "{PACKAGE_URL}\npackage SHA-256 {PACKAGE_SHA256} matched\n{} -> {} ({} bytes, SHA-256 {digest}) in {:.1}s",
+            lib.member,
+            dll.display(),
+            bytes.len(),
+            started.elapsed().as_secs_f64()
+        );
     }
 }

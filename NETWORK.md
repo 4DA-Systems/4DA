@@ -603,7 +603,7 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
 | What | Host | Endpoint |
 |---|---|---|
 | Embedding model (`nomic-embed-text-v1.5`, fp16 ONNX + tokenizer, 5 files, ~262 MB) | `huggingface.co`, which redirects to its CDN (`cdn.hf.co` / Xet storage) | `GET /nomic-ai/nomic-embed-text-v1.5/resolve/e9b6763023c676ca8431644204f50c2b100d9aab/{onnx/model_fp16.onnx, tokenizer.json, config.json, special_tokens_map.json, tokenizer_config.json}` (a `Range` header resumes a partial file) |
-| ONNX Runtime library (only if missing from the install, e.g. a hand-built binary) | `github.com` | `/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-{platform}.{zip,tgz}` |
+| ONNX Runtime library (only if missing from the install, e.g. a hand-built binary) | `api.nuget.org` (Microsoft's NuGet package, ~120 MB, holding every platform's library) | `GET /v3-flatcontainer/microsoft.ml.onnxruntime/1.24.2/microsoft.ml.onnxruntime.1.24.2.nupkg`; the package and the one library taken from it are each pinned by SHA-256 (`src-tauri/src/embeddings_providers/ort_runtime.rs`) |
 
 - **What is sent:** plain `GET`s for those fixed public files. No user data, no identifier, no
   file, project or query content: the request is the same for every install.

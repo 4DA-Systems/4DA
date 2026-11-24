@@ -2,6 +2,11 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
+
+use sha2::{Digest as _, Sha256};
+
 use super::*;
 
 /// The first bytes of real libraries, as each format lays them out.
@@ -62,56 +67,214 @@ fn an_arm64_library_does_not_run_on_an_intel_mac() {
     assert!(runs_on(None, "x86_64"));
 }
 
+/// Each downloadable platform, with its key in `scripts/download-ort.cjs`.
+const PLATFORMS: [(&str, &str, &str); 5] = [
+    ("windows", "x86_64", "win32-x64"),
+    ("windows", "aarch64", "win32-arm64"),
+    ("macos", "aarch64", "darwin-arm64"),
+    ("linux", "x86_64", "linux-x64"),
+    ("linux", "aarch64", "linux-arm64"),
+];
+
+fn is_sha256(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 #[test]
 fn every_downloadable_platform_is_pinned_and_intel_macos_says_why_not() {
-    for (os, arch, kind) in [
-        ("windows", "x86_64", ArchiveKind::Zip),
-        ("windows", "aarch64", ArchiveKind::Zip),
-        ("macos", "aarch64", ArchiveKind::Tgz),
-        ("linux", "x86_64", ArchiveKind::Tgz),
-        ("linux", "aarch64", ArchiveKind::Tgz),
-    ] {
-        let a = archive_for(os, arch).expect("a pinned archive");
-        assert_eq!(a.kind, kind, "{os}/{arch}");
-        assert_eq!(a.sha256.len(), 64, "{os}/{arch}");
+    assert!(PACKAGE_URL.starts_with("https://api.nuget.org/v3-flatcontainer/"));
+    assert!(is_sha256(PACKAGE_SHA256));
+    for (os, arch, _) in PLATFORMS {
+        let lib = library_for(os, arch).expect("a pinned library");
+        assert!(is_sha256(lib.sha256), "{os}/{arch}");
         assert!(
-            a.sha256.bytes().all(|b| b.is_ascii_hexdigit()),
-            "{os}/{arch}"
-        );
-        assert!(a
-            .url
-            .starts_with("https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/"));
-        let tgz = a.url.ends_with(".tgz");
-        assert_eq!(
-            tgz,
-            kind == ArchiveKind::Tgz,
-            "{os}/{arch}: the kind follows the archive, not the temp file name"
+            lib.member.starts_with("runtimes/") && lib.member.contains("/native/"),
+            "{os}/{arch}: {}",
+            lib.member
         );
     }
-    let intel = archive_for("macos", "x86_64").expect_err("no Intel macOS build exists");
+    let intel = library_for("macos", "x86_64").expect_err("no Intel macOS build exists");
     assert!(
         intel.contains("Intel Macs") && intel.contains("Ollama"),
         "{intel}"
     );
-    assert!(archive_for("freebsd", "x86_64").is_err());
+    assert!(library_for("freebsd", "x86_64").is_err());
+}
+
+/// The text after `start` up to the next `end`, or which marker is missing.
+fn between<'a>(text: &'a str, start: &str, end: &str) -> Result<&'a str, String> {
+    let (_, after) = text
+        .split_once(start)
+        .ok_or_else(|| format!("download-ort.cjs has no `{start}`"))?;
+    let (inside, _) = after
+        .split_once(end)
+        .ok_or_else(|| format!("download-ort.cjs: nothing ends `{start}`"))?;
+    Ok(inside)
+}
+
+/// `scripts/download-ort.cjs` bundles the library from the same package; the
+/// two sets of pins must not drift apart.
+#[test]
+fn the_pins_equal_the_build_scripts() -> Result<(), String> {
+    let script = include_str!("../../../scripts/download-ort.cjs");
+    let version = between(script, "const ORT_VERSION = '", "'")?;
+    assert_eq!(version, ORT_VERSION);
+
+    let nuget = between(script, "const NUGET = {", "};")?;
+    let url = between(nuget, "url: `", "`")?.replace("${ORT_VERSION}", version);
+    assert_eq!(url, PACKAGE_URL);
+    assert_eq!(between(nuget, "sha256: '", "'")?, PACKAGE_SHA256);
+
+    let platforms = between(script, "const PLATFORMS = {", "\n};")?;
+    for (os, arch, key) in PLATFORMS {
+        let entry = between(platforms, &format!("'{key}': {{"), "\n  }")?;
+        let lib = library_for(os, arch)?;
+        assert_eq!(between(entry, "member: '", "'")?, lib.member, "{key}");
+        assert_eq!(between(entry, "libSha256: '", "'")?, lib.sha256, "{key}");
+    }
+    // Intel macOS: neither side has a library to take.
+    let intel = between(platforms, "'darwin-x64': {", "\n  }")?;
+    assert!(intel.contains("bundleNothing") && !intel.contains("member:"));
+    assert!(library_for("macos", "x86_64").is_err());
+    Ok(())
+}
+
+const MEMBER: &str = "runtimes/win-x64/native/onnxruntime.dll";
+const LIBRARY: &[u8] = b"the x64 library";
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+/// A package laid out like the NuGet one, written to `dir`; returns its path
+/// and SHA-256.
+fn package(dir: &Path, entries: &[(&str, &[u8])]) -> (PathBuf, String) {
+    let path = dir.join("package.nupkg");
+    let file = std::fs::File::create(&path).expect("create package");
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, bytes) in entries {
+        zip.start_file(*name, options).expect("start entry");
+        zip.write_all(bytes).expect("write entry");
+    }
+    zip.finish().expect("finish package");
+    let digest = sha256_hex(&std::fs::read(&path).expect("read package"));
+    (path, digest)
+}
+
+/// Neither the library nor its temp file is left behind.
+fn assert_nothing_at(dest: &Path) {
+    assert!(!dest.exists(), "{} exists", dest.display());
+    assert!(!tmp_path(dest).exists(), "a temp file was left beside it");
 }
 
 #[test]
-fn the_digests_match_the_build_scripts_pins() {
-    // scripts/download-ort.cjs pins the same five archives; a version bump must change both.
-    let script = include_str!("../../../scripts/download-ort.cjs");
-    for (os, arch) in [
-        ("windows", "x86_64"),
-        ("windows", "aarch64"),
-        ("macos", "aarch64"),
-        ("linux", "x86_64"),
-        ("linux", "aarch64"),
-    ] {
-        let a = archive_for(os, arch).expect("a pinned archive");
-        assert!(
-            script.contains(a.sha256),
-            "{os}/{arch}: {} is not pinned in download-ort.cjs",
-            a.sha256
-        );
-    }
+fn the_right_member_with_both_digests_matching_is_extracted() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // The real package holds two onnxruntime.dll files; arm64 comes first.
+    let (pkg, pkg_sha) = package(
+        dir.path(),
+        &[
+            (
+                "runtimes/win-arm64/native/onnxruntime.dll",
+                b"the arm64 library",
+            ),
+            (MEMBER, LIBRARY),
+        ],
+    );
+    let dest = dir.path().join("onnxruntime.dll");
+    let lib_sha = sha256_hex(LIBRARY);
+    let lib = OrtLibrary {
+        member: MEMBER,
+        sha256: &lib_sha,
+    };
+    extract_library(&pkg, &pkg_sha, lib, &dest).expect("extracted");
+    assert_eq!(std::fs::read(&dest).expect("read library"), LIBRARY);
+    assert!(!tmp_path(&dest).exists());
+}
+
+#[test]
+fn a_package_that_does_not_match_its_pin_is_never_opened() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (pkg, _) = package(dir.path(), &[(MEMBER, LIBRARY)]);
+    let dest = dir.path().join("onnxruntime.dll");
+    let lib_sha = sha256_hex(LIBRARY);
+    let lib = OrtLibrary {
+        member: MEMBER,
+        sha256: &lib_sha,
+    };
+    let err = extract_library(&pkg, &"0".repeat(64), lib, &dest).expect_err("rejected");
+    assert!(
+        matches!(err, OrtPackageError::PackageDigest { .. }),
+        "{err:?}"
+    );
+    assert!(err.to_string().contains("package rejected"), "{err}");
+    assert_nothing_at(&dest);
+}
+
+#[test]
+fn a_library_that_does_not_match_its_pin_never_gets_its_name() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (pkg, pkg_sha) = package(dir.path(), &[(MEMBER, LIBRARY)]);
+    let dest = dir.path().join("onnxruntime.dll");
+    let other_sha = sha256_hex(b"another library");
+    let lib = OrtLibrary {
+        member: MEMBER,
+        sha256: &other_sha,
+    };
+    let err = extract_library(&pkg, &pkg_sha, lib, &dest).expect_err("rejected");
+    assert!(
+        matches!(&err, OrtPackageError::LibraryDigest { member, .. } if member == MEMBER),
+        "{err:?}"
+    );
+    assert!(err.to_string().contains("library rejected"), "{err}");
+    assert_nothing_at(&dest);
+}
+
+#[test]
+fn a_package_without_the_member_is_an_error() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (pkg, pkg_sha) = package(
+        dir.path(),
+        &[("runtimes/linux-x64/native/libonnxruntime.so", LIBRARY)],
+    );
+    let dest = dir.path().join("onnxruntime.dll");
+    let lib_sha = sha256_hex(LIBRARY);
+    let lib = OrtLibrary {
+        member: MEMBER,
+        sha256: &lib_sha,
+    };
+    let err = extract_library(&pkg, &pkg_sha, lib, &dest).expect_err("rejected");
+    assert!(
+        matches!(&err, OrtPackageError::MissingMember(m) if m == MEMBER),
+        "{err:?}"
+    );
+    assert_nothing_at(&dest);
+}
+
+/// The old lookup took the first entry whose name ended in the library's
+/// file name. Only the full path counts now, even when the bytes are right.
+#[test]
+fn a_file_of_the_same_name_at_another_path_is_not_taken() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (pkg, pkg_sha) = package(
+        dir.path(),
+        &[
+            ("onnxruntime.dll", LIBRARY),
+            ("runtimes/win-x64/onnxruntime.dll", LIBRARY),
+            ("lib/runtimes/win-x64/native/onnxruntime.dll", LIBRARY),
+        ],
+    );
+    let dest = dir.path().join("onnxruntime.dll");
+    let lib_sha = sha256_hex(LIBRARY);
+    let lib = OrtLibrary {
+        member: MEMBER,
+        sha256: &lib_sha,
+    };
+    let err = extract_library(&pkg, &pkg_sha, lib, &dest).expect_err("rejected");
+    assert!(matches!(err, OrtPackageError::MissingMember(_)), "{err:?}");
+    assert_nothing_at(&dest);
 }
