@@ -96,11 +96,6 @@ jobs:
     needs: resolve
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    env:
-      # scripts/ci/apt-install.sh: give up on a stalled mirror after 4 minutes
-      # an attempt, so its second and third attempts (on another mirror) fit
-      # inside the Linux install steps below. The packages are about 60 MB.
-      APT_INSTALL_TIMEOUT: "240"
     # One permission, for one reason: the REST API lists a DRAFT release only
     # to a token with push access, which for GITHUB_TOKEN is `contents: write`
     # ("get a release by tag" never returns drafts). Permissions cannot vary by
@@ -164,6 +159,10 @@ jobs:
       # the candidate ran on the previous release's database, and whether it
       # saw the previous session end uncleanly.
       MIGRATION_EVIDENCE: 'schema version|Running Phase|Database ready|migrat|exited uncleanly'
+      # scripts/ci/apt-install.sh: give up on a stalled mirror after 4 minutes
+      # an attempt, so its second and third attempts (on another mirror) fit
+      # inside the Linux install steps below. The packages are about 60 MB.
+      APT_INSTALL_TIMEOUT: '240'
     steps:
       # Only scripts/, and into a subdirectory. The installed binary checks for
       # <CARGO_MANIFEST_DIR>/../data, a path compiled in at build time that is
