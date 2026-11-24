@@ -4,7 +4,7 @@ All notable changes to 4DA will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.0.4] - Unreleased
+## [1.0.4] - 2026-11-24
 
 The release that makes 4DA the dependency engine the site describes. A summary of what you
 will notice since 1.0.3, not the full commit log.
