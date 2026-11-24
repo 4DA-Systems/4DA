@@ -39,7 +39,12 @@ function pinManifest(manifest, repo, tag, assetNames) {
   if (!platforms || Object.keys(platforms).length === 0) {
     return { manifest, problems: ['latest.json has no platforms'] };
   }
-  if (manifest.version && `v${manifest.version}` !== tag) {
+  // A rehearsal tag (`v1.0.4-dryrun.2`) builds the app at its real version
+  // (1.0.4), so the manifest matches the tag up to the `-suffix`. Refusing it
+  // stopped every rehearsal here, before the install-and-launch gate could
+  // run (v1.0.4-dryrun.2, 2026-11-24). A rehearsal is never published.
+  const v = manifest.version ? `v${manifest.version}` : null;
+  if (v && tag !== v && !tag.startsWith(`${v}-`)) {
     problems.push(`latest.json version ${manifest.version} does not match tag ${tag}`);
   }
   const out = { ...manifest, platforms: {} };

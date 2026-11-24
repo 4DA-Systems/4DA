@@ -59,6 +59,17 @@ test('a manifest for another version, another repo or another tag is refused', (
   assert.ok(pinManifest(otherTag, REPO, 'v1.0.5', assetsOf('1.0.4')).problems.length > 0);
 });
 
+test('a rehearsal tag of the same version is pinned to the rehearsal release', () => {
+  const { manifest: pinned, problems } = pinManifest(manifest('1.0.4'), REPO, 'v1.0.4-dryrun.2', assetsOf('1.0.4'));
+  assert.deepEqual(problems, []);
+  for (const entry of Object.values(pinned.platforms)) {
+    assert.ok(entry.url.startsWith(`https://github.com/${REPO}/releases/download/v1.0.4-dryrun.2/`), entry.url);
+  }
+  // Not a loophole for a different version: 1.0.4 is not a prefix-match for v1.0.40 or v1.0.5-dryrun.1.
+  assert.ok(pinManifest(manifest('1.0.4'), REPO, 'v1.0.40', assetsOf('1.0.4')).problems.some((p) => /does not match/.test(p)));
+  assert.ok(pinManifest(manifest('1.0.4'), REPO, 'v1.0.5-dryrun.1', assetsOf('1.0.4')).problems.some((p) => /does not match/.test(p)));
+});
+
 test('check-urls passes only when every URL answers 200, retrying a lagging CDN', async () => {
   const urls = ['https://a/1', 'https://a/2'];
   let calls = 0;
