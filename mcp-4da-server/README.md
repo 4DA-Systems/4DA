@@ -7,7 +7,7 @@ The 4DA MCP server now lives in its own repository, with its full history:
 Install it as before; the package name is unchanged:
 
 ```bash
-claude mcp add --scope user 4da -- npx -y --prefer-offline @4da/mcp-server@6.5.0
+claude mcp add --scope user 4da -- npx -y --prefer-offline @4da/mcp-server@6.5.1
 ```
 
 As a Claude Code plugin:

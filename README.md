@@ -40,7 +40,7 @@ From the screenshot above: `@zag-js/core` 0.82.1 has an advisory, but its parent
 ### For your coding agent — free, Apache-2.0, no account
 
 ```bash
-claude mcp add --scope user 4da -- npx -y --prefer-offline @4da/mcp-server@6.5.0   # Claude Code
+claude mcp add --scope user 4da -- npx -y --prefer-offline @4da/mcp-server@6.5.1   # Claude Code
 npx -y @4da/mcp-server@latest --setup    # Cursor, VS Code, Windsurf, Claude Desktop, Devin
 ```
 
