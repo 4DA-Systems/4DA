@@ -35,7 +35,7 @@ No API keys. No accounts. No desktop app required. See **[MCP server & agents](/
 
 ## System requirements
 
-4DA runs on modest hardware. Private, on-device semantic search is built in — no GPU, no API key, and no first-run download required.
+4DA runs on modest hardware. The dependency engine needs no GPU, no API key and nothing beyond the installer. On-device semantic search (interests and natural-language search) downloads its embedding model once, about 260 MB, the first time you turn it on; if Ollama is running, it can serve the embeddings instead.
 
 | | Baseline (free) | + Cloud AI (BYOK) | + Local AI (offline) |
 |---|---|---|---|
@@ -46,7 +46,9 @@ No API keys. No accounts. No desktop app required. See **[MCP server & agents](/
 
 Disk use grows with your corpus: an active install's database reaches a couple of GB, each schema migration keeps up to 2 full database backups, and caches and models add about 1 GB. The data-retention setting (default 30 days, adjustable 7–365) bounds how long items are kept.
 
-Supported: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1). Installers are about 280–300 MB on Windows and macOS and about 370 MB for the Linux AppImage. Most of that is the local embedding model, which ships inside the installer and works fully offline on first run.
+Supported: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1). Installers are about 40–50 MB; the Linux AppImage is about 120 MB because it carries its own WebKitGTK. The local embedding model is not in the installer: it is downloaded once (about 260 MB, every file checked against a pinned SHA-256) only when you turn on interests or run a natural-language search. Everything the dependency engine does works without it.
+
+> **Linux, v1.0.4:** if 4DA exits with "Missing required system libraries", the check that prints it is wrong in two cases, both fixed in the next release. The `.deb` on Debian: start it with `PATH="$PATH:/usr/sbin:/sbin" fourda`. The AppImage on a system without WebKitGTK: `sudo apt install libwebkit2gtk-4.1-0` (Fedora: `sudo dnf install webkit2gtk4.1`). Details: [LINUX.md](https://github.com/4DA-Systems/4DA/blob/main/LINUX.md).
 
 ## Build from source
 
@@ -57,6 +59,6 @@ pnpm install
 pnpm tauri dev   # First build: 5–15 min. Dev server: localhost:4444.
 ```
 
-**Prerequisites:** Rust (pinned via `rust-toolchain.toml`), Node.js 20, pnpm 9.15. Windows also needs VS Build Tools 2022 with the C++ workload.
+**Prerequisites:** Rust 1.95.0 (pinned in `src-tauri/rust-toolchain.toml`), Node.js 22, pnpm 10.34.6 (pinned by `packageManager`; `corepack enable` picks it up). Windows also needs VS Build Tools 2022 with the C++ workload.
 
 Next: **[Quickstart](/docs/quickstart/)**.
