@@ -97,6 +97,25 @@ updates:
     commit-message:
       prefix: "chore(cargo)"
       include: "scope"
+    ignore:
+      # DEFERRED 2026-11-25 (#1110). pdf-extract 0.12.1, its newest release,
+      # requires lopdf ^0.42, so a direct lopdf 0.47 leaves TWO lopdf copies
+      # (plus second copies of md-5, cbc, ecb, block-padding, weezl,
+      # brotli-decompressor and alloc-*). The text-extraction path would stay
+      # on 0.42 either way, so 0.45's crafted-PDF fixes would reach only the
+      # metadata reader. Lift when a pdf-extract release accepts the newer
+      # lopdf, and bump both together.
+      - dependency-name: "lopdf"
+        versions: [">=0.43"]
+      # DEFERRED 2026-11-25 (#1079). parking_lot 0.13 removes the automatic
+      # eventual fairness every Mutex/RwLock here relies on not to starve a
+      # waiter (the database connections included), a load-dependent change
+      # that unit tests cannot prove safe. tokio, tao and string_cache stay on
+      # 0.12 too, so it would only add a second parking_lot, parking_lot_core
+      # and lock_api. Lift when those dependencies move to 0.13, together with
+      # a review of the hot locks (fair unlocks where a waiter must progress).
+      - dependency-name: "parking_lot"
+        versions: [">=0.13"]
 
   # ── Rust (Team Relay server) ──────────────────────────────────────
   # Separate crate, separate Cargo.lock — NOT a workspace member of

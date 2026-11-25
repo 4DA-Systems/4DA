@@ -7,7 +7,7 @@
 
 use serde::Serialize;
 use std::sync::OnceLock;
-use tracing::debug;
+use tracing::{debug, warn};
 
 // ── Public types ────────────────────────────────────────────────────
 
@@ -67,15 +67,30 @@ fn round1(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
 
-fn detect_hardware_impl() -> HardwareInfo {
+/// Total and available RAM in bytes. sysinfo 0.40 made `System` construction
+/// fallible; on Windows, macOS and Linux it always succeeds, and elsewhere a
+/// failure reads as 0 bytes, which is what 0.39 reported on a system it could
+/// not read.
+fn ram_bytes() -> (u64, u64) {
     use sysinfo::{MemoryRefreshKind, RefreshKind};
-    let mut sys = sysinfo::System::new_with_specifics(
+    match sysinfo::System::new_with_specifics(
         RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()),
-    );
-    sys.refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+    ) {
+        Ok(mut sys) => {
+            sys.refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+            (sys.total_memory(), sys.available_memory())
+        }
+        Err(e) => {
+            warn!(target: "4da::hardware", error = %e, "RAM detection unavailable");
+            (0, 0)
+        }
+    }
+}
 
-    let ram_total_gb = round1(sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0));
-    let ram_available_gb = round1(sys.available_memory() as f64 / (1024.0 * 1024.0 * 1024.0));
+fn detect_hardware_impl() -> HardwareInfo {
+    let (ram_total, ram_available) = ram_bytes();
+    let ram_total_gb = round1(ram_total as f64 / (1024.0 * 1024.0 * 1024.0));
+    let ram_available_gb = round1(ram_available as f64 / (1024.0 * 1024.0 * 1024.0));
 
     let gpu = detect_gpu();
 
