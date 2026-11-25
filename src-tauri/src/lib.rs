@@ -559,34 +559,6 @@ mod utils_edge_tests;
 // App Entry
 // ============================================================================
 
-/// Check for required Linux shared libraries.
-/// Returns list of missing library descriptions.
-#[cfg(target_os = "linux")]
-fn check_linux_dependencies() -> Vec<String> {
-    let mut missing = Vec::new();
-
-    // Check via ldconfig (most reliable for runtime detection)
-    let check_lib = |lib_pattern: &str| -> bool {
-        std::process::Command::new("ldconfig")
-            .args(["-p"])
-            .output()
-            .map(|out| {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                stdout.contains(lib_pattern)
-            })
-            .unwrap_or(false)
-    };
-
-    if !check_lib("libwebkit2gtk-4.1") {
-        missing.push("libwebkit2gtk-4.1 (WebView rendering engine)".to_string());
-    }
-    if !check_lib("libgtk-3") {
-        missing.push("libgtk-3 (GTK UI framework)".to_string());
-    }
-
-    missing
-}
-
 /// Detect NVIDIA GPU using multiple methods (lspci may not be available).
 #[cfg(target_os = "linux")]
 fn detect_nvidia_gpu() -> bool {
@@ -761,26 +733,15 @@ pub fn run() {
         }
     }
 
-    // Pre-flight: verify critical Linux dependencies before Tauri tries to use them.
-    // Without these, Tauri crashes with cryptic errors. Better to fail clearly.
-    #[cfg(target_os = "linux")]
-    {
-        let missing_libs = check_linux_dependencies();
-        if !missing_libs.is_empty() {
-            eprintln!("\n\u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}");
-            eprintln!("\u{2551}  4DA: Missing required system libraries              \u{2551}");
-            eprintln!("\u{255a}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255d}\n");
-            for lib in &missing_libs {
-                eprintln!("  \u{2717} {lib}");
-            }
-            eprintln!("\nInstall with:");
-            eprintln!("  Ubuntu/Debian:  sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev");
-            eprintln!("  Fedora/RHEL:    sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel");
-            eprintln!("  Arch Linux:     sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3");
-            eprintln!();
-            std::process::exit(1);
-        }
-    }
+    // No Linux library preflight here. libwebkit2gtk-4.1 and libgtk-3 are
+    // DT_NEEDED by this binary, so the dynamic loader has already loaded them
+    // by the time main() runs; when one is missing the process never starts
+    // ("error while loading shared libraries"). The `ldconfig -p` probe that
+    // stood here could therefore only ever report a library that had loaded,
+    // and it did, in two real cases: the AppImage, whose bundled WebKitGTK is
+    // found through RUNPATH $ORIGIN/../lib and is not in ld.so.cache, and
+    // Debian, where ldconfig is in /sbin, off a normal user's PATH, so the
+    // probe failed to run and read as "missing". Both exited before any window.
 
     // Set Windows AUMID so OS notifications show "4DA" instead of inheriting parent process name.
     // Two-part fix: (1) set process AUMID for taskbar grouping, (2) register in HKCU so the
