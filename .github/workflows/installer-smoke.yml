@@ -53,6 +53,7 @@ on:
       - scripts/update-site-release.cjs
       - scripts/ci/apt-install.sh
       - scripts/ci/apt-mirror-select.sh
+      - scripts/ci/check-nsis-upgrade.ps1
 
 permissions: {}
 
@@ -544,6 +545,14 @@ jobs:
           $exe = ("$($e.DisplayIcon)" -replace ',\d+$', '').Trim('"')
           if (-not (Test-Path -LiteralPath $exe)) { Write-Host "::error title=Upgrade::$exe is missing after the upgrade"; exit 1 }
           Write-Host "upgraded in place: $($e.DisplayName) $($e.DisplayVersion) in $($env:INSTALL_DIR), executable $exe"
+          # Only what the candidate ships is left, plus the previous release's
+          # embedding model, which it reads (scripts/ci/check-nsis-upgrade.ps1).
+          # From the release after 1.0.4 the installer removes the rest
+          # (src-tauri/windows/hooks.nsh); up to 1.0.4 a leftover is a warning.
+          $base = ($env:SMOKE_TAG -replace '^v', '') -replace '-.*$', ''
+          $strict = [version]$base -gt [version]'1.0.4'
+          & smoke-tools/scripts/ci/check-nsis-upgrade.ps1 -Installer $env:INSTALLER -InstallDir $env:INSTALL_DIR -Strict:$strict
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
           $p = Start-Process -FilePath $exe -WorkingDirectory $env:INSTALL_DIR -PassThru
           Write-Host "launched $exe as pid $($p.Id) on the same profile, FOURDA_DATA_DIR=$($env:FOURDA_DATA_DIR)"
@@ -799,10 +808,13 @@ jobs:
             $files = @(Get-ChildItem -LiteralPath $env:INSTALL_DIR -Recurse -File)
             $mb = [math]::Round((($files | Measure-Object -Property Length -Sum).Sum) / 1MB, 1)
             Get-ChildItem -LiteralPath $env:INSTALL_DIR -Recurse | Select-Object -First 50 -ExpandProperty FullName | Write-Host
-            # NSIS removes the files the CURRENT version installed. After an
-            # upgrade, paths only the previous release shipped stay behind; the
-            # fresh leg proves the candidate's own uninstall is clean.
-            if ($env:UPGRADE -eq 'true') {
+            # NSIS removes the files the CURRENT version installed. Up to 1.0.4,
+            # paths only the previous release shipped stay behind after an
+            # upgrade; from the release after it, the uninstall hook removes
+            # them too (src-tauri/windows/hooks.nsh), so nothing may be left.
+            $base = ($env:SMOKE_TAG -replace '^v', '') -replace '-.*$', ''
+            $removesOlder = [version]$base -gt [version]'1.0.4'
+            if ($env:UPGRADE -eq 'true' -and -not $removesOlder) {
               Write-Host "::warning title=Uninstall after upgrade::$($env:PREV_TAG) left $($files.Count) file(s), $mb MB, in $($env:INSTALL_DIR) that the $($env:SMOKE_TAG) uninstaller does not remove"
             } else {
               Write-Host "::error title=Uninstall::$($env:INSTALL_DIR) is still there 120 s after a silent uninstall ($($files.Count) file(s), $mb MB)"
