@@ -268,6 +268,21 @@ pub(crate) fn lib_runs_here(path: &std::path::Path) -> bool {
     }
 }
 
+/// The library start-up names in `ORT_DYLIB_PATH`: the first of `candidates`
+/// (bundled, then cache) that exists and that `runs_here` accepts. Start-up
+/// passes `lib_runs_here`, because `ensure_ort_runtime` trusts a set variable
+/// without checking it again: a library for another CPU must never be named
+/// here, and with none named the lazy path picks, explains or downloads one.
+pub(crate) fn startup_library(
+    candidates: &[PathBuf],
+    runs_here: impl Fn(&Path) -> bool,
+) -> Option<&Path> {
+    candidates
+        .iter()
+        .map(PathBuf::as_path)
+        .find(|p| p.exists() && runs_here(p))
+}
+
 #[cfg(test)]
 #[path = "ort_runtime_tests.rs"]
 mod tests;

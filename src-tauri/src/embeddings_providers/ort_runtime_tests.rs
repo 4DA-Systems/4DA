@@ -255,6 +255,73 @@ fn a_package_without_the_member_is_an_error() {
     assert_nothing_at(&dest);
 }
 
+/// Write `bytes` at `path`, creating its folder.
+fn library_at(path: &Path, bytes: &[u8]) {
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("create dir");
+    std::fs::write(path, bytes).expect("write library");
+}
+
+/// Start-up sets `ORT_DYLIB_PATH` before any thread exists, and
+/// `ensure_ort_runtime` trusts a set variable without opening the library
+/// again. So the CPU check has to run here too: v1.0.3's Intel macOS app
+/// bundled an ARM64 library, and naming it crashed the first embedding.
+#[test]
+fn start_up_never_names_a_library_built_for_another_cpu() {
+    let (here, other) = match std::env::consts::ARCH {
+        "x86_64" => (elf(0x3e), elf(0xb7)),
+        "aarch64" => (elf(0xb7), elf(0x3e)),
+        _ => return, // no library of a known CPU runs here
+    };
+    let dir = tempfile::tempdir().expect("tempdir");
+    let bundled = dir.path().join("bundled").join("ort").join("lib");
+    let cache = dir.path().join("cache").join("ort").join("lib");
+    let candidates = [bundled.clone(), cache.clone()];
+
+    // Wrong-CPU bundled library, a cached one for this CPU: the cache wins.
+    library_at(&bundled, &other);
+    library_at(&cache, &here);
+    assert_eq!(
+        startup_library(&candidates, lib_runs_here),
+        Some(cache.as_path())
+    );
+
+    // Only the wrong-CPU library: nothing is named, so ensure_ort_runtime
+    // decides later (it logs why, removes a wrong cached copy, downloads).
+    std::fs::remove_file(&cache).expect("remove cache");
+    assert_eq!(startup_library(&candidates, lib_runs_here), None);
+
+    // A library for this CPU in the bundle is still the first choice.
+    library_at(&bundled, &here);
+    library_at(&cache, &here);
+    assert_eq!(
+        startup_library(&candidates, lib_runs_here),
+        Some(bundled.as_path())
+    );
+}
+
+/// The selection itself: order kept, a missing path never named (even though
+/// `lib_runs_here` accepts a file it cannot read), the check applied to each.
+#[test]
+fn start_up_takes_the_first_existing_candidate_the_check_accepts() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let missing = dir.path().join("missing");
+    let first = dir.path().join("first");
+    let second = dir.path().join("second");
+    library_at(&first, b"x");
+    library_at(&second, b"x");
+
+    let all = [missing.clone(), first.clone(), second.clone()];
+    assert_eq!(startup_library(&all, |_| true), Some(first.as_path()));
+    assert_eq!(
+        startup_library(&all, |p| p == second.as_path()),
+        Some(second.as_path())
+    );
+    assert_eq!(startup_library(&all, |_| false), None);
+    assert_eq!(startup_library(&[missing.clone()], |_| true), None);
+    assert_eq!(startup_library(&[missing], lib_runs_here), None);
+    assert_eq!(startup_library(&[], |_| true), None);
+}
+
 /// The old lookup took the first entry whose name ended in the library's
 /// file name. Only the full path counts now, even when the bytes are right.
 #[test]
