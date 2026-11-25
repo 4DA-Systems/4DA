@@ -631,6 +631,7 @@ jobs:
               echo "left behind: $f"
               LEFT=$((LEFT + 1))
             elif [ ! -d "$f" ]; then
+              echo "removed: $f"
               DROPPED=$((DROPPED + 1))
             fi
           done < <(comm -23 "$RUNNER_TEMP/previous-files.txt" "$RUNNER_TEMP/candidate-files.txt")
@@ -638,7 +639,7 @@ jobs:
             echo "::error title=Upgrade::$LEFT file(s) of $PREV_TAG that $SMOKE_TAG does not ship are still on disk"
             exit 1
           fi
-          echo "upgraded in place to $PKG $GOT; $DROPPED file(s) only $PREV_TAG shipped were removed"
+          echo "upgraded in place to $PKG $GOT; $DROPPED path(s) only $PREV_TAG shipped were removed"
 
           DESKTOP="$(dpkg -L "$PKG" | grep -E '^/usr/share/applications/[^/]+\.desktop$' | head -n 1 || true)"
           EXEC_CMD=""
