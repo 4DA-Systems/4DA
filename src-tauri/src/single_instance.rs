@@ -300,7 +300,9 @@ fn identity_is_instance(
 fn proc_identity(pid: u32) -> Option<ProcIdentity> {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
     let pid = Pid::from_u32(pid);
-    let mut sys = System::new();
+    // sysinfo 0.40 made `System::new` fallible (it always succeeds on Linux and
+    // macOS). A failure reads as "nothing readable", like an unreadable process.
+    let mut sys = System::new().ok()?;
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
