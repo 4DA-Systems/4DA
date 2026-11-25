@@ -6,8 +6,8 @@
 
 ```bash
 # Prerequisites:
-#   - Rust 1.93+ (rustup will auto-pin from src-tauri/rust-toolchain.toml)
-#   - Node.js 20 LTS (.nvmrc provided)
+#   - Rust 1.95.0 (rustup picks it up from src-tauri/rust-toolchain.toml)
+#   - Node.js 22 (.nvmrc provided)
 #   - pnpm 10.34.6 (pinned in package.json packageManager)
 # Platform build tools:
 #   - Windows: Visual Studio Build Tools 2022 + "Desktop development with C++"
