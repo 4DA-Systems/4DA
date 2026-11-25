@@ -14,26 +14,32 @@ Other distributions using GTK3 and WebKitGTK 4.1 should also work.
 ### .deb (Ubuntu / Debian)
 
 ```bash
-sudo apt install ./4da-home_*.deb
+sudo apt install ./4DA_*_amd64.deb
 ```
 
 ### .rpm (Fedora)
 
 ```bash
-sudo dnf install ./4da-home-*.rpm
+sudo dnf install ./4DA-*.x86_64.rpm
 ```
 
 ### AppImage
 
 ```bash
-chmod +x 4DA-Home_*.AppImage
-./4DA-Home_*.AppImage
+chmod +x 4DA_*_amd64.AppImage
+./4DA_*_amd64.AppImage
 ```
 
-AppImage requires FUSE2. On Ubuntu 22.04+ it is not installed by default:
+The AppImage carries its own WebKitGTK and GTK, so it does not need them from
+your distribution. It needs FUSE 2 to mount itself, which Ubuntu 22.04 and
+later do not install by default, plus the OpenGL/EGL libraries every desktop
+installation already has:
 
 ```bash
-sudo apt install libfuse2
+sudo apt install libfuse2       # Ubuntu 22.04, Debian 12
+sudo apt install libfuse2t64    # Ubuntu 24.04 and later
+sudo dnf install fuse-libs      # Fedora
+sudo pacman -S fuse2            # Arch
 ```
 
 ## Runtime Dependencies
@@ -56,9 +62,16 @@ sudo dnf install webkit2gtk4.1 gtk3 libappindicator-gtk3
 sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3
 ```
 
-The `.deb` and `.rpm` packages declare these as dependencies, so your package manager will pull them automatically. Only the AppImage requires manual dependency management.
+The `.deb` and `.rpm` packages declare these as dependencies, so your package manager will pull them automatically. The AppImage carries its own copies and needs only FUSE 2 (above).
 
 ## Known Issues
+
+### 1.0.4 and earlier: "Missing required system libraries"
+
+Up to version 1.0.4, 4DA checked for WebKitGTK and GTK with `ldconfig -p` before opening its window, and exited with this message when the check failed. The check was wrong in two cases, both fixed in the next release:
+
+- **The AppImage**, on a system without its own WebKitGTK: the check looked only at the system's libraries, not at the copies inside the AppImage. Workaround: `sudo apt install libwebkit2gtk-4.1-0` (Fedora: `sudo dnf install webkit2gtk4.1`).
+- **The .deb on Debian**, where `ldconfig` is in `/sbin`, which is not on a normal user's `PATH`, so the check could not run and reported the libraries missing although they were installed. Workaround: start it with `PATH="$PATH:/usr/sbin:/sbin" fourda`.
 
 ### NVIDIA: Blank or white screen
 

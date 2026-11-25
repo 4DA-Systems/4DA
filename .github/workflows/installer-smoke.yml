@@ -376,20 +376,34 @@ jobs:
           # ships it by default; the documented fix for users is libfuse2t64
           # (libfuse2 before 24.04). grep without -q: no SIGPIPE under pipefail.
           #
-          # This server image also lacks two things every stock Ubuntu desktop
-          # has, and the AppImage needs: the host GL/EGL stack, which AppImages
-          # leave to the host by convention (v1.0.3: "libEGL.so.1: cannot open
-          # shared object file"), and a system libwebkit2gtk-4.1 (GNOME Help
-          # depends on it), which the app's own Linux preflight demands even
-          # though the AppImage bundles WebKit (v1.0.3: "Missing required
-          # system libraries").
-          PKGS="libegl1 libegl-mesa0 libgles2 libgl1 libgbm1 libwebkit2gtk-4.1-0"
+          # This server image also lacks the host GL/EGL stack every stock
+          # Ubuntu desktop has, which AppImages leave to the host by convention
+          # (v1.0.3: "libEGL.so.1: cannot open shared object file").
+          PKGS="libegl1 libegl-mesa0 libgles2 libgl1 libgbm1"
+          # The AppImage bundles WebKitGTK and GTK. Up to v1.0.4 the app's own
+          # Linux preflight still demanded a SYSTEM libwebkit2gtk-4.1 (v1.0.3,
+          # v1.0.4: "Missing required system libraries"), so those releases
+          # get one here. Later releases have no preflight, and this leg
+          # proves they start on the bundled WebKit alone.
+          VERSION="${SMOKE_TAG#v}"
+          VERSION="${VERSION%%-*}"
+          OLD_PREFLIGHT=false
+          if [ "$(printf '%s\n' "$VERSION" 1.0.4 | sort -V | tail -n 1)" = "1.0.4" ]; then
+            OLD_PREFLIGHT=true
+            PKGS="$PKGS libwebkit2gtk-4.1-0"
+          fi
           if ! ldconfig -p | grep 'libfuse.so.2' >/dev/null; then
             . /etc/os-release
             if [ "${VERSION_ID%%.*}" -ge 24 ]; then PKGS="$PKGS libfuse2t64"; else PKGS="$PKGS libfuse2"; fi
           fi
           # shellcheck disable=SC2086
           bash smoke-tools/scripts/ci/apt-install.sh $PKGS
+          if [ "$OLD_PREFLIGHT" = "false" ] && ldconfig -p | grep 'libwebkit2gtk-4.1' >/dev/null; then
+            echo "::error title=Unfaithful test::this runner has a system libwebkit2gtk-4.1, so a start would not prove the AppImage runs on its bundled WebKit"
+            ldconfig -p | grep -E 'libwebkit2gtk|libjavascriptcoregtk'
+            exit 1
+          fi
+          echo "system WebKitGTK installed for the preflight of $SMOKE_TAG: $OLD_PREFLIGHT"
           { echo "APP_EXE=$INSTALLER"; echo "APP_VERSION=AppImage"; } >> "$GITHUB_ENV"
 
       - name: Launch on the fresh profile (Windows)
