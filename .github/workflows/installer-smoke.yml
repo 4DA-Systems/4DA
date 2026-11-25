@@ -8,9 +8,11 @@ name: Installer smoke
 # it the way a user would, launch it on a fresh profile and require (1) the
 # readiness line in the app's own log within READY_BUDGET_SECS and (2) the
 # process still alive ALIVE_SECS later, with no fatal line in the log. The
-# upgrade legs first install the previous release, run it, and install the
-# candidate over it on the same profile, the way the updater does. The app's
-# log directory is uploaded whatever the outcome.
+# upgrade legs (Windows, macOS arm64, Linux .deb) first install the previous
+# release, run it, and install the candidate over it on the same profile, the
+# way the updater does (a Linux release up to v1.0.3 cannot start, so from
+# one the Linux leg only installs it). The app's log directory is uploaded
+# whatever the outcome.
 #
 # Three ways in:
 # - release.yml calls it (workflow_call) between "artifacts assembled" and
@@ -129,10 +131,7 @@ jobs:
             runner: ubuntu-24.04
             kind: linuxAppImage
           # Upgrade legs: the previous release, then the candidate over it on
-          # the same profile. No Linux upgrade leg yet: no published Linux
-          # build has ever started (up to v1.0.3 the single-instance plugin
-          # panics on every launch), so there is nothing to upgrade from. Add
-          # one once a published Linux release passes the fresh legs.
+          # the same profile.
           - label: Windows x64 upgrade
             runner: windows-latest
             kind: win
@@ -140,6 +139,14 @@ jobs:
           - label: macOS arm64 upgrade
             runner: macos-latest
             kind: macArm
+            upgrade: true
+          # Up to v1.0.3 no Linux build starts (the single-instance plugin
+          # panics on the D-Bus name, fixed in v1.0.4), so from those this leg
+          # installs the previous package without launching it: see
+          # PREV_LAUNCH below.
+          - label: Linux deb upgrade (Ubuntu 24.04)
+            runner: ubuntu-24.04
+            kind: linuxDeb
             upgrade: true
     env:
       SMOKE_TAG: ${{ needs.resolve.outputs.tag }}
@@ -233,6 +240,14 @@ jobs:
             exit 1
           fi
           node smoke-tools/scripts/installer-smoke.cjs fetch --repo "$GITHUB_REPOSITORY"             --tag "$PREV_TAG" --kind "$KIND" --dir "$RUNNER_TEMP/installer-previous"
+          # A Linux build up to v1.0.3 panics on every launch, so a Linux leg
+          # upgrading from one installs it and never starts it.
+          PREV_VERSION="${PREV_TAG#v}"
+          PREV_VERSION="${PREV_VERSION%%-*}"
+          if [ "$RUNNER_OS" = "Linux" ] && [ "$(printf '%s\n' "$PREV_VERSION" 1.0.4 | sort -V | head -n 1)" != "1.0.4" ]; then
+            echo "PREV_LAUNCH=false" >> "$GITHUB_ENV"
+            echo "$PREV_TAG cannot start on Linux: this leg installs it and does not launch it"
+          fi
 
       - name: Install (Windows, silent NSIS)
         if: runner.os == 'Windows'
@@ -339,7 +354,8 @@ jobs:
         shell: bash
         timeout-minutes: 30
         env:
-          INSTALLER: ${{ steps.fetch.outputs.installer }}
+          # An upgrade leg installs the previous release here, the candidate later.
+          INSTALLER: ${{ matrix.upgrade && steps.fetch_prev.outputs.installer || steps.fetch.outputs.installer }}
         run: |
           set -euo pipefail
           # As a user would: apt resolves the package's own dependencies.
@@ -441,7 +457,7 @@ jobs:
           { echo "APP_PID=$PID"; echo "SMOKE_APP_OUTPUT=$SMOKE_EVIDENCE/app-stderr.log"; } >> "$GITHUB_ENV"
 
       - name: Launch on the fresh profile (Linux, Xvfb)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.PREV_LAUNCH != 'false'
         shell: bash
         run: |
           set -euo pipefail
@@ -587,6 +603,117 @@ jobs:
             echo "SMOKE_APP_OUTPUT=$SMOKE_EVIDENCE/candidate-stderr.log"
           } >> "$GITHUB_ENV"
 
+      # A .deb upgrade the way a user does one: `apt install ./new.deb` over the
+      # installed package, which dpkg upgrades in place (same Package name) and
+      # whose files the candidate no longer ships it removes. When the previous
+      # release is running, its files are replaced under it, then SIGTERM (its
+      # clean exit from v1.0.4) and the candidate starts on the same profile.
+      # From a previous release that cannot start (PREV_LAUNCH=false) the
+      # profile is fresh; the upgraded install is still what launches.
+      - name: Upgrade (Linux) - install the candidate .deb over the previous release with apt, launch it
+        if: matrix.upgrade && runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 30
+        env:
+          INSTALLER: ${{ steps.fetch.outputs.installer }}
+        run: |
+          set -euo pipefail
+          PKG="$(dpkg-deb -f "$INSTALLER" Package)"
+          WANT="$(dpkg-deb -f "$INSTALLER" Version)"
+          echo "installed: $PKG $(dpkg-query -W -f='${Version}' "$PKG"); candidate: $PKG $WANT"
+          dpkg -L "$PKG" | sort > "$RUNNER_TEMP/previous-files.txt"
+          bash smoke-tools/scripts/ci/apt-install.sh "$INSTALLER"
+
+          GOT="$(dpkg-query -W -f='${Version}' "$PKG")"
+          if [ "$GOT" != "$WANT" ]; then
+            echo "::error title=Upgrade::$PKG is $GOT after the upgrade, expected $WANT"
+            exit 1
+          fi
+          # Every installed file is the candidate's, byte for byte (md5sums).
+          BAD="$(dpkg --verify "$PKG" 2>&1 || true)"
+          if [ -n "$BAD" ]; then
+            echo "::error title=Upgrade::installed files differ from the candidate package"
+            echo "$BAD"
+            exit 1
+          fi
+          # What only the previous package shipped is gone from disk.
+          dpkg -L "$PKG" | sort > "$RUNNER_TEMP/candidate-files.txt"
+          LEFT=0
+          DROPPED=0
+          while IFS= read -r f; do
+            if [ -f "$f" ] || [ -L "$f" ]; then
+              echo "left behind: $f"
+              LEFT=$((LEFT + 1))
+            elif [ ! -d "$f" ]; then
+              echo "removed: $f"
+              DROPPED=$((DROPPED + 1))
+            fi
+          done < <(comm -23 "$RUNNER_TEMP/previous-files.txt" "$RUNNER_TEMP/candidate-files.txt")
+          if [ "$LEFT" -gt 0 ]; then
+            echo "::error title=Upgrade::$LEFT file(s) of $PREV_TAG that $SMOKE_TAG does not ship are still on disk"
+            exit 1
+          fi
+          echo "upgraded in place to $PKG $GOT; $DROPPED path(s) only $PREV_TAG shipped were removed"
+
+          DESKTOP="$(dpkg -L "$PKG" | grep -E '^/usr/share/applications/[^/]+\.desktop$' | head -n 1 || true)"
+          EXEC_CMD=""
+          if [ -n "$DESKTOP" ]; then
+            EXEC_CMD="$(grep -m 1 '^Exec=' "$DESKTOP" | cut -d= -f2- | cut -d' ' -f1 | tr -d '"')"
+          fi
+          EXE=""
+          if [ -n "$EXEC_CMD" ]; then EXE="$(command -v "$EXEC_CMD" || true)"; fi
+          if [ -z "$EXE" ]; then
+            echo "::error title=Upgrade::cannot tell which binary the menu entry of $PKG starts after the upgrade"
+            exit 1
+          fi
+
+          if [ -n "${APP_PID:-}" ]; then
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "::error title=Upgrade::$PREV_TAG was no longer running when the update began"
+              exit 1
+            fi
+            kill -TERM "$APP_PID"
+            for _ in $(seq 1 30); do kill -0 "$APP_PID" 2>/dev/null || break; sleep 1; done
+            if kill -0 "$APP_PID" 2>/dev/null; then
+              echo "::error title=Upgrade::$PREV_TAG did not quit within 30 s of SIGTERM"
+              exit 1
+            fi
+            echo "$PREV_TAG exited on SIGTERM after its files were replaced"
+            # Kept as evidence; the candidate's readiness must come from its own log.
+            mv "$SMOKE_LOG_DIR" "$SMOKE_EVIDENCE/previous-release-logs"
+            # The previous launch's X server on :99 goes when its session does.
+            for _ in $(seq 1 30); do [ -e /tmp/.X99-lock ] || break; sleep 1; done
+          else
+            echo "$PREV_TAG was installed, not launched; the candidate starts on a fresh profile"
+          fi
+
+          OUT="$SMOKE_EVIDENCE/candidate-output.log"
+          setsid nohup xvfb-run -n 99 -s '-screen 0 1280x800x24' dbus-run-session -- \
+            "$EXE" > "$OUT" 2>&1 < /dev/null &
+          LAUNCHER=$!
+          PID=""
+          for _ in $(seq 1 30); do
+            PID="$(pgrep -n -f "^$EXE" || true)"
+            if [ -n "$PID" ] || ! kill -0 "$LAUNCHER" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ -z "$PID" ]; then
+            if kill -0 "$LAUNCHER" 2>/dev/null; then
+              echo "::error title=Upgrade::no $EXE process 30 s after launch"
+              cat "$OUT" || true
+              exit 1
+            fi
+            echo "the candidate exited within seconds of launch"
+            PID="$LAUNCHER"
+          fi
+          echo "launched $EXE ($GOT) as pid $PID, FOURDA_DATA_DIR=$FOURDA_DATA_DIR"
+          {
+            echo "APP_EXE=$EXE"
+            echo "APP_VERSION=$GOT"
+            echo "APP_PID=$PID"
+            echo "SMOKE_APP_OUTPUT=$OUT"
+          } >> "$GITHUB_ENV"
+
       - name: Prove the candidate started on the upgraded profile
         if: matrix.upgrade
         shell: bash
@@ -644,7 +771,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: installer-smoke-${{ matrix.kind }}-${{ matrix.runner }}
+          # A fresh leg and an upgrade leg can share kind and runner.
+          name: installer-smoke-${{ matrix.kind }}-${{ matrix.runner }}${{ matrix.upgrade && '-upgrade' || '' }}
           path: |
             ${{ env.SMOKE_LOG_DIR }}
             ${{ env.SMOKE_EVIDENCE }}
