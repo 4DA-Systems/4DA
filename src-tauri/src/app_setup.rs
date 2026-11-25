@@ -304,8 +304,9 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
     crate::runtime_paths::RuntimePaths::init();
 
     // Pre-set ORT_DYLIB_PATH while still single-threaded (safe for env::set_var).
-    // Checks bundled resources first, then cache. If neither exists, the lazy
-    // init in ensure_ort_runtime will download and set it later.
+    // Bundled resources first, then cache, and only a library built for this
+    // CPU: ensure_ort_runtime trusts a set variable without checking it again.
+    // If none qualifies, that lazy init picks, explains or downloads one later.
     #[cfg(feature = "fastembed-local")]
     {
         let paths = crate::runtime_paths::RuntimePaths::get();
@@ -320,7 +321,8 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
             paths.bundled_models_dir().join("ort").join(ort_lib),
             paths.model_cache_dir().join("ort").join(ort_lib),
         ];
-        if let Some(path) = candidates.iter().find(|p| p.exists()) {
+        use crate::embeddings::{lib_runs_here, startup_library};
+        if let Some(path) = startup_library(&candidates, lib_runs_here) {
             std::env::set_var("ORT_DYLIB_PATH", path);
         }
     }

@@ -18,6 +18,9 @@ pub(crate) mod ort_runtime;
 mod retry;
 
 pub(crate) use observe::observe_embed_load;
+// For start-up, which names the ONNX Runtime library before any thread exists.
+#[cfg(feature = "fastembed-local")]
+pub(crate) use ort_runtime::{lib_runs_here, startup_library};
 
 // Re-export parent items so submodules can reference them via `super::`
 pub(super) use super::{truncate_and_normalize, EMBEDDING_CLIENT};
